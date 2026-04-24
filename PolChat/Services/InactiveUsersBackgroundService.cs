@@ -20,7 +20,7 @@ public class InactiveUsersBackgroundService : BackgroundService
         {
             try
             {
-                await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                await Task.Delay(TimeSpan.FromSeconds(10*60), stoppingToken);
 
                 using var scope = _serviceProvider.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<ChatDbContext>();

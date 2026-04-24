@@ -33,15 +33,15 @@ public class UsersController : ControllerBase
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
         var users = await _db.users
-            .Where(u => u.Username != null)
+            .Where(u => u.username != null)
             .Select(u => new UserDto
             {
-                Username = u.Username,
-                Role = u.Role,
-                Status = u.Status,
-                LastSeen = u.LastSeen,
-                CreatedAt = u.CreatedAt,
-                Avatar = u.Avatar,
+                Username = u.username,
+                Role = u.role,
+                Status = u.status,
+                LastSeen = u.last_seen,
+                CreatedAt = u.created_at,
+                Avatar = u.avatar,
                 IsDeleted = false
             })
             .ToListAsync();
@@ -65,11 +65,56 @@ public class UsersController : ControllerBase
         var user = await _db.users.FindAsync(username);
         if (user == null) return NotFound(new { error = "User not found" });
 
-        user.Status = request.Status;
-        user.LastSeen = now;
+        user.status = request.Status;
+        user.last_seen = now;
         await _db.SaveChangesAsync();
 
         return Ok(new { success = true });
+    }
+
+    // PUT /api/users/{username}/role
+    [HttpPut("{username}/role")]
+    public async Task<IActionResult> ChangeRole(string username, [FromBody] ChangeRoleRequest request)
+    {
+        var session = await GetSession();
+        if (session == null) return Unauthorized(new { error = "Not authenticated" });
+        if (session.Role != "admin") return StatusCode(403, new { error = "Admin only" });
+
+        if (string.IsNullOrEmpty(request.Role) || (request.Role != "user" && request.Role != "admin"))
+            return BadRequest(new { error = "Invalid role" });
+
+        var user = await _db.users.FindAsync(username);
+        if (user == null) return NotFound(new { error = "User not found" });
+
+        user.role = request.Role;
+        await _db.SaveChangesAsync();
+
+        return Ok(new { success = true });
+    }
+
+    // DELETE /api/users/{username}
+    [HttpDelete("{username}")]
+    public async Task<IActionResult> DeleteUser(string username)
+    {
+        var session = await GetSession();
+        if (session == null) return Unauthorized(new { error = "Not authenticated" });
+        if (session.Role != "admin") return StatusCode(403, new { error = "Admin only" });
+        if (username == session.Username) return BadRequest(new { error = "Cannot delete yourself" });
+
+        var user = await _db.users.FindAsync(username);
+        if (user == null) return NotFound(new { error = "User not found" });
+
+        _db.users.Remove(user);
+        await _db.SaveChangesAsync();
+
+        return Ok(new { success = true });
+    }
+
+    // GET /api/server_info
+    [HttpGet("/api/server_info")]
+    public IActionResult ServerInfo()
+    {
+        return Ok(new { status = "ok", version = "1.0.0" });
     }
 
     // POST /api/user/heartbeat
@@ -85,10 +130,10 @@ public class UsersController : ControllerBase
         var user = await _db.users.FindAsync(username);
         if (user == null) return NotFound(new { error = "User not found" });
 
-        user.LastSeen = now;
-        if (user.Status == "away")
+        user.last_seen = now;
+        if (user.status == "away")
         {
-            user.Status = "online";
+            user.status = "online";
         }
         await _db.SaveChangesAsync();
 

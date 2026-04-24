@@ -2,10 +2,10 @@ namespace ChatApp.Models;
 
 public class DMChannel
 {
-    public string Id { get; set; } = null!;
-    public List<string> Participants { get; set; } = new();
-    public string? CreatedBy { get; set; }
-    public DateTime CreatedAt { get; set; }
+    public string id { get; set; } = null!;
+    public List<string> participants { get; set; } = new();
+    public string? created_by { get; set; }
+    public DateTime created_at { get; set; }
 }
 
 public class DMChannelDto

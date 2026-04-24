@@ -1,0 +1,31 @@
+{
+  "name": "polchat",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dda-dream/PolChat.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/dda-dream/PolChat/issues"
+  },
+  "homepage": "https://github.com/dda-dream/PolChat#readme",
+  "dependencies": {
+    "@microsoft/signalr": "^10.0.0",
+    "@types/bootstrap": "^5.2.10",
+    "@types/socket.io-client": "^1.4.36",
+    "bootstrap": "^5.3.8",
+    "eslint": "^10.2.1",
+    "io": "^1.5.8",
+    "socket": "^1.1.86",
+    "typescript": "5.4"
+  }
+}

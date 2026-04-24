@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using ChatApp.Data;
+using ChatApp.Hubs;
 using ChatApp.Models;
 using ChatApp.Services;
 
@@ -12,11 +14,13 @@ public class ChannelsController : ControllerBase
 {
     private readonly ChatDbContext _db;
     private readonly ISessionService _sessionService;
+    private readonly IHubContext<ChatHub> _hub;
 
-    public ChannelsController(ChatDbContext db, ISessionService sessionService)
+    public ChannelsController(ChatDbContext db, ISessionService sessionService, IHubContext<ChatHub> hub)
     {
         _db = db;
         _sessionService = sessionService;
+        _hub = hub;
     }
 
     private async Task<SessionData?> GetSession()
@@ -27,17 +31,17 @@ public class ChannelsController : ControllerBase
 
     private static ChannelDto ToChannelDto(Channel ch, HashSet<string> existingUsers)
     {
-        var creator = ch.CreatedBy;
+        var creator = ch.created_by;
         return new ChannelDto
         {
-            Id = ch.Id,
-            Name = ch.Name,
-            Description = ch.Description,
-            CreatedBy = ch.CreatedBy,
+            Id = ch.id,
+            Name = ch.name,
+            Description = ch.description,
+            CreatedBy = ch.created_by,
             CreatedByDisplay = (!string.IsNullOrEmpty(creator) && existingUsers.Contains(creator)) ? creator : Constants.DeletedUserDisplayName,
             CreatedByDeleted = string.IsNullOrEmpty(creator) || !existingUsers.Contains(creator),
-            CreatedAt = ch.CreatedAt,
-            IsPrivate = ch.IsPrivate
+            CreatedAt = ch.created_at,
+            IsPrivate = ch.is_private
         };
     }
 
@@ -48,8 +52,8 @@ public class ChannelsController : ControllerBase
         var session = await GetSession();
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
-        var channels = await _db.Channels.OrderBy(c => c.CreatedAt).ToListAsync();
-        var existingUsers = (await _db.users.Select(u => u.Username).ToListAsync()).ToHashSet();
+        var channels = await _db.Channels.OrderBy(c => c.created_at).ToListAsync();
+        var existingUsers = (await _db.users.Select(u => u.username).ToListAsync()).ToHashSet();
         var dtos = channels.Select(c => ToChannelDto(c, existingUsers)).ToList();
         return Ok(dtos);
     }
@@ -64,22 +68,26 @@ public class ChannelsController : ControllerBase
         var name = HtmlSanitizer.Sanitize(request.Name);
         var description = HtmlSanitizer.Sanitize(request.Description);
 
-        var existing = await _db.Channels.FirstOrDefaultAsync(c => c.Name == name);
+        var existing = await _db.Channels.FirstOrDefaultAsync(c => c.name == name);
         if (existing != null) return BadRequest(new { error = "Already exists" });
 
         var channel = new Channel
         {
-            Id = Guid.NewGuid().ToString(),
-            Name = name,
-            Description = description,
-            CreatedBy = session.Username,
-            CreatedAt = DateTime.UtcNow,
-            IsPrivate = request.IsPrivate
+            id = Guid.NewGuid().ToString(),
+            name = name,
+            description = description,
+            created_by = session.Username,
+            created_at = DateTime.UtcNow,
+            is_private = request.IsPrivate
         };
         _db.Channels.Add(channel);
         await _db.SaveChangesAsync();
 
-        var existingUsers = (await _db.users.Select(u => u.Username).ToListAsync()).ToHashSet();
+        var existingUsers = (await _db.users.Select(u => u.username).ToListAsync()).ToHashSet();
+
+        // Broadcast channel_created to all users
+        await _hub.Clients.All.SendAsync("channel_created");
+
         return Ok(ToChannelDto(channel, existingUsers));
     }
 
@@ -93,16 +101,19 @@ public class ChannelsController : ControllerBase
         var channel = await _db.Channels.FindAsync(channelId);
         if (channel == null) return NotFound(new { error = "Not found" });
 
-        if (channel.Name == Constants.GeneralChannelName)
+        if (channel.name == Constants.GeneralChannelName)
             return BadRequest(new { error = "Cannot delete general" });
 
-        if (session.Role != "admin" && channel.CreatedBy != session.Username)
+        if (session.Role != "admin" && channel.created_by != session.Username)
             return StatusCode(403, new { error = "No permission" });
 
         _db.Channels.Remove(channel);
         var messages = _db.Messages.Where(m => m.ChannelId == channelId);
         _db.Messages.RemoveRange(messages);
         await _db.SaveChangesAsync();
+
+        // Broadcast channel_deleted to all users
+        await _hub.Clients.All.SendAsync("channel_deleted");
 
         return Ok(new { success = true });
     }
@@ -121,18 +132,21 @@ public class ChannelsController : ControllerBase
         var channel = await _db.Channels.FindAsync(channelId);
         if (channel == null) return NotFound(new { error = "Канал не найден" });
 
-        if (channel.Name == Constants.GeneralChannelName)
+        if (channel.name == Constants.GeneralChannelName)
             return StatusCode(403, new { error = "Нельзя переименовать общий канал" });
 
-        if (session.Role != "admin" && channel.CreatedBy != session.Username)
+        if (session.Role != "admin" && channel.created_by != session.Username)
             return StatusCode(403, new { error = "Нет прав" });
 
-        var existing = await _db.Channels.FirstOrDefaultAsync(c => c.Name == newName && c.Id != channelId);
+        var existing = await _db.Channels.FirstOrDefaultAsync(c => c.name == newName && c.id != channelId);
         if (existing != null) return BadRequest(new { error = "Канал с таким названием уже существует" });
 
-        var oldName = channel.Name;
-        channel.Name = newName;
+        var oldName = channel.name;
+        channel.name = newName;
         await _db.SaveChangesAsync();
+
+        // Broadcast channel_renamed
+        await _hub.Clients.All.SendAsync("channel_renamed", new { channelId, newName });
 
         return Ok(new { success = true, new_name = newName });
     }
@@ -151,14 +165,17 @@ public class ChannelsController : ControllerBase
         var channel = await _db.Channels.FindAsync(channelId);
         if (channel == null) return NotFound(new { error = "Канал не найден" });
 
-        if (channel.Name == Constants.GeneralChannelName)
+        if (channel.name == Constants.GeneralChannelName)
             return StatusCode(403, new { error = "Нельзя изменить описание общего канала" });
 
-        if (session.Role != "admin" && channel.CreatedBy != session.Username)
+        if (session.Role != "admin" && channel.created_by != session.Username)
             return StatusCode(403, new { error = "Нет прав" });
 
-        channel.Description = newDescription;
+        channel.description = newDescription;
         await _db.SaveChangesAsync();
+
+        // Broadcast channel_description_updated
+        await _hub.Clients.All.SendAsync("channel_description_updated", new { channelId, newDescription });
 
         return Ok(new { success = true, new_description = newDescription });
     }

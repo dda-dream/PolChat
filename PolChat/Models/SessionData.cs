@@ -73,3 +73,8 @@ public class AddReactionRequest
     public string MessageId { get; set; } = null!;
     public string Emoji { get; set; } = null!;
 }
+
+public class ChangeRoleRequest
+{
+    public string Role { get; set; } = null!;
+}

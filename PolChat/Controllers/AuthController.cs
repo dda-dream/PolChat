@@ -34,22 +34,22 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
         var user = await _db.users.FindAsync(request.Username);
-        if (user == null || user.Password != DbInitializer.ComputeSha256Hash(request.Password))
+        if (user == null || user.password != DbInitializer.ComputeSha256Hash(request.Password))
         {
             return Unauthorized(new { success = false, error = "Invalid credentials" });
         }
 
         var sessionId = await _sessionService.CreateSessionAsync(new SessionData
         {
-            UserId = user.Username,
-            Username = user.Username,
-            Role = user.Role
+            UserId = user.username,
+            Username = user.username,
+            Role = user.role
         });
 
         // Update status to online
         var now = DateTime.UtcNow;
-        user.Status = "online";
-        user.LastSeen = now;
+        user.status = "online";
+        user.last_seen = now;
         await _db.SaveChangesAsync();
 
         Response.Cookies.Append("SESSION_ID", sessionId, new CookieOptions
@@ -60,7 +60,7 @@ public class AuthController : ControllerBase
             Secure = false // set true in production with HTTPS
         });
 
-        return Ok(new { success = true, redirect = "/" });
+        return Ok(new { success = true, redirect = "/chat.html" });
     }
 
     // GET /logout
@@ -107,12 +107,12 @@ public class AuthController : ControllerBase
 
         _db.users.Add(new User
         {
-            Username = request.Username,
-            Password = DbInitializer.ComputeSha256Hash(request.Password),
-            Role = "user",
-            CreatedAt = DateTime.UtcNow,
-            Avatar = "default.png",
-            Status = "offline"
+            username = request.Username,
+            password = DbInitializer.ComputeSha256Hash(request.Password),
+            role = "user",
+            created_at = DateTime.UtcNow,
+            avatar = "default.png",
+            status = "offline"
         });
         await _db.SaveChangesAsync();
 

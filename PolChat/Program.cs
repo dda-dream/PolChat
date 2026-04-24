@@ -1,6 +1,7 @@
 using ChatApp.Data;
 using ChatApp.Hubs;
 using ChatApp.Services;
+using Microsoft.AspNetCore.Rewrite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi;
 using Serilog;
@@ -76,6 +77,11 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// Настройка перенаправления
+var option = new RewriteOptions();
+option.AddRewrite("^$", "login.html", skipRemainingRules: true);
+app.UseRewriter(option);
+
 
 // ===== Middleware =====
 if (app.Environment.IsDevelopment())
@@ -121,6 +127,8 @@ app.MapGet("/_debug/routes/details", (IEnumerable<EndpointDataSource> endpointSo
 
     return Results.Text(sb.ToString(), "text/plain");
 });
+
+
 
 
 
