@@ -1,6 +1,7 @@
 using ChatApp.Data;
 using ChatApp.Hubs;
 using ChatApp.Services;
+using Microsoft.EntityFrameworkCore;
 using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
