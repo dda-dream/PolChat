@@ -1,0 +1,6 @@
+@PolChat_HostAddress = http://localhost:5008
+
+GET {{PolChat_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
