@@ -36,7 +36,7 @@ public class MessagesController : ControllerBase
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
         var username = session.Username;
 
-        var channels = await _db.Channels.OrderBy(c => c.created_at).ToListAsync();
+        var channels = await _db.channels.OrderBy(c => c.created_at).ToListAsync();
         var existingUsers = (await _db.users.Select(u => u.username).ToListAsync()).ToHashSet();
 
         var channelDtos = channels.Select(ch => new ChannelDto
@@ -52,7 +52,7 @@ public class MessagesController : ControllerBase
         }).ToList();
 
         // DM channels
-        var dmRows = await _db.DMChannels.ToListAsync();
+        var dmRows = await _db.dm_channels.ToListAsync();
         var dmDtos = new List<DMChannelDto>();
         foreach (var dm in dmRows)
         {
@@ -108,9 +108,9 @@ public class MessagesController : ControllerBase
         var offset = (page - 1) * limit;
         var existingUsers = (await _db.users.Select(u => u.username).ToListAsync()).ToHashSet();
 
-        var totalCount = await _db.Messages.CountAsync(m => m.ChannelId == channelId);
+        var totalCount = await _db.messages.CountAsync(m => m.ChannelId == channelId);
 
-        var rows = await _db.Messages
+        var rows = await _db.messages
             .Where(m => m.ChannelId == channelId)
             .OrderByDescending(m => m.Timestamp)
             .Skip(offset)
@@ -122,7 +122,7 @@ public class MessagesController : ControllerBase
         var replyMessages = new Dictionary<string, Message>();
         if (replyToIds.Count > 0)
         {
-            var replyRows = await _db.Messages.Where(m => replyToIds.Contains(m.Id)).ToListAsync();
+            var replyRows = await _db.messages.Where(m => replyToIds.Contains(m.Id)).ToListAsync();
             foreach (var rr in replyRows) replyMessages[rr.Id] = rr;
         }
 
@@ -185,7 +185,7 @@ public class MessagesController : ControllerBase
 
         var newContent = HtmlSanitizer.Sanitize(request.Content);
 
-        var msg = await _db.Messages.FindAsync(messageId);
+        var msg = await _db.messages.FindAsync(messageId);
         if (msg == null || msg.Username != session.Username)
             return StatusCode(403, new { error = "No permission" });
 
@@ -207,14 +207,14 @@ public class MessagesController : ControllerBase
         var session = await GetSession();
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
-        var msg = await _db.Messages.FindAsync(messageId);
+        var msg = await _db.messages.FindAsync(messageId);
         if (msg == null) return NotFound(new { error = "Not found" });
 
         if (msg.Username != session.Username && session.Role != "admin")
             return StatusCode(403, new { error = "No permission" });
 
         var channelId = msg.ChannelId;
-        _db.Messages.Remove(msg);
+        _db.messages.Remove(msg);
         await _db.SaveChangesAsync();
 
         // Broadcast delete to channel
@@ -251,7 +251,7 @@ public class MessagesController : ControllerBase
 
         var username = session.Username;
 
-        var msg = await _db.Messages
+        var msg = await _db.messages
             .Where(m => m.Id == messageId)
             .Select(m => new { m.ChannelId, m.Username })
             .FirstOrDefaultAsync();
@@ -288,7 +288,7 @@ public class MessagesController : ControllerBase
         var session = await GetSession();
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
-        var rows = await _db.Messages
+        var rows = await _db.messages
             .Where(m => m.ChannelId == channelId && m.Username == session.Username)
             .Select(m => new { m.Id, m.ReadBy, m.DeliveredTo })
             .ToListAsync();
@@ -312,7 +312,7 @@ public class MessagesController : ControllerBase
         var session = await GetSession();
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
-        var msg = await _db.Messages.Where(m => m.Id == messageId).Select(m => m.ReadBy).FirstOrDefaultAsync();
+        var msg = await _db.messages.Where(m => m.Id == messageId).Select(m => m.ReadBy).FirstOrDefaultAsync();
         var readBy = msg ?? new List<string>();
         return Ok(new { read_by = readBy, read_count = readBy.Count });
     }

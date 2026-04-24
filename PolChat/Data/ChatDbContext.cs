@@ -8,9 +8,9 @@ public class ChatDbContext : DbContext
     public ChatDbContext(DbContextOptions<ChatDbContext> options) : base(options) { }
 
     public DbSet<User> users => Set<User>();
-    public DbSet<Channel> Channels => Set<Channel>();
-    public DbSet<Message> Messages => Set<Message>();
-    public DbSet<DMChannel> DMChannels => Set<DMChannel>();
+    public DbSet<Channel> channels => Set<Channel>();
+    public DbSet<Message> messages => Set<Message>();
+    public DbSet<DMChannel> dm_channels => Set<DMChannel>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

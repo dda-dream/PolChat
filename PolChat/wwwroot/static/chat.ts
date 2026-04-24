@@ -2,8 +2,8 @@
 // ============ ГЛОБАЛЬНЫЕ ОБЪЯВЛЕНИЯ И ТИПЫ ============
 //import * as bootstrap from 'bootstrap';
 //import * as signalr from '@microsoft/signalr'   
-import { HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
-
+//import { HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
+ 
 /* global window, document, bootstrap, localStorage, sessionStorage, fetch, alert, confirm, prompt, FileReader, URL, FormData, MutationObserver, Set, Map, console */
 "use strict";
  
@@ -54,11 +54,11 @@ function showGlobalNotification(message: string, type: 'info' | 'success' | 'dan
 if (isChatPage) {
     // ============ СОЗДАНИЕ SIGNALR CONNECTION ============
     // SignalR connection to ASP.NET Core backend
-
-    const connection = new HubConnectionBuilder()
+    
+    const connection = new signalR.HubConnectionBuilder()
         .withUrl("/chathub", { withCredentials: true })
         .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
-        .configureLogging(LogLevel.Warning)
+        .configureLogging(signalR.LogLevel.Warning)
         .build();
 
     // Start connection
@@ -3377,10 +3377,10 @@ if (isUserManagementPage) {
     // Автообновление при перезапуске сервера
     let isRestarting = false;
 
-    const userConnection = new HubConnectionBuilder()
+    const userConnection = new signalR.HubConnectionBuilder()
         .withUrl("/chathub", { withCredentials: true })
         .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
-        .configureLogging(LogLevel.Warning)
+        .configureLogging(signalR.LogLevel.Warning)
         .build();
 
     userConnection.start().catch(err => console.error('SignalR user connection error:', err));

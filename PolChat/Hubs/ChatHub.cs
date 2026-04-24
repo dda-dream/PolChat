@@ -178,14 +178,14 @@ public class ChatHub : Hub
             DeliveredTo = new List<string>()
         };
 
-        _db.Messages.Add(message);
+        _db.messages.Add(message);
         await _db.SaveChangesAsync();
 
         // Get reply-to info if needed
         ReplyToInfo? replyToInfo = null;
         if (replyToId != null)
         {
-            var rm = await _db.Messages
+            var rm = await _db.messages
                 .Where(m => m.Id == replyToId)
                 .Select(m => new { m.Id, m.Username, m.Content, m.FileUrl })
                 .FirstOrDefaultAsync();
@@ -207,7 +207,7 @@ public class ChatHub : Hub
         // DM: check delivery
         if (channelId.Contains('-'))
         {
-            var dm = await _db.DMChannels.FirstOrDefaultAsync(d => d.id == channelId);
+            var dm = await _db.dm_channels.FirstOrDefaultAsync(d => d.id == channelId);
             if (dm != null)
             {
                 var otherUser = dm.participants.FirstOrDefault(p => p != username);
@@ -271,7 +271,7 @@ public class ChatHub : Hub
         // DM unread notification
         if (channelId.Contains('-'))
         {
-            var dm = await _db.DMChannels.FirstOrDefaultAsync(d => d.id == channelId);
+            var dm = await _db.dm_channels.FirstOrDefaultAsync(d => d.id == channelId);
             if (dm != null)
             {
                 var otherUser = dm.participants.FirstOrDefault(p => p != username);
@@ -299,7 +299,7 @@ public class ChatHub : Hub
 
         var username = userInfo.Username;
 
-        var row = await _db.Messages
+        var row = await _db.messages
             .Where(m => m.Id == messageId)
             .Select(m => m.Reactions)
             .FirstOrDefaultAsync();

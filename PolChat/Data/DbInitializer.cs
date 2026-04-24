@@ -42,7 +42,7 @@ public static class DbInitializer
                 created_at = now,
                 is_private = false
             };
-            db.Channels.Add(general);
+            db.channels.Add(general);
 
             await db.SaveChangesAsync();
             Console.WriteLine("[OK] БД инициализирована: admin + general");

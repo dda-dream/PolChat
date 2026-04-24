@@ -39,7 +39,7 @@ public class DMChannelsController : ControllerBase
 
         var existingUsers = (await _db.users.Select(u => u.username).ToListAsync()).ToHashSet();
 
-        var dms = await _db.DMChannels.ToListAsync();
+        var dms = await _db.dm_channels.ToListAsync();
         var dtos = new List<DMChannelDto>();
 
         foreach (var dm in dms)
@@ -78,7 +78,7 @@ public class DMChannelsController : ControllerBase
         if (!otherExists) return NotFound(new { error = "User not found" });
 
         // Check if DM already exists
-        var allDms = await _db.DMChannels.ToListAsync();
+        var allDms = await _db.dm_channels.ToListAsync();
         var existing = allDms.FirstOrDefault(d =>
             d.participants.Contains(username) && d.participants.Contains(request.OtherUser));
         if (existing != null)
@@ -91,7 +91,7 @@ public class DMChannelsController : ControllerBase
             created_by = username,
             created_at = DateTime.UtcNow
         };
-        _db.DMChannels.Add(dm);
+        _db.dm_channels.Add(dm);
         await _db.SaveChangesAsync();
 
         // Broadcast dm_channel_created to participants
@@ -114,15 +114,15 @@ public class DMChannelsController : ControllerBase
         var session = await GetSession();
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
-        var dm = await _db.DMChannels.FindAsync(dmId);
+        var dm = await _db.dm_channels.FindAsync(dmId);
         if (dm == null) return NotFound(new { error = "Not found" });
 
         if (!dm.participants.Contains(session.Username))
             return StatusCode(403, new { error = "No permission" });
 
-        _db.DMChannels.Remove(dm);
-        var messages = _db.Messages.Where(m => m.ChannelId == dmId);
-        _db.Messages.RemoveRange(messages);
+        _db.dm_channels.Remove(dm);
+        var messages = _db.messages.Where(m => m.ChannelId == dmId);
+        _db.messages.RemoveRange(messages);
         await _db.SaveChangesAsync();
 
         // Broadcast dm_channel_deleted to participants

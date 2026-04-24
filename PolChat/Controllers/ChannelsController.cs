@@ -52,7 +52,7 @@ public class ChannelsController : ControllerBase
         var session = await GetSession();
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
-        var channels = await _db.Channels.OrderBy(c => c.created_at).ToListAsync();
+        var channels = await _db.channels.OrderBy(c => c.created_at).ToListAsync();
         var existingUsers = (await _db.users.Select(u => u.username).ToListAsync()).ToHashSet();
         var dtos = channels.Select(c => ToChannelDto(c, existingUsers)).ToList();
         return Ok(dtos);
@@ -68,7 +68,7 @@ public class ChannelsController : ControllerBase
         var name = HtmlSanitizer.Sanitize(request.Name);
         var description = HtmlSanitizer.Sanitize(request.Description);
 
-        var existing = await _db.Channels.FirstOrDefaultAsync(c => c.name == name);
+        var existing = await _db.channels.FirstOrDefaultAsync(c => c.name == name);
         if (existing != null) return BadRequest(new { error = "Already exists" });
 
         var channel = new Channel
@@ -80,7 +80,7 @@ public class ChannelsController : ControllerBase
             created_at = DateTime.UtcNow,
             is_private = request.IsPrivate
         };
-        _db.Channels.Add(channel);
+        _db.channels.Add(channel);
         await _db.SaveChangesAsync();
 
         var existingUsers = (await _db.users.Select(u => u.username).ToListAsync()).ToHashSet();
@@ -98,7 +98,7 @@ public class ChannelsController : ControllerBase
         var session = await GetSession();
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
-        var channel = await _db.Channels.FindAsync(channelId);
+        var channel = await _db.channels.FindAsync(channelId);
         if (channel == null) return NotFound(new { error = "Not found" });
 
         if (channel.name == Constants.GeneralChannelName)
@@ -107,9 +107,9 @@ public class ChannelsController : ControllerBase
         if (session.Role != "admin" && channel.created_by != session.Username)
             return StatusCode(403, new { error = "No permission" });
 
-        _db.Channels.Remove(channel);
-        var messages = _db.Messages.Where(m => m.ChannelId == channelId);
-        _db.Messages.RemoveRange(messages);
+        _db.channels.Remove(channel);
+        var messages = _db.messages.Where(m => m.ChannelId == channelId);
+        _db.messages.RemoveRange(messages);
         await _db.SaveChangesAsync();
 
         // Broadcast channel_deleted to all users
@@ -129,7 +129,7 @@ public class ChannelsController : ControllerBase
         if (string.IsNullOrEmpty(newName) || newName.Length > 50)
             return BadRequest(new { error = "Название должно быть от 1 до 50 символов" });
 
-        var channel = await _db.Channels.FindAsync(channelId);
+        var channel = await _db.channels.FindAsync(channelId);
         if (channel == null) return NotFound(new { error = "Канал не найден" });
 
         if (channel.name == Constants.GeneralChannelName)
@@ -138,7 +138,7 @@ public class ChannelsController : ControllerBase
         if (session.Role != "admin" && channel.created_by != session.Username)
             return StatusCode(403, new { error = "Нет прав" });
 
-        var existing = await _db.Channels.FirstOrDefaultAsync(c => c.name == newName && c.id != channelId);
+        var existing = await _db.channels.FirstOrDefaultAsync(c => c.name == newName && c.id != channelId);
         if (existing != null) return BadRequest(new { error = "Канал с таким названием уже существует" });
 
         var oldName = channel.name;
@@ -162,7 +162,7 @@ public class ChannelsController : ControllerBase
         if (newDescription != null && newDescription.Length > 500)
             return BadRequest(new { error = "Описание не должно превышать 500 символов" });
 
-        var channel = await _db.Channels.FindAsync(channelId);
+        var channel = await _db.channels.FindAsync(channelId);
         if (channel == null) return NotFound(new { error = "Канал не найден" });
 
         if (channel.name == Constants.GeneralChannelName)
