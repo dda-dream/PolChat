@@ -2,6 +2,7 @@ using StackExchange.Redis;
 using System.Text.Json;
 using ChatApp.Models;
 using ChatApp.Data;
+using System.Security.Cryptography;
 
 namespace ChatApp.Services;
 
@@ -32,7 +33,8 @@ public class SessionService : ISessionService
             var data = await _redis.StringGetAsync($"session:{sessionId}");
             if (data.IsNullOrEmpty) return null;
 
-            return JsonSerializer.Deserialize<SessionData>(data!);
+            //TODO: Disambiguate JsonSerializer.Deserialize overloads by passing a string
+            return JsonSerializer.Deserialize<SessionData>(data.ToString()!);
         }
         catch (Exception ex)
         {

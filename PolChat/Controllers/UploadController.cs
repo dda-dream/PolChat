@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using ChatApp.Data;
 using ChatApp.Services;
+using ChatApp.Models;
 
 namespace ChatApp.Controllers;
 

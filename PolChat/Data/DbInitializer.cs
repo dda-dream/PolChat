@@ -18,7 +18,7 @@ public static class DbInitializer
             Console.WriteLine($"[WARN] EnsureCreated failed (tables may already exist): {ex.Message}");
         }
 
-        var userCount = await db.Users.CountAsync();
+        var userCount = await db.users.CountAsync();
         if (userCount == 0)
         {
             var now = DateTime.UtcNow;
@@ -31,7 +31,7 @@ public static class DbInitializer
                 Avatar = "default.png",
                 Status = "offline"
             };
-            db.Users.Add(admin);
+            db.users.Add(admin);
 
             var general = new Channel
             {

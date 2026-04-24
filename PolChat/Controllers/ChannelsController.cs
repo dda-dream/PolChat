@@ -49,7 +49,7 @@ public class ChannelsController : ControllerBase
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
         var channels = await _db.Channels.OrderBy(c => c.CreatedAt).ToListAsync();
-        var existingUsers = (await _db.Users.Select(u => u.Username).ToListAsync()).ToHashSet();
+        var existingUsers = (await _db.users.Select(u => u.Username).ToListAsync()).ToHashSet();
         var dtos = channels.Select(c => ToChannelDto(c, existingUsers)).ToList();
         return Ok(dtos);
     }
@@ -79,7 +79,7 @@ public class ChannelsController : ControllerBase
         _db.Channels.Add(channel);
         await _db.SaveChangesAsync();
 
-        var existingUsers = (await _db.Users.Select(u => u.Username).ToListAsync()).ToHashSet();
+        var existingUsers = (await _db.users.Select(u => u.Username).ToListAsync()).ToHashSet();
         return Ok(ToChannelDto(channel, existingUsers));
     }
 

@@ -2,9 +2,22 @@ using ChatApp.Data;
 using ChatApp.Hubs;
 using ChatApp.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.OpenApi;
+using Serilog;
 using StackExchange.Redis;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Host.UseSerilog();
+
+// Настройка самого Serilog
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console()
+    .CreateLogger();
+
+// Подключение к хосту
+builder.Host.UseSerilog();
 
 // ===== Configuration =====
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
@@ -41,7 +54,7 @@ builder.Services.AddControllers()
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new()
+    c.SwaggerDoc("v1", new OpenApiInfo
     {
         Title = "Chat API",
         Version = "1.0.0",
@@ -63,6 +76,7 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+
 // ===== Middleware =====
 if (app.Environment.IsDevelopment())
 {
@@ -76,6 +90,39 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<ChatHub>("/chathub");
+
+
+app.MapGet("/_debug/routes/details", (IEnumerable<EndpointDataSource> endpointSources) =>
+{
+    var sb = new StringBuilder();
+    sb.AppendLine("Registered Routes:");
+    sb.AppendLine("==================");
+
+    foreach (var endpoint in endpointSources.SelectMany(x => x.Endpoints))
+    {
+        if (endpoint is RouteEndpoint routeEndpoint)
+        {
+            sb.AppendLine($"DisplayName: {routeEndpoint.DisplayName}");
+            sb.AppendLine($"Pattern: {routeEndpoint.RoutePattern.RawText}");
+            sb.AppendLine($"Order: {routeEndpoint.Order}");
+
+            var httpMethods = routeEndpoint.Metadata
+                .OfType<HttpMethodMetadata>()
+                .FirstOrDefault()?.HttpMethods;
+
+            if (httpMethods != null)
+            {
+                sb.AppendLine($"Methods: {string.Join(", ", httpMethods)}");
+            }
+
+            sb.AppendLine("---");
+        }
+    }
+
+    return Results.Text(sb.ToString(), "text/plain");
+});
+
+
 
 // ===== Startup =====
 using (var scope = app.Services.CreateScope())

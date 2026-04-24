@@ -33,7 +33,7 @@ public class InactiveUsersBackgroundService : BackgroundService
                       AND (NOW() - last_seen) > INTERVAL '2 minutes'", stoppingToken);
 
                 // Set users to 'offline' if away for 5 minutes
-                await db.Database.ExecuteSqlRawAsync(@@"
+                await db.Database.ExecuteSqlRawAsync(@"
                     UPDATE users SET status = 'offline'
                     WHERE status = 'away'
                       AND last_seen IS NOT NULL

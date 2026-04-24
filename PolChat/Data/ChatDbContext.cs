@@ -7,7 +7,7 @@ public class ChatDbContext : DbContext
 {
     public ChatDbContext(DbContextOptions<ChatDbContext> options) : base(options) { }
 
-    public DbSet<User> Users => Set<User>();
+    public DbSet<User> users => Set<User>();
     public DbSet<Channel> Channels => Set<Channel>();
     public DbSet<Message> Messages => Set<Message>();
     public DbSet<DMChannel> DMChannels => Set<DMChannel>();
@@ -67,6 +67,18 @@ public class ChatDbContext : DbContext
             e.HasIndex(m => m.Username);
             e.HasIndex(m => m.ReplyToId);
             e.HasIndex(m => new { m.ChannelId, m.Timestamp }).IsDescending(false, true);
+
+            // Explicit FK: Message.User -> User.Username (using existing Username property)
+            e.HasOne(m => m.User)
+             .WithMany()
+             .HasForeignKey(m => m.Username)
+             .OnDelete(DeleteBehavior.SetNull);
+
+            // Self-referencing FK for replies
+            e.HasOne(m => m.ReplyTo)
+             .WithMany()
+             .HasForeignKey(m => m.ReplyToId)
+             .OnDelete(DeleteBehavior.SetNull);
         });
 
         // DM Channels

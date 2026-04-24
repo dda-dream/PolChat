@@ -33,7 +33,7 @@ public class DMChannelsController : ControllerBase
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
         var username = session.Username;
 
-        var existingUsers = (await _db.Users.Select(u => u.Username).ToListAsync()).ToHashSet();
+        var existingUsers = (await _db.users.Select(u => u.Username).ToListAsync()).ToHashSet();
 
         var dms = await _db.DMChannels.ToListAsync();
         var dtos = new List<DMChannelDto>();
@@ -70,7 +70,7 @@ public class DMChannelsController : ControllerBase
         if (string.IsNullOrEmpty(request.OtherUser) || request.OtherUser == username)
             return BadRequest(new { error = "Invalid user" });
 
-        var otherExists = await _db.Users.AnyAsync(u => u.Username == request.OtherUser);
+        var otherExists = await _db.users.AnyAsync(u => u.Username == request.OtherUser);
         if (!otherExists) return NotFound(new { error = "User not found" });
 
         // Check if DM already exists

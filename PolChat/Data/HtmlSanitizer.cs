@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using System.Net;
 
 namespace ChatApp.Data;
 
@@ -30,6 +31,6 @@ public static class HtmlSanitizer
     public static string EscapeHtml(string? text)
     {
         if (string.IsNullOrEmpty(text)) return "";
-        return System.WebUtility.HtmlEncode(text);
+        return WebUtility.HtmlEncode(text);
     }
 }

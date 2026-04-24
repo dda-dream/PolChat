@@ -32,7 +32,7 @@ public class UsersController : ControllerBase
         var session = await GetSession();
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
-        var users = await _db.Users
+        var users = await _db.users
             .Where(u => u.Username != null)
             .Select(u => new UserDto
             {
@@ -62,7 +62,7 @@ public class UsersController : ControllerBase
         var username = session.Username;
         var now = DateTime.UtcNow;
 
-        var user = await _db.Users.FindAsync(username);
+        var user = await _db.users.FindAsync(username);
         if (user == null) return NotFound(new { error = "User not found" });
 
         user.Status = request.Status;
@@ -82,7 +82,7 @@ public class UsersController : ControllerBase
         var username = session.Username;
         var now = DateTime.UtcNow;
 
-        var user = await _db.Users.FindAsync(username);
+        var user = await _db.users.FindAsync(username);
         if (user == null) return NotFound(new { error = "User not found" });
 
         user.LastSeen = now;

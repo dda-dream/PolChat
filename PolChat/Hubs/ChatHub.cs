@@ -42,7 +42,7 @@ public class ChatHub : Hub
 
         // Update user status to online
         var now = DateTime.UtcNow;
-        await _db.Users
+        await _db.users
             .Where(u => u.Username == username)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(u => u.Status, "online")
@@ -118,7 +118,7 @@ public class ChatHub : Hub
             if (!stillOnline)
             {
                 var now = DateTime.UtcNow;
-                await _db.Users
+                await _db.users
                     .Where(u => u.Username == username)
                     .ExecuteUpdateAsync(s => s
                         .SetProperty(u => u.Status, "offline")
@@ -192,7 +192,7 @@ public class ChatHub : Hub
 
             if (rm != null)
             {
-                var existingUsers = await _db.Users.Select(u => u.Username).ToListAsync();
+                var existingUsers = await _db.users.Select(u => u.Username).ToListAsync();
                 replyToInfo = new ReplyToInfo
                 {
                     Id = rm.Id,
@@ -213,7 +213,7 @@ public class ChatHub : Hub
                 var otherUser = dm.Participants.FirstOrDefault(p => p != username);
                 if (otherUser != null)
                 {
-                    var isOnline = await _db.Users
+                    var isOnline = await _db.users
                         .Where(u => u.Username == otherUser)
                         .Select(u => u.Status == "online")
                         .FirstOrDefaultAsync();
@@ -277,7 +277,7 @@ public class ChatHub : Hub
                 var otherUser = dm.Participants.FirstOrDefault(p => p != username);
                 if (otherUser != null)
                 {
-                    var existingUsers = await _db.Users.Select(u => u.Username).ToListAsync();
+                    var existingUsers = await _db.users.Select(u => u.Username).ToListAsync();
                     if (existingUsers.Contains(otherUser))
                     {
                         var uc = await GetUnreadCountForChannel(channelId, otherUser);

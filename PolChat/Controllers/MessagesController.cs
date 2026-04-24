@@ -33,7 +33,7 @@ public class MessagesController : ControllerBase
         var username = session.Username;
 
         var channels = await _db.Channels.OrderBy(c => c.CreatedAt).ToListAsync();
-        var existingUsers = (await _db.Users.Select(u => u.Username).ToListAsync()).ToHashSet();
+        var existingUsers = (await _db.users.Select(u => u.Username).ToListAsync()).ToHashSet();
 
         var channelDtos = channels.Select(ch => new ChannelDto
         {
@@ -68,7 +68,7 @@ public class MessagesController : ControllerBase
             });
         }
 
-        var users = await _db.Users
+        var users = await _db.users
             .Where(u => u.Username != null)
             .Select(u => new UserDto
             {
@@ -102,7 +102,7 @@ public class MessagesController : ControllerBase
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
         var offset = (page - 1) * limit;
-        var existingUsers = (await _db.Users.Select(u => u.Username).ToListAsync()).ToHashSet();
+        var existingUsers = (await _db.users.Select(u => u.Username).ToListAsync()).ToHashSet();
 
         var totalCount = await _db.Messages.CountAsync(m => m.ChannelId == channelId);
 
@@ -135,7 +135,8 @@ public class MessagesController : ControllerBase
                 FileUrl = row.FileUrl,
                 Timestamp = row.Timestamp.ToString("O"),
                 Edited = row.Edited,
-                EditedAt = row.EditedAt?.ToString("O"),
+                //TODO: NEED FIX
+                //EditedAt = row.EditedAt?.ToString("O"),
                 Reactions = row.Reactions ?? new List<Reaction>(),
                 ReadBy = row.ReadBy ?? new List<string>(),
                 DeliveredTo = row.DeliveredTo ?? new List<string>(),
