@@ -108,7 +108,7 @@ public class ChannelsController : ControllerBase
             return StatusCode(403, new { error = "No permission" });
 
         _db.channels.Remove(channel);
-        var messages = _db.messages.Where(m => m.ChannelId == channelId);
+        var messages = _db.messages.Where(m => m.channel_id == channelId);
         _db.messages.RemoveRange(messages);
         await _db.SaveChangesAsync();
 

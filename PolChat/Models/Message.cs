@@ -1,23 +1,26 @@
-namespace ChatApp.Models;
-
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
+
+namespace ChatApp.Models;
 
 public class Message
 {
-    public string Id { get; set; } = null!;
-    public string ChannelId { get; set; } = null!;
-    public string Username { get; set; } = null!;
-    public string? Content { get; set; }
-    public string? FileUrl { get; set; }
-    public DateTime Timestamp { get; set; }
-    public bool Edited { get; set; }
-    public DateTime? EditedAt { get; set; }
-    public string? ReplyToId { get; set; }
+    public string id { get; set; } = null!;
+
+    [Column("channel_id")]
+    public string channel_id { get; set; } = null!;
+    public string username { get; set; } = null!;
+    public string? content { get; set; }
+    public string? file_url { get; set; }
+    public DateTime timestamp { get; set; }
+    public bool edited { get; set; }
+    public DateTime? edited_at { get; set; }
+    public string? reply_to_id { get; set; }
 
     // PostgreSQL arrays
-    public List<Reaction> Reactions { get; set; } = new();
-    public List<string> ReadBy { get; set; } = new();
-    public List<string> DeliveredTo { get; set; } = new();
+    public List<Reaction> reactions { get; set; } = new();
+    public List<string> read_by { get; set; } = new();
+    public List<string> delivered_to { get; set; } = new();
 
     // Navigation
     [JsonIgnore]

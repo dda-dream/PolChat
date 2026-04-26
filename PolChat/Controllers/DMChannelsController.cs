@@ -121,7 +121,7 @@ public class DMChannelsController : ControllerBase
             return StatusCode(403, new { error = "No permission" });
 
         _db.dm_channels.Remove(dm);
-        var messages = _db.messages.Where(m => m.ChannelId == dmId);
+        var messages = _db.messages.Where(m => m.channel_id == dmId);
         _db.messages.RemoveRange(messages);
         await _db.SaveChangesAsync();
 

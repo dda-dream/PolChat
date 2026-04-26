@@ -108,54 +108,54 @@ public class MessagesController : ControllerBase
         var offset = (page - 1) * limit;
         var existingUsers = (await _db.users.Select(u => u.username).ToListAsync()).ToHashSet();
 
-        var totalCount = await _db.messages.CountAsync(m => m.ChannelId == channelId);
+        var totalCount = await _db.messages.CountAsync(m => m.channel_id == channelId);
 
         var rows = await _db.messages
-            .Where(m => m.ChannelId == channelId)
-            .OrderByDescending(m => m.Timestamp)
+            .Where(m => m.channel_id == channelId)
+            .OrderByDescending(m => m.timestamp)
             .Skip(offset)
             .Take(limit)
             .ToListAsync();
         rows.Reverse();
 
-        var replyToIds = rows.Where(r => r.ReplyToId != null).Select(r => r.ReplyToId!).Distinct().ToList();
+        var replyToIds = rows.Where(r => r.reply_to_id != null).Select(r => r.reply_to_id!).Distinct().ToList();
         var replyMessages = new Dictionary<string, Message>();
         if (replyToIds.Count > 0)
         {
-            var replyRows = await _db.messages.Where(m => replyToIds.Contains(m.Id)).ToListAsync();
-            foreach (var rr in replyRows) replyMessages[rr.Id] = rr;
+            var replyRows = await _db.messages.Where(m => replyToIds.Contains(m.id)).ToListAsync();
+            foreach (var rr in replyRows) replyMessages[rr.id] = rr;
         }
 
         var messages = new List<MessageDto>();
         foreach (var row in rows)
         {
-            var senderExists = existingUsers.Contains(row.Username);
+            var senderExists = existingUsers.Contains(row.username);
             var msg = new MessageDto
             {
-                Id = row.Id,
-                ChannelId = row.ChannelId,
-                Username = senderExists ? row.Username : Constants.DeletedUserDisplayName,
-                Content = row.Content,
-                FileUrl = row.FileUrl,
-                Timestamp = row.Timestamp.ToString("O"),
-                Edited = row.Edited,
+                Id = row.id,
+                ChannelId = row.channel_id,
+                Username = senderExists ? row.username : Constants.DeletedUserDisplayName,
+                Content = row.content,
+                FileUrl = row.file_url,
+                Timestamp = row.timestamp.ToString("O"),
+                Edited = row.edited,
                 //TODO: FIX IT LATER
-                //EditedAt = row.EditedAt?.ToString("O"),
-                Reactions = row.Reactions ?? new List<Reaction>(),
-                ReadBy = row.ReadBy ?? new List<string>(),
-                DeliveredTo = row.DeliveredTo ?? new List<string>(),
+                EditedAt = row.edited_at,//row.EditedAt?.ToString("O"),
+                Reactions = row.reactions ?? new List<Reaction>(),
+                ReadBy = row.read_by ?? new List<string>(),
+                DeliveredTo = row.delivered_to ?? new List<string>(),
                 IsDeletedSender = !senderExists
             };
 
-            if (row.ReplyToId != null && replyMessages.TryGetValue(row.ReplyToId, out var rm))
+            if (row.reply_to_id != null && replyMessages.TryGetValue(row.reply_to_id, out var rm))
             {
-                var ru = rm.Username;
+                var ru = rm.username;
                 msg.ReplyTo = new ReplyToInfo
                 {
-                    Id = rm.Id,
+                    Id = rm.id,
                     Username = existingUsers.Contains(ru) ? ru : Constants.DeletedUserDisplayName,
-                    Content = rm.Content ?? "",
-                    FileUrl = rm.FileUrl,
+                    Content = rm.content ?? "",
+                    FileUrl = rm.file_url,
                     IsDeleted = !existingUsers.Contains(ru)
                 };
             }
@@ -186,16 +186,16 @@ public class MessagesController : ControllerBase
         var newContent = HtmlSanitizer.Sanitize(request.Content);
 
         var msg = await _db.messages.FindAsync(messageId);
-        if (msg == null || msg.Username != session.Username)
+        if (msg == null || msg.username != session.Username)
             return StatusCode(403, new { error = "No permission" });
 
-        msg.Content = newContent;
-        msg.Edited = true;
-        msg.EditedAt = DateTime.UtcNow;
+        msg.content = newContent;
+        msg.edited = true;
+        msg.edited_at = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
         // Broadcast edit to channel
-        await _hub.Clients.Group(msg.ChannelId).SendAsync("message_edited", new { id = messageId, content = newContent });
+        await _hub.Clients.Group(msg.channel_id).SendAsync("message_edited", new { id = messageId, content = newContent });
 
         return Ok(new { success = true });
     }
@@ -210,10 +210,10 @@ public class MessagesController : ControllerBase
         var msg = await _db.messages.FindAsync(messageId);
         if (msg == null) return NotFound(new { error = "Not found" });
 
-        if (msg.Username != session.Username && session.Role != "admin")
+        if (msg.username != session.Username && session.Role != "admin")
             return StatusCode(403, new { error = "No permission" });
 
-        var channelId = msg.ChannelId;
+        var channelId = msg.channel_id;
         _db.messages.Remove(msg);
         await _db.SaveChangesAsync();
 
@@ -252,12 +252,12 @@ public class MessagesController : ControllerBase
         var username = session.Username;
 
         var msg = await _db.messages
-            .Where(m => m.Id == messageId)
-            .Select(m => new { m.ChannelId, m.Username })
+            .Where(m => m.id == messageId)
+            .Select(m => new { m.channel_id, m.username })
             .FirstOrDefaultAsync();
 
         if (msg == null) return NotFound(new { success = false, error = "Not found" });
-        if (msg.Username == username) return Ok(new { success = true, message = "Cannot read own" });
+        if (msg.username == username) return Ok(new { success = true, message = "Cannot read own" });
 
         await _db.Database.ExecuteSqlRawAsync(@"
             UPDATE messages SET read_by = array_append(read_by, {0})
@@ -265,7 +265,8 @@ public class MessagesController : ControllerBase
             username, messageId);
 
         // Broadcast read event
-        await _hub.Clients.Group(msg.ChannelId).SendAsync("message_read", new { messageId, readBy = username, channelId = msg.ChannelId });
+        await _hub.Clients.Group(msg.channel_id).SendAsync("message_read", 
+                new { messageId, readBy = username, channelId = msg.channel_id });
 
         return Ok(new { success = true });
     }
@@ -289,17 +290,17 @@ public class MessagesController : ControllerBase
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
         var rows = await _db.messages
-            .Where(m => m.ChannelId == channelId && m.Username == session.Username)
-            .Select(m => new { m.Id, m.ReadBy, m.DeliveredTo })
+            .Where(m => m.channel_id == channelId && m.username == session.Username)
+            .Select(m => new { m.id, m.read_by, m.delivered_to })
             .ToListAsync();
 
         var statuses = new Dictionary<string, object>();
         foreach (var r in rows)
         {
-            statuses[r.Id] = new
+            statuses[r.id] = new
             {
-                delivered = (r.DeliveredTo?.Count ?? 0) > 0,
-                read = (r.ReadBy?.Count ?? 0) > 0
+                delivered = (r.delivered_to?.Count ?? 0) > 0,
+                read = (r.read_by?.Count ?? 0) > 0
             };
         }
         return Ok(statuses);
@@ -312,7 +313,7 @@ public class MessagesController : ControllerBase
         var session = await GetSession();
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
-        var msg = await _db.messages.Where(m => m.Id == messageId).Select(m => m.ReadBy).FirstOrDefaultAsync();
+        var msg = await _db.messages.Where(m => m.id == messageId).Select(m => m.read_by).FirstOrDefaultAsync();
         var readBy = msg ?? new List<string>();
         return Ok(new { read_by = readBy, read_count = readBy.Count });
     }

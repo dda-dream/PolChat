@@ -28,7 +28,9 @@ var redisConnection = builder.Configuration.GetConnectionString("Redis")
 
 // ===== Database =====
 builder.Services.AddDbContext<ChatDbContext>(options =>
-    options.UseNpgsql(connectionString));
+    options.UseNpgsql(connectionString)
+           
+    );
 
 // ===== Redis =====
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
