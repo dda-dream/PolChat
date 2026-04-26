@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using ChatApp.Models;
+using System.Text.Json;
 
 namespace ChatApp.Data;
 
@@ -79,6 +80,15 @@ public class ChatDbContext : DbContext
              .WithMany()
              .HasForeignKey(m => m.reply_to_id)
              .OnDelete(DeleteBehavior.SetNull);
+
+            
+            e.Property(x => x.reactions)
+            .HasConversion(
+                v => JsonSerializer.Serialize(v, JsonSerializerOptions.Default),
+                v => JsonSerializer.Deserialize<List<Reaction>>(v, JsonSerializerOptions.Default)!
+            );
+
+
         });
 
         // DM Channels
@@ -92,5 +102,9 @@ public class ChatDbContext : DbContext
             e.Property(d => d.participants)
                 .HasColumnType("text[]");
         });
+
+        
+
+
     }
 }

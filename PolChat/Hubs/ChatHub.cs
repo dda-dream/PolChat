@@ -174,7 +174,7 @@ public class ChatHub : Hub
             timestamp = now,
             edited = false,
             reactions = new List<Reaction>(),
-            read_by = new List<string>(),
+            read_by = Array.Empty<string>(),//new List<string>(),
             delivered_to = new List<string>()
         };
 

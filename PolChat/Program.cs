@@ -3,6 +3,7 @@ using ChatApp.Hubs;
 using ChatApp.Services;
 using Microsoft.AspNetCore.Rewrite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.OpenApi;
 using Serilog;
 using StackExchange.Redis;
@@ -28,9 +29,10 @@ var redisConnection = builder.Configuration.GetConnectionString("Redis")
 
 // ===== Database =====
 builder.Services.AddDbContext<ChatDbContext>(options =>
-    options.UseNpgsql(connectionString)
-           
-    );
+    {
+        options.UseNpgsql(connectionString);
+           //.UseSnakeCaseNamingConvention()
+    });
 
 // ===== Redis =====
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
@@ -79,6 +81,15 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+
+app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(@"C:\0\PolChat\uploads\"),
+    RequestPath = "/uploads"
+});
+
+app.UseRouting();   
 // Настройка перенаправления
 var option = new RewriteOptions();
 option.AddRewrite("^$", "login.html", skipRemainingRules: true);
@@ -93,11 +104,15 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
-app.UseStaticFiles();
+
+
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<ChatHub>("/chathub");
+
+
 
 
 app.MapGet("/_debug/routes/details", (IEnumerable<EndpointDataSource> endpointSources) =>

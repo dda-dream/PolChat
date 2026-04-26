@@ -7,6 +7,7 @@ public class Message
 {
     public string id { get; set; } = null!;
 
+    [ForeignKey(nameof(Channel))]
     [Column("channel_id")]
     public string channel_id { get; set; } = null!;
     public string username { get; set; } = null!;
@@ -19,7 +20,11 @@ public class Message
 
     // PostgreSQL arrays
     public List<Reaction> reactions { get; set; } = new();
-    public List<string> read_by { get; set; } = new();
+
+
+    public string[] read_by { get; set; } = Array.Empty<string>();
+
+
     public List<string> delivered_to { get; set; } = new();
 
     // Navigation
@@ -47,8 +52,8 @@ public class MessageDto
     public string Timestamp { get; set; } = null!;
     public bool Edited { get; set; }
     public DateTime? EditedAt { get; set; }
-    public List<Reaction> Reactions { get; set; } = new();
-    public List<string> ReadBy { get; set; } = new();
+    public List<Reaction> Reactions { get; set; } = new List<Reaction>();
+    public string[] ReadBy { get; set; } = Array.Empty<string>();
     public List<string> DeliveredTo { get; set; } = new();
     public ReplyToInfo? ReplyTo { get; set; }
     public bool IsDeletedSender { get; set; }

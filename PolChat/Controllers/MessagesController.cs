@@ -142,7 +142,7 @@ public class MessagesController : ControllerBase
                 //TODO: FIX IT LATER
                 EditedAt = row.edited_at,//row.EditedAt?.ToString("O"),
                 Reactions = row.reactions ?? new List<Reaction>(),
-                ReadBy = row.read_by ?? new List<string>(),
+                ReadBy = row.read_by ?? Array.Empty<string>(),
                 DeliveredTo = row.delivered_to ?? new List<string>(),
                 IsDeletedSender = !senderExists
             };
@@ -300,7 +300,7 @@ public class MessagesController : ControllerBase
             statuses[r.id] = new
             {
                 delivered = (r.delivered_to?.Count ?? 0) > 0,
-                read = (r.read_by?.Count ?? 0) > 0
+                read = (r.read_by?.Length ?? 0) > 0
             };
         }
         return Ok(statuses);
@@ -314,8 +314,8 @@ public class MessagesController : ControllerBase
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
         var msg = await _db.messages.Where(m => m.id == messageId).Select(m => m.read_by).FirstOrDefaultAsync();
-        var readBy = msg ?? new List<string>();
-        return Ok(new { read_by = readBy, read_count = readBy.Count });
+        var readBy = msg ?? Array.Empty<string>(); ;
+        return Ok(new { read_by = readBy, read_count = readBy });
     }
 
     private async Task<Dictionary<string, int>> GetRealUnreadCounts(string username)
