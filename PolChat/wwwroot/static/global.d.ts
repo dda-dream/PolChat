@@ -1,63 +1,60 @@
-declare global {
-    //import { HubConnection } from '@microsoft/signalr';
-    //import * as bootstrap from 'bootstrap';
-    const bootstrap: typeof import('bootstrap');
-    const signalR: typeof import('@microsoft/signalr');
-    //type HubConnectionBuilder = import('@microsoft/signalr').HubConnection;
-    //console.log(HubConnectionBuilder);
-     
-    // ====================== ИНТЕРФЕЙСЫ ======================
-    // ASP.NET Core System.Text.Json сериализует в camelCase
+// global.d.ts — ФИНАЛЬНАЯ РАБОЧАЯ ВЕРСИЯ
 
+declare global {
+    // Глобальные библиотеки
+    const io: any;
+    const bootstrap: any;
+ 
+    // ====================== ИНТЕРФЕЙСЫ ======================
     interface Message {
         id: string;
-        channelId?: string;
+        channel_id?: string;
         username: string;
         content: string;
-        fileUrl?: string | null;
+        file_url?: string | null;
         timestamp: string;
         edited?: boolean;
-        editedAt?: string;
         reactions?: { emoji: string; users: string[] }[];
-        readBy?: string[];
-        deliveredTo?: string[];
-        replyTo?: {
-            id: string;
-            username: string;
-            content?: string;
-            isDeleted?: boolean;
-            fileUrl?: string;
+        read_by?: string[];
+        reply_to?: {  
+            id: string; 
+            username: string; 
+            content?: string; 
+            is_deleted?: boolean; 
+            file_url?: string 
         } | null;
-        isDeletedSender?: boolean;
-        isTemp?: boolean;
+        is_temp?: boolean;
+        is_deleted_sender?: boolean;
+    }
+
+    interface Window {
+        openMediaModal: (mediaUrl: string, type: 'image' | 'video') => void;
     }
 
     interface User {
         username: string;
         status: 'online' | 'away' | 'offline';
         role: 'user' | 'admin';
-        lastSeen?: string;
-        createdAt?: string;
-        avatar?: string;
-        isDeleted?: boolean;
+        last_seen?: string;
+        created_at?: string;
+        is_deleted?: boolean;
     }
 
     interface Channel {
         id: string;
         name: string;
         description?: string;
-        isPrivate?: boolean;
-        createdBy?: string;
-        createdByDisplay?: string;
-        createdByDeleted?: boolean;
-        createdAt?: string;
+        is_private?: boolean;
+        created_by?: string;
+        created_by_display?: string;
+        created_by_deleted?: boolean;
+        created_at?: string;
     }
-      
+
     interface DMChannel {
         id: string;
         name: string;
-        originalName?: string;
-        isDeleted?: boolean;
+        is_deleted?: boolean;
     }
 
     interface UnreadCounts {
@@ -103,7 +100,6 @@ declare global {
         changeRole?: (username: string, role: string) => void;
         deleteUser?: (username: string) => void;
         typingHideTimeout?: number;
-        openMediaModal: (mediaUrl: string, type: 'image' | 'video') => void; 
     }
 }
 

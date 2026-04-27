@@ -82,18 +82,21 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 
+app.UseRouting();
+
 app.UseStaticFiles();
+/*
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(@"C:\0\PolChat\uploads\"),
     RequestPath = "/uploads"
 });
+*/
 
-app.UseRouting();   
-// Настройка перенаправления
-var option = new RewriteOptions();
-option.AddRewrite("^$", "login.html", skipRemainingRules: true);
-app.UseRewriter(option);
+
+
+
+
 
 
 // ===== Middleware =====

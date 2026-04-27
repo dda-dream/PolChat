@@ -9,7 +9,8 @@ using ChatApp.Services;
 namespace ChatApp.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+//[Route("api/[controller]")]
+[Route("api/dm_channels")]
 public class DMChannelsController : ControllerBase
 {
     private readonly ChatDbContext _db;

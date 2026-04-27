@@ -123,9 +123,8 @@ public class AuthController : ControllerBase
     [HttpGet("/")]
     public IActionResult Index()
     {
-        // In production, serve from wwwroot or use static files
-        // For now return a placeholder that the frontend will replace
-        return Content(ChatHtml(), "text/html");
+        //return Content(ChatHtml(), "text/html");
+        return Redirect("/login.html");
     }
 
     // GET /api/time
