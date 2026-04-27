@@ -9,7 +9,6 @@
     <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
-    <script> window.CURRENT_USER = "{{ username }}";</script>
     <link href="/static/chat.css" rel="stylesheet">
     <script src="/static/chat.js" defer></script>
 </head>
@@ -20,7 +19,7 @@
     <div class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <i class="fas fa-comments"></i> Чат
-            <small><i class="fas fa-user"></i> {{ username }}</small>
+            <small id="sidebar-username"><i class="fas fa-user"></i> {{ username }}</small>
         </div>
         <div class="channels-list">
             <div class="section-header">

@@ -139,4 +139,25 @@ public class UsersController : ControllerBase
 
         return Ok(new { success = true });
     }
+
+    // GET /api/users/me
+    [HttpGet("me")]
+    public async Task<IActionResult> GetCurrentUser()
+    {
+        var session = await GetSession();
+        if (session == null) return Unauthorized(new { error = "Not authenticated" });
+
+        var user = await _db.users.FindAsync(session.Username);
+        if (user == null) return NotFound(new { error = "User not found" });
+
+        return Ok(new
+        {
+            username = user.username,
+            role = user.role,
+            status = user.status,
+            avatar = user.avatar,
+            createdAt = user.created_at,
+            lastSeen = user.last_seen
+        });
+    }
 }

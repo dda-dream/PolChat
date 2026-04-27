@@ -107,7 +107,7 @@ if (isChatPage) {
     let currentChannel = null;
     let currentChannelType = null;
     let currentChannelName = '';
-    let currentUsername = window.CURRENT_USER || 'unknown';
+    let currentUsername = '';
     let editingMessageId = null;
     let typingTimeout = null;
     let isTyping = false;
@@ -145,6 +145,31 @@ if (isChatPage) {
     const DELETED_USER_DISPLAY = "Удаленный аккаунт";
     const DELETED_USER_AVATAR = "?";
     // ============ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ЧАТА ============
+    async function loadCurrentUser() {
+        try {
+            const response = await fetch('/api/users/me');
+            if (!response.ok) {
+                throw new Error('Failed to load user info');
+            }
+            const userData = await response.json();
+            currentUsername = userData.username;
+            // Обновляем отображение имени в сайдбаре
+            const sidebarUsername = document.getElementById('sidebar-username');
+            if (sidebarUsername) {
+                sidebarUsername.innerHTML = `<i class="fas fa-user"></i> ${escapeHtml(currentUsername)}`;
+            }
+            // Сохраняем в window для других частей кода
+            window.CURRENT_USER = currentUsername;
+            console.log('Current user loaded:', currentUsername);
+            return currentUsername;
+        }
+        catch (error) {
+            console.error('Error loading current user:', error);
+            // Если не удалось загрузить пользователя, перенаправляем на логин
+            window.location.href = '/login';
+            throw error;
+        }
+    }
     function initMessageStatuses(messages) {
         if (!messages || currentChannelType !== 'dm')
             return;
@@ -2264,6 +2289,7 @@ if (isChatPage) {
     });
     // ============ ИНИЦИАЛИЗАЦИЯ ЧАТА ============
     async function initChat() {
+        await loadCurrentUser();
         setupActivityTracking();
         setupVisibilityTracking();
         startHeartbeat();
@@ -2823,9 +2849,24 @@ if (isRegisterPage) {
 if (isSettingsPage) {
     let channelData = null;
     let renameModal, descriptionModal, infoModal, membersModal;
-    let currentUser = '{{ username }}';
+    let currentUser = '';
     const urlParams = new URLSearchParams(window.location.search);
     const channelId = urlParams.get('id');
+    (async () => {
+        try {
+            const response = await fetch('/api/users/me');
+            if (response.ok) {
+                const userData = await response.json();
+                currentUser = userData.username;
+                window.CURRENT_USER = currentUser;
+            }
+        }
+        catch (error) {
+            console.error('Error loading user in settings:', error);
+        }
+        // Затем загружаем данные канала
+        await loadChannelData();
+    })();
     if (!channelId) {
         showGlobalNotification('Канал не указан', 'danger');
         setTimeout(() => goBack(), 1500);
@@ -3107,6 +3148,23 @@ if (isSettingsPage) {
 }
 // ============ КОД ТОЛЬКО ДЛЯ СТРАНИЦЫ УПРАВЛЕНИЯ ПОЛЬЗОВАТЕЛЯМИ ============
 if (isUserManagementPage) {
+    let currentUser = '';
+    // Загружаем текущего пользователя
+    (async () => {
+        try {
+            const response = await fetch('/api/users/me');
+            if (response.ok) {
+                const userData = await response.json();
+                currentUser = userData.username;
+                window.CURRENT_USER = currentUser;
+            }
+        }
+        catch (error) {
+            console.error('Error loading user in admin panel:', error);
+        }
+        // Затем загружаем пользователей
+        await loadUsers();
+    })();
     async function loadUsers() {
         try {
             const response = await fetch('/api/users');
