@@ -24,7 +24,7 @@ Log.Logger = new LoggerConfiguration()
 builder.Host.UseSerilog();
 
 // ===== Configuration =====
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+var connectionString = builder.Configuration.GetConnectionString("PostgreSQL");
 var redisConnection = builder.Configuration.GetConnectionString("Redis");
 
 builder.Services.AddHttpContextAccessor();
