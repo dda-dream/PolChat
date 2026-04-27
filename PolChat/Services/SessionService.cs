@@ -17,11 +17,13 @@ public class SessionService : ISessionService
 {
     private readonly IDatabase _redis;
     private readonly ILogger<SessionService> _logger;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
-    public SessionService(IConnectionMultiplexer redis, ILogger<SessionService> logger)
+    public SessionService(IConnectionMultiplexer redis, ILogger<SessionService> logger, IHttpContextAccessor httpContextAccessor)
     {
         _redis = redis.GetDatabase();
         _logger = logger;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     public async Task<SessionData?> GetSessionAsync(string? sessionId)
@@ -30,7 +32,7 @@ public class SessionService : ISessionService
 
         try
         {
-            var data = await _redis.StringGetAsync($"session:{sessionId}");
+            var data = await _redis.StringGetAsync($"session_{_httpContextAccessor.HttpContext?.Connection.LocalPort}:{sessionId}");
             if (data.IsNullOrEmpty) return null;
 
             //TODO: Disambiguate JsonSerializer.Deserialize overloads by passing a string
@@ -51,7 +53,7 @@ public class SessionService : ISessionService
         try
         {
             await _redis.StringSetAsync(
-                $"session:{sessionId}",
+                $"session_{_httpContextAccessor.HttpContext?.Connection.LocalPort}:{sessionId}",
                 json,
                 TimeSpan.FromDays(Constants.SessionTtlDays)
             );
@@ -68,7 +70,7 @@ public class SessionService : ISessionService
     {
         try
         {
-            await _redis.KeyDeleteAsync($"session:{sessionId}");
+            await _redis.KeyDeleteAsync($"session_{_httpContextAccessor.HttpContext?.Connection.LocalPort}:{sessionId}");
         }
         catch (Exception ex)
         {

@@ -25,6 +25,8 @@ builder.Host.UseSerilog();
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 var redisConnection = builder.Configuration.GetConnectionString("Redis");
 
+builder.Services.AddHttpContextAccessor();
+
 // ===== Database =====
 builder.Services.AddDbContext<ChatDbContext>(options =>
     {
