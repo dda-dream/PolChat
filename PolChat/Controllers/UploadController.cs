@@ -47,8 +47,8 @@ public class UploadController : ControllerBase
 
         if (!Directory.Exists(_uploadFolder))
             Directory.CreateDirectory(_uploadFolder);
-
-        var safeName = $"{DateTime.UtcNow:yyyy-MM-dd-HH-mm-ss}-{Guid.NewGuid():N}.[{ext}]";
+        
+        var safeName = $"{DateTime.UtcNow:yyyy-MM-dd-HH-mm-ss}-{Guid.NewGuid():N}.{ext}";
         var filepath = Path.Combine(_uploadFolder, safeName);
 
         await using var stream = new FileStream(filepath, FileMode.Create);
