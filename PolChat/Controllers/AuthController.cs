@@ -31,8 +31,8 @@ public class AuthController : ControllerBase
     }
 
     // POST /api/auth/login
-    //[HttpPost("/api/auth/login")]
-    [HttpPost("/login")]
+    [HttpPost("/api/auth/login")]
+    //[HttpPost("/login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
         var user = await _db.users.FindAsync(request.Username);

@@ -1,5 +1,8 @@
 // ============ ГЛОБАЛЬНЫЕ ОБЪЯВЛЕНИЯ И ТИПЫ ============
-/* global window, document, io, bootstrap, localStorage, sessionStorage, fetch, alert, confirm, prompt, FileReader, URL, FormData, MutationObserver, Set, Map, console */
+//import * as bootstrap from 'bootstrap';
+//import * as signalr from '@microsoft/signalr'   
+//import { HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
+/* global window, document, bootstrap, localStorage, sessionStorage, fetch, alert, confirm, prompt, FileReader, URL, FormData, MutationObserver, Set, Map, console */
 "use strict";
 // Расширение глобального объекта window
 // ============ ОПРЕДЕЛЕНИЕ ТИПА СТРАНИЦЫ ============
@@ -38,15 +41,21 @@ function showGlobalNotification(message, type = 'info') {
 }
 // ============ КОД ТОЛЬКО ДЛЯ СТРАНИЦЫ ЧАТА ============
 if (isChatPage) {
-    // ============ СОЗДАНИЕ SOCKET ============
-    // Предполагается, что io() возвращает тип Socket
-    const socket = io({
-        reconnection: true,
-        reconnectionAttempts: Infinity,
-        reconnectionDelay: 10 * 1000,
-        reconnectionDelayMax: 5 * 1000,
-        withCredentials: true
-    });
+    // ============ СОЗДАНИЕ SIGNALR CONNECTION ============
+    // SignalR connection to ASP.NET Core backend
+    const connection = new signalR.HubConnectionBuilder()
+        .withUrl("/chathub", { withCredentials: true })
+        .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
+        .configureLogging(signalR.LogLevel.Warning)
+        .build();
+    // Start connection
+    connection.start().then(() => {
+        updateConnectionStatus(true);
+        updateUserStatusOnServer(STATUS.ONLINE);
+        loadUsersWithStatus();
+        forceRefreshUnreadCounts();
+        updateServerTimeInTitle();
+    }).catch(err => console.error('SignalR connection error:', err));
     function toggleSidebar() {
         const sidebar = document.getElementById('sidebar');
         const overlay = document.getElementById('sidebarOverlay');
@@ -130,6 +139,7 @@ if (isChatPage) {
     let scrollLockTimeout = null;
     let messageReadBy = new Map();
     let pendingMessages = new Map();
+    let serverTimeOffset = 0; // разница между серверным и локальным временем (мс)
     let titleUpdateInterval = null;
     let lastUnreadCount = 0;
     const DELETED_USER_DISPLAY = "Удаленный аккаунт";
@@ -142,8 +152,8 @@ if (isChatPage) {
         for (const msg of messages) {
             if (msg.username !== currentUsername)
                 continue;
-            const readers = msg.read_by || [];
-            const delivered = msg.delivered_to || [];
+            const readers = msg.readBy || [];
+            const delivered = msg.deliveredTo || [];
             // Прочитано: кто-то кроме отправителя добавил себя в read_by
             const isRead = readers.some(u => u.trim().toLowerCase() !== myUser);
             // ✅ ИСПРАВЛЕНО: delivered_to содержит получателей. Если массив не пуст, сообщение доставлено.
@@ -156,10 +166,31 @@ if (isChatPage) {
             messageStatuses.set(msg.id, s);
         }
     }
-    function updateTitleWithCurrentTime(dateAndTime) {
+    function parseServerDateTime(dateTimeStr) {
+        // формат "дд.мм.гггг чч:мм:сс"
+        const parts = dateTimeStr.split(' ');
+        if (parts.length !== 2)
+            return null;
+        const dateParts = parts[0].split('.');
+        const timeParts = parts[1].split(':');
+        if (dateParts.length !== 3 || timeParts.length !== 3)
+            return null;
+        const year = parseInt(dateParts[2], 10);
+        const month = parseInt(dateParts[1], 10) - 1;
+        const day = parseInt(dateParts[0], 10);
+        const hour = parseInt(timeParts[0], 10);
+        const minute = parseInt(timeParts[1], 10);
+        const second = parseInt(timeParts[2], 10);
+        return new Date(year, month, day, hour, minute, second);
+    }
+    function updateTitleWithCurrentTime() {
+        const now = new Date();
+        const serverNow = new Date(now.getTime() + serverTimeOffset);
+        const timeStr = serverNow.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const dateStr = serverNow.toLocaleDateString('ru-RU');
         const title = lastUnreadCount > 0
-            ? `(${lastUnreadCount}) Чат | ${dateAndTime}`
-            : `Чат | ${dateAndTime}`;
+            ? `(${lastUnreadCount}) Pol Чат | ${dateStr} ${timeStr}`
+            : `Pol Чат | ${dateStr} ${timeStr}`;
         if (document.title !== title)
             document.title = title;
     }
@@ -278,13 +309,10 @@ if (isChatPage) {
             return `<div class="message-file mt-2"><img class="message-image" src="${escapeHtml(fileUrl)}" onclick="event.stopPropagation(); openMediaModal('${safeUrl}', 'image')" loading="lazy" style="max-width:100%; max-height:400px; border-radius:12px; cursor:pointer;"></div>`;
         }
         else if (type === 'video') {
-            return `<div class="message-file mt-2 video-preview-container" style="position: relative; display: inline-block; cursor: pointer;" onclick="event.stopPropagation(); openMediaModal('${safeUrl}', 'video')">
-                <video class="message-video" style="max-width:100%; max-height:400px; border-radius:8px; cursor:pointer;" preload="metadata">
+            return `<div class="message-file mt-2">
+                <video class="message-video" style="max-width:100%; max-height:400px; border-radius:8px; cursor:pointer;" preload="metadata" onclick="event.stopPropagation(); openMediaModal('${safeUrl}', 'video')">
                     <source src="${escapeHtml(fileUrl)}">
                 </video>
-                <div class="video-play-button" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 60px; height: 60px; background: rgba(0,0,0,0.6); border-radius: 50%; display: flex; align-items: center; justify-content: center; pointer-events: none; transition: all 0.2s;">
-                    <i class="fas fa-play" style="color: white; font-size: 24px; margin-left: 4px;"></i>
-                </div>
             </div>`;
         }
         else {
@@ -313,13 +341,10 @@ if (isChatPage) {
             </div>`;
         }
         else if (type === 'video') {
-            return `<div class="message-file mt-2 video-preview-container" style="position: relative; display: inline-block; cursor: pointer; min-height: 300px; background: #000; border-radius: 8px;" onclick="event.stopPropagation(); openMediaModal('${safeUrl}', 'video')">
-                <video class="message-video" style="max-width:100%; max-height:300px; min-height:300px; border-radius:8px; cursor:pointer;" preload="metadata">
+            return `<div class="message-file mt-2" style="min-height: 300px; background: #000; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                <video class="message-video" style="max-width:100%; max-height:300px; min-height:300px; border-radius:8px; cursor:pointer;" preload="metadata" onclick="event.stopPropagation(); openMediaModal('${safeUrl}', 'video')">
                     <source src="${escapeHtml(fileUrl)}">
                 </video>
-                <div class="video-play-button" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 60px; height: 60px; background: rgba(0,0,0,0.6); border-radius: 50%; display: flex; align-items: center; justify-content: center; pointer-events: none; transition: all 0.2s;">
-                    <i class="fas fa-play" style="color: white; font-size: 24px; margin-left: 4px;"></i>
-                </div>
             </div>`;
         }
         else {
@@ -337,8 +362,8 @@ if (isChatPage) {
         // Если кэш пуст (первичный рендер), вычисляем безопасно
         if (!status) {
             const myUser = currentUsername.trim().toLowerCase();
-            const readers = message.read_by || [];
-            const delivered = message.delivered_to || [];
+            const readers = message.readBy || [];
+            const delivered = message.deliveredTo || [];
             const isRead = readers.some(u => u.trim().toLowerCase() !== myUser);
             const isDelivered = delivered.length > 0;
             if (isRead)
@@ -390,7 +415,7 @@ if (isChatPage) {
         }
     }
     function formatMessage(msg) {
-        const isDeletedSender = msg.is_deleted_sender === true || msg.username === DELETED_USER_DISPLAY;
+        const isDeletedSender = msg.isDeletedSender === true || msg.username === DELETED_USER_DISPLAY;
         const isOwn = (!isDeletedSender && msg.username === currentUsername);
         const displayUsername = getSafeUsername(msg.username, isDeletedSender);
         const avatarLetter = getUserAvatarLetter(msg.username, isDeletedSender);
@@ -398,31 +423,27 @@ if (isChatPage) {
         const date = new Date(msg.timestamp).toLocaleDateString('ru-RU');
         const fullTime = `${date} ${time}`;
         let replyHtml = '';
-        if (msg.reply_to) {
-            const replyIsDeleted = msg.reply_to.is_deleted === true;
-            const replyDisplayName = getSafeUsername(msg.reply_to.username, replyIsDeleted);
-            replyHtml = `<div class="message-reply" onclick="scrollToMessage('${escapeHtml(msg.reply_to.id)}')">
+        if (msg.replyTo) {
+            const replyIsDeleted = msg.replyTo.isDeleted === true;
+            const replyDisplayName = getSafeUsername(msg.replyTo.username, replyIsDeleted);
+            replyHtml = `<div class="message-reply" onclick="scrollToMessage('${escapeHtml(msg.replyTo.id)}')">
                 <div class="reply-header"><i class="fas fa-reply"></i> ${escapeHtml(replyDisplayName)}</div>
-                <div class="reply-content">${escapeHtml(msg.reply_to.content || (msg.reply_to.file_url ? '📎 Файл' : ''))}</div>
+                <div class="reply-content">${escapeHtml(msg.replyTo.content || (msg.replyTo.fileUrl ? '📎 Файл' : ''))}</div>
             </div>`;
         }
         let fileHtml = '';
-        if (msg.file_url) {
-            const fileName = msg.file_url.split('/').pop() || 'file';
-            if (msg.is_temp && msg.file_url.startsWith('blob:')) {
-                fileHtml = formatFileMessage(msg.file_url, fileName);
+        if (msg.fileUrl) {
+            const fileName = msg.fileUrl.split('/').pop() || 'file';
+            if (msg.isTemp && msg.fileUrl.startsWith('blob:')) {
+                fileHtml = formatFileMessage(msg.fileUrl, fileName);
             }
             else {
-                fileHtml = formatFileMessageWithLoading(msg.file_url, fileName);
+                fileHtml = formatFileMessageWithLoading(msg.fileUrl, fileName);
             }
         }
         let reactionsHtml = '';
         if (msg.reactions && msg.reactions.length) {
-            reactionsHtml = `<div class="message-reactions">${msg.reactions.map(r => {
-                const emoji = r?.emoji || '';
-                const users = r?.users || [];
-                return `<span class="reaction-badge" onclick="addReaction('${escapeHtml(msg.id)}','${escapeHtml(emoji)}')">${escapeHtml(emoji)} ${users.length}</span>`;
-            }).join('')}</div>`;
+            reactionsHtml = `<div class="message-reactions">${msg.reactions.map(r => `<span class="reaction-badge" onclick="addReaction('${escapeHtml(msg.id)}','${escapeHtml(r.emoji)}')">${escapeHtml(r.emoji)} ${r.users.length}</span>`).join('')}</div>`;
         }
         const safeUsername = escapeHtml(displayUsername);
         const safeContent = msg.content ? formatText(msg.content) : '';
@@ -491,8 +512,8 @@ if (isChatPage) {
             return;
         }
         msgs.forEach(msg => {
-            if (msg.read_by)
-                messageReadBy.set(msg.id, msg.read_by);
+            if (msg.readBy)
+                messageReadBy.set(msg.id, msg.readBy);
         });
         if (div)
             div.innerHTML = msgs.map(m => formatMessage(m)).join('');
@@ -515,8 +536,8 @@ if (isChatPage) {
             return;
         initMessageStatuses(newMessages);
         for (const msg of newMessages) {
-            if (msg.read_by)
-                messageReadBy.set(msg.id, msg.read_by);
+            if (msg.readBy)
+                messageReadBy.set(msg.id, msg.readBy);
         }
         let newMessagesHtml = '';
         for (const msg of newMessages) {
@@ -830,7 +851,7 @@ if (isChatPage) {
         }
         const file = pendingFileBlob;
         const fileName = pendingFileName || 'file';
-        const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
         // Получаем текст подписи из textarea
         const captionInput = document.getElementById('fileCaptionInput');
         let caption = captionInput ? captionInput.value.trim() : '';
@@ -846,16 +867,16 @@ if (isChatPage) {
             if (data.success) {
                 pendingMessages.set(tempId, {
                     content: caption,
-                    file_url: data.file_url,
-                    reply_to: replyData,
-                    channel_id: currentChannel
+                    fileUrl: data.fileUrl,
+                    replyTo: replyData,
+                    channelId: currentChannel
                 });
-                socket.emit('send_message', {
-                    temp_id: tempId,
-                    channel_id: currentChannel,
+                connection.invoke('SendMessage', {
+                    tempId: tempId,
+                    channelId: currentChannel,
                     content: caption,
-                    file_url: data.file_url,
-                    reply_to: replyData
+                    fileUrl: data.fileUrl,
+                    replyTo: replyData
                 });
                 showNotification(caption ? 'Файл с подписью отправлен!' : 'Файл отправлен!', 'success');
             }
@@ -963,7 +984,7 @@ if (isChatPage) {
             sendBtn.disabled = true;
             const originalHtml = sendBtn.innerHTML;
             sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-            const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
             const replyData = replyToMessageData ? { id: replyToMessageData.id, username: replyToMessageData.username, content: replyToMessageData.content } : null;
             if (hasFile && pendingFileBlob) {
                 const file = pendingFileBlob;
@@ -977,16 +998,16 @@ if (isChatPage) {
                     if (uploadData.success) {
                         pendingMessages.set(tempId, {
                             content: content,
-                            file_url: uploadData.file_url,
-                            reply_to: replyData,
-                            channel_id: currentChannel
+                            fileUrl: uploadData.fileUrl,
+                            replyTo: replyData,
+                            channelId: currentChannel
                         });
-                        socket.emit('send_message', {
-                            temp_id: tempId,
-                            channel_id: currentChannel,
+                        connection.invoke('SendMessage', {
+                            tempId: tempId,
+                            channelId: currentChannel,
                             content: content,
-                            file_url: uploadData.file_url,
-                            reply_to: replyData
+                            fileUrl: uploadData.fileUrl,
+                            replyTo: replyData
                         });
                     }
                     else {
@@ -1009,16 +1030,16 @@ if (isChatPage) {
             else {
                 pendingMessages.set(tempId, {
                     content: content,
-                    file_url: null,
-                    reply_to: replyData,
-                    channel_id: currentChannel
+                    fileUrl: null,
+                    replyTo: replyData,
+                    channelId: currentChannel
                 });
-                socket.emit('send_message', {
-                    temp_id: tempId,
-                    channel_id: currentChannel,
+                connection.invoke('SendMessage', {
+                    tempId: tempId,
+                    channelId: currentChannel,
                     content: content,
-                    file_url: null,
-                    reply_to: replyData
+                    fileUrl: null,
+                    replyTo: replyData
                 });
             }
             input.value = '';
@@ -1176,7 +1197,7 @@ if (isChatPage) {
             currentlyActiveMessageActions = null;
         }
     }
-    function addReaction(mid, emoji) { socket.emit('add_reaction', { message_id: mid, emoji: emoji }); }
+    function addReaction(mid, emoji) { connection.invoke('AddReaction', mid, emoji); }
     function showReactionPanel(mid, ev) {
         ev.stopPropagation();
         if (activeReactionPanel) {
@@ -1353,7 +1374,7 @@ if (isChatPage) {
         try {
             await fetch(`/api/unread/${channelId}/read`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
             await forceRefreshUnreadCounts();
-            socket.emit('mark_channel_read', { channel_id: channelId });
+            connection.invoke('MarkChannelRead', channelId);
         }
         catch (e) {
             console.error(e);
@@ -1369,7 +1390,7 @@ if (isChatPage) {
             ]);
             const userChannelIds = new Set();
             channels.forEach((ch) => {
-                if (!ch.is_private) {
+                if (!ch.isPrivate) {
                     userChannelIds.add(ch.id);
                 }
                 else {
@@ -1450,7 +1471,28 @@ if (isChatPage) {
                 }
             }
             lastUnreadCount = total;
+            // Получаем серверное время и вычисляем смещение
+            try {
+                const timeRes = await fetch('/api/time');
+                const timeData = await timeRes.json();
+                const serverDateTimeStr = `${timeData.date} ${timeData.time}`;
+                const serverDate = parseServerDateTime(serverDateTimeStr);
+                if (serverDate) {
+                    const localNow = new Date();
+                    serverTimeOffset = serverDate.getTime() - localNow.getTime();
+                }
+            }
+            catch (e) {
+                console.warn('Failed to sync time:', e);
+            }
+            updateTitleWithCurrentTime();
             updateFavicon(total);
+            // Запускаем таймер обновления заголовка, если ещё не запущен
+            if (titleUpdateInterval === null) {
+                titleUpdateInterval = window.setInterval(() => {
+                    updateTitleWithCurrentTime();
+                }, 1000);
+            }
         }
         catch (e) {
             console.error('Failed to update unread total:', e);
@@ -1641,7 +1683,7 @@ if (isChatPage) {
                 div.innerHTML = dms.map((dm) => {
                     const active = currentChannel === dm.id && currentChannelType === 'dm';
                     const unread = unreadCounts[dm.id] || 0;
-                    const displayName = dm.is_deleted ? DELETED_USER_DISPLAY : dm.name;
+                    const displayName = dm.isDeleted ? DELETED_USER_DISPLAY : dm.name;
                     return `<div class="dm-item ${active ? 'active' : ''}" data-dm-id="${escapeHtml(dm.id)}">
                         <div class="dm-info" onclick="joinChannel('dm','${escapeHtml(dm.id)}','${escapeHtml(displayName)}','')">
                             <div class="dm-name"><i class="fas fa-user"></i> ${escapeHtml(displayName)}${unread > 0 ? `<span class="unread-badge">${unread > 99 ? '99+' : unread}</span>` : ''}</div>
@@ -1669,7 +1711,7 @@ if (isChatPage) {
             let html = '';
             for (const u of others) {
                 const statusClass = u.status === 'online' ? 'status-online' : (u.status === 'away' ? 'status-away' : 'status-offline');
-                const statusText = u.status === 'online' ? 'онлайн' : (u.status === 'away' ? 'отошел' : formatLastSeen(u.last_seen));
+                const statusText = u.status === 'online' ? 'онлайн' : (u.status === 'away' ? 'отошел' : formatLastSeen(u.lastSeen));
                 html += `<div class="user-item">
                     <div class="user-info" onclick="startDMWithUser('${escapeHtml(u.username)}')">
                         <div class="user-status ${statusClass}"></div>
@@ -1714,9 +1756,9 @@ if (isChatPage) {
                 loadDMChannels();
                 joinChannel('dm', data.id, username, '');
             }
-            else if (res.status === 409 && data.dm_id) {
+            else if (res.status === 409 && data.dmId) {
                 loadDMChannels();
-                joinChannel('dm', data.dm_id, username, '');
+                joinChannel('dm', data.dmId, username, '');
             }
             else
                 showNotification(data.error || 'Ошибка', 'danger');
@@ -1779,7 +1821,7 @@ if (isChatPage) {
         const name = prompt('Название канала:');
         if (name && name.trim()) {
             const desc = prompt('Описание:');
-            fetch('/api/channels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim(), description: desc || '', is_private: false }) }).then(() => loadChannels(true));
+            fetch('/api/channels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim(), description: desc || '', isPrivate: false }) }).then(() => loadChannels(true));
         }
     }
     function openChannelSettings() {
@@ -1807,7 +1849,7 @@ if (isChatPage) {
             const res = await fetch(url);
             const data = await res.json();
             const messages = data.messages || [];
-            hasMoreMessages = data.pagination?.has_more || false;
+            hasMoreMessages = data.pagination?.hasMore || false;
             if (reset) {
                 displayMessages(messages);
                 messages.forEach((msg) => {
@@ -1841,8 +1883,7 @@ if (isChatPage) {
         }
         if (currentChannel === id && currentChannelType === type)
             return;
-        if (currentChannel)
-            socket.emit('leave_channel', { channel_id: currentChannel });
+        connection.invoke('LeaveChannel', currentChannel);
         currentChannel = id;
         currentChannelType = type;
         currentChannelName = name;
@@ -1856,7 +1897,7 @@ if (isChatPage) {
             currentChannelDescEl.textContent = newDesc;
         if (messageInput)
             messageInput.disabled = false;
-        socket.emit('join_channel', { channel_id: id });
+        connection.invoke('JoinChannel', id);
         currentPage = 1;
         hasMoreMessages = true;
         await loadMessages(id, true);
@@ -1919,7 +1960,12 @@ if (isChatPage) {
             const response = await fetch('/api/time');
             const timeData = await response.json();
             const serverDateTimeStr = `${timeData.date} ${timeData.time}`;
-            updateTitleWithCurrentTime(serverDateTimeStr);
+            const serverDate = parseServerDateTime(serverDateTimeStr);
+            if (serverDate) {
+                const localNow = new Date();
+                serverTimeOffset = serverDate.getTime() - localNow.getTime();
+                updateTitleWithCurrentTime();
+            }
         }
         catch (e) {
             console.error('Failed to sync time:', e);
@@ -1956,19 +2002,19 @@ if (isChatPage) {
         }
     }
     // ============ SOCKET СОБЫТИЯ ============
-    socket.on('connect', () => {
+    connection.on('reconnected', () => {
         updateConnectionStatus(true);
         updateUserStatusOnServer(STATUS.ONLINE);
         loadUsersWithStatus();
         forceRefreshUnreadCounts();
         updateServerTimeInTitle();
     });
-    socket.on('disconnect', () => updateConnectionStatus(false));
-    socket.on('new_message', async (message) => {
+    connection.on('close', () => updateConnectionStatus(false));
+    connection.on('new_message', async (message) => {
         if (receivedMessages.has(message.id))
             return;
         receivedMessages.add(message.id);
-        const isCurrent = message.channel_id === currentChannel;
+        const isCurrent = message.channelId === currentChannel;
         if (isCurrent) {
             const msgDiv = document.getElementById('messages-area');
             if (msgDiv && msgDiv.innerHTML.includes('Нет сообщений'))
@@ -2000,38 +2046,38 @@ if (isChatPage) {
         }
         // Обновляем счетчики и уведомления (только для входящих)
         if (message.username !== currentUsername) {
-            const isDM = message.channel_id?.includes('-') || false;
+            const isDM = message.channelId?.includes('-') || false;
             let isParticipant = false;
             try {
                 if (isDM) {
                     const dmChannels = await fetch('/api/dm_channels').then(r => r.json());
-                    isParticipant = dmChannels.some((dm) => dm.id === message.channel_id);
+                    isParticipant = dmChannels.some((dm) => dm.id === message.channelId);
                 }
                 else {
                     const channels = await fetch('/api/channels').then(r => r.json());
-                    isParticipant = channels.some((ch) => ch.id === message.channel_id);
+                    isParticipant = channels.some((ch) => ch.id === message.channelId);
                 }
             }
             catch (e) {
                 console.error(e);
             }
             if (isParticipant) {
-                const newCnt = (unreadCounts[message.channel_id || ''] || 0) + 1;
-                updateChannelUnreadCount(message.channel_id || '', newCnt, isDM);
+                const newCnt = (unreadCounts[message.channelId || ''] || 0) + 1;
+                updateChannelUnreadCount(message.channelId || '', newCnt, isDM);
             }
             if (notificationsEnabled) {
-                showFullNotification(`${message.username}`, message.content || (message.file_url ? '📎 Файл' : ''));
+                showFullNotification(`${message.username}`, message.content || (message.fileUrl ? '📎 Файл' : ''));
                 if (audio)
                     audio.play().catch(() => { });
             }
         }
     });
-    socket.on('message_sent', (data) => {
-        const { temp_id, id } = data;
-        if (!temp_id || !id)
+    connection.on('message_sent', (data) => {
+        const { tempId, id } = data;
+        if (!tempId || !id)
             return;
         // Удаляем временную запись
-        pendingMessages.delete(temp_id);
+        pendingMessages.delete(tempId);
         // Явно ставим статус SENT, если сообщение еще не прочитано/доставлено
         if (currentChannelType === 'dm' && currentChannel) {
             const curStatus = messageStatuses.get(id);
@@ -2041,7 +2087,8 @@ if (isChatPage) {
             }
         }
     });
-    socket.on('message_edited', (data) => {
+    // TODO: Requires Hub event - currently not broadcast by backend
+    connection.on('message_edited', (data) => {
         const d = document.getElementById(`msg-${data.id}`);
         if (d) {
             const td = d.querySelector('.message-text');
@@ -2069,15 +2116,16 @@ if (isChatPage) {
             }
         }
     });
-    socket.on('message_deleted', (data) => {
+    // TODO: Requires Hub event - currently not broadcast by backend
+    connection.on('message_deleted', (data) => {
         const d = document.getElementById(`msg-${data.id}`);
         if (d)
             d.remove();
     });
-    socket.on('messages_delivered', (data) => {
-        if (data.channel_id !== currentChannel)
+    connection.on('messages_delivered', (data) => {
+        if (data.channelId !== currentChannel)
             return;
-        data.message_ids.forEach(msgId => {
+        data.messageIds.forEach(msgId => {
             const currentStatus = messageStatuses.get(msgId);
             // Обновляем только если сообщение еще не прочитано
             if (currentStatus !== MESSAGE_STATUS.READ) {
@@ -2086,7 +2134,7 @@ if (isChatPage) {
             }
         });
     });
-    socket.on('message_reaction_updated', (data) => {
+    connection.on('message_reaction_updated', (data) => {
         const d = document.getElementById(`msg-${data.id}`);
         if (d) {
             let rd = d.querySelector('.message-reactions');
@@ -2099,43 +2147,41 @@ if (isChatPage) {
                 }
             }
             if (rd && data.reactions) {
-                rd.innerHTML = data.reactions.map(r => {
-                    const emoji = r?.emoji || '';
-                    const users = r?.users || [];
-                    return `<span class="reaction-badge" onclick="addReaction('${escapeHtml(data.id)}','${escapeHtml(emoji)}')">${escapeHtml(emoji)} ${users.length}</span>`;
-                }).join('');
+                rd.innerHTML = data.reactions.map(r => `<span class="reaction-badge" onclick="addReaction('${escapeHtml(data.id)}','${escapeHtml(r.emoji)}')">${escapeHtml(r.emoji)} ${r.users.length}</span>`).join('');
             }
         }
     });
-    socket.on('message_read', (data) => {
-        if (!data.message_id)
+    // TODO: Requires Hub event - currently not broadcast by backend
+    connection.on('message_read', (data) => {
+        if (!data.messageId)
             return;
         // Обновляем локальный список прочитавших
-        let currentReadBy = messageReadBy.get(data.message_id) || [];
-        if (data.read_by && !currentReadBy.includes(data.read_by)) {
-            currentReadBy.push(data.read_by);
-            messageReadBy.set(data.message_id, currentReadBy);
+        let currentReadBy = messageReadBy.get(data.messageId) || [];
+        if (data.readBy && !currentReadBy.includes(data.readBy)) {
+            currentReadBy.push(data.readBy);
+            messageReadBy.set(data.messageId, currentReadBy);
         }
-        const msgDiv = document.getElementById(`msg-${data.message_id}`);
+        const msgDiv = document.getElementById(`msg-${data.messageId}`);
         if (msgDiv) {
             const msgUsername = msgDiv.querySelector('.message-username')?.textContent;
             // Если это личная переписка (DM) и сообщение мое -> обновляем галочки
             if (currentChannelType === 'dm' && msgUsername === currentUsername) {
-                updateMessageStatus(data.message_id, MESSAGE_STATUS.READ);
+                updateMessageStatus(data.messageId, MESSAGE_STATUS.READ);
             }
             // Если это канал -> обновляем счетчик "глаз"
             if (currentChannelType === 'channel') {
-                updateReadByDisplay(data.message_id);
+                updateReadByDisplay(data.messageId);
             }
         }
     });
-    socket.on('user_status', (data) => {
+    connection.on('user_status', (data) => {
         if (data.username !== currentUsername)
             loadUsersWithStatus();
     });
-    socket.on('channel_renamed', (data) => {
-        const { channel_id, new_name } = data;
-        const channelElement = document.querySelector(`.channel-item[data-channel-id="${channel_id}"]`);
+    // TODO: Requires Hub event - currently not broadcast by backend
+    connection.on('channel_renamed', (data) => {
+        const { channelId: renamedChannelId, newName } = data;
+        const channelElement = document.querySelector(`.channel-item[data-channel-id="${renamedChannelId}"]`);
         if (channelElement) {
             const nameSpan = channelElement.querySelector('.channel-name');
             if (nameSpan) {
@@ -2144,52 +2190,64 @@ if (isChatPage) {
                 nameSpan.innerHTML = '';
                 if (icon)
                     nameSpan.appendChild(icon);
-                nameSpan.appendChild(document.createTextNode(' ' + new_name));
+                nameSpan.appendChild(document.createTextNode(' ' + newName));
                 if (unreadBadge)
                     nameSpan.appendChild(unreadBadge);
             }
         }
-        if (currentChannel === channel_id && currentChannelType === 'channel') {
-            currentChannelName = new_name;
+        if (currentChannel === renamedChannelId && currentChannelType === 'channel') {
+            currentChannelName = newName;
             const currentChannelNameEl = document.getElementById('current-channel-name');
             if (currentChannelNameEl)
-                currentChannelNameEl.textContent = new_name;
+                currentChannelNameEl.textContent = newName;
         }
-        showNotification(`Канал переименован в "${new_name}"`, 'info');
+        showNotification(`Канал переименован в "${newName}"`, 'info');
     });
-    socket.on('channel_description_updated', (data) => {
-        const { channel_id, new_description } = data;
-        const channelElement = document.querySelector(`.channel-item[data-channel-id="${channel_id}"]`);
+    // TODO: Requires Hub event - currently not broadcast by backend
+    connection.on('channel_description_updated', (data) => {
+        const { channelId: descChannelId, newDescription } = data;
+        const channelElement = document.querySelector(`.channel-item[data-channel-id="${descChannelId}"]`);
         if (channelElement) {
             const descSpan = channelElement.querySelector('.channel-description');
             if (descSpan) {
-                descSpan.textContent = new_description || 'Нет описания';
+                descSpan.textContent = newDescription || 'Нет описания';
             }
         }
-        if (currentChannel === channel_id && currentChannelType === 'channel') {
+        if (currentChannel === descChannelId && currentChannelType === 'channel') {
             const currentChannelDescEl = document.getElementById('current-channel-desc');
             if (currentChannelDescEl)
-                currentChannelDescEl.textContent = '(' + new_description + ')' || '';
+                currentChannelDescEl.textContent = '(' + newDescription + ')' || '';
         }
-        if (new_description) {
+        if (newDescription) {
             showNotification(`Описание канала обновлено`, 'info');
         }
     });
-    socket.on('unread_counts_updated', () => {
+    connection.on('unread_counts_updated', () => {
         forceRefreshUnreadCounts();
     });
-    socket.on('channel_created', () => loadChannels(true));
-    socket.on('channel_deleted', () => { if (currentChannelType === 'channel') {
+    // DM unread count update event from backend
+    connection.on('unread_update_dm', (data) => {
+        if (data.dmId && typeof data.count === 'number') {
+            updateChannelUnreadCount(data.dmId, data.count, true);
+            unreadCounts[data.dmId] = data.count;
+        }
+    });
+    // TODO: Requires Hub event - currently not broadcast by backend
+    connection.on('channel_created', () => loadChannels(true));
+    // TODO: Requires Hub event - currently not broadcast by backend
+    connection.on('channel_deleted', () => { if (currentChannelType === 'channel') {
         currentChannel = null;
         loadChannels(true);
     } });
-    socket.on('dm_channel_created', () => loadDMChannels());
-    socket.on('dm_channel_deleted', () => { if (currentChannelType === 'dm') {
+    // TODO: Requires Hub event - currently not broadcast by backend
+    connection.on('dm_channel_created', () => loadDMChannels());
+    // TODO: Requires Hub event - currently not broadcast by backend
+    connection.on('dm_channel_deleted', () => { if (currentChannelType === 'dm') {
         currentChannel = null;
         loadDMChannels();
     } });
-    socket.on('typing', (data) => {
-        if (data.channel_id === currentChannel && data.username !== currentUsername) {
+    connection.on('typing', (data) => {
+        if (data.channelId === currentChannel && data.username !== currentUsername) {
             const td = document.getElementById('typingIndicator');
             const typingUserSpan = document.getElementById('typingUser');
             if (td && typingUserSpan) {
@@ -2283,7 +2341,7 @@ if (isChatPage) {
                 autoResizeTextarea();
                 if (!isTyping && this.value.trim() && currentChannel) {
                     isTyping = true;
-                    socket.emit('typing', { channel_id: currentChannel, username: currentUsername });
+                    connection.invoke('Typing', currentChannel);
                 }
                 if (typingTimeout)
                     clearTimeout(typingTimeout);
@@ -2471,7 +2529,7 @@ if (isLoginPage) {
                 localStorage.removeItem('rememberedUser');
             }
             try {
-                const response = await fetch('/login', {
+                const response = await fetch('/api/auth/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password })
@@ -2725,7 +2783,7 @@ if (isRegisterPage) {
                 submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Проверка...';
             }
             try {
-                const response = await fetch('/register', {
+                const response = await fetch('/api/auth/register', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password })
@@ -2800,14 +2858,14 @@ if (isSettingsPage) {
             if (channelIdDisplayEl)
                 channelIdDisplayEl.textContent = channelData.id;
             if (channelCreatorEl)
-                channelCreatorEl.textContent = channelData.created_by_display || channelData.created_by || 'Неизвестно';
+                channelCreatorEl.textContent = channelData.createdByDisplay || channelData.createdBy || 'Неизвестно';
             if (channelCreatedAtEl)
-                channelCreatedAtEl.textContent = channelData.created_at ? new Date(channelData.created_at).toLocaleString('ru-RU') : 'Неизвестно';
-            if (channelData.created_by_deleted && channelCreatorEl) {
+                channelCreatedAtEl.textContent = channelData.createdAt ? new Date(channelData.createdAt).toLocaleString('ru-RU') : 'Неизвестно';
+            if (channelData.createdByDeleted && channelCreatorEl) {
                 channelCreatorEl.innerHTML += ' <span class="badge bg-secondary">аккаунт удален</span>';
             }
             const dangerSection = document.getElementById('dangerSection');
-            if (dangerSection && (channelData.created_by === currentUser || currentUser === 'admin')) {
+            if (dangerSection && (channelData.createdBy === currentUser || currentUser === 'admin')) {
                 dangerSection.style.display = 'block';
             }
         }
@@ -2931,7 +2989,7 @@ if (isSettingsPage) {
             });
             let html = '';
             sortedUsers.forEach(user => {
-                const isCreator = user.username === channelData?.created_by;
+                const isCreator = user.username === channelData?.createdBy;
                 const isOnline = user.status === 'online';
                 html += `
                     <div class="member-item">
@@ -3075,14 +3133,14 @@ if (isUserManagementPage) {
                         
                         <div class="mb-2">
                             <small class="text-muted">
-                                <i class="fas fa-calendar"></i> Регистрация: ${user.created_at ? new Date(user.created_at).toLocaleDateString() : 'неизвестно'}
+                                <i class="fas fa-calendar"></i> Регистрация: ${user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'неизвестно'}
                             </small>
                         </div>
                         
-                        ${user.last_seen ? `
+                        ${user.lastSeen ? `
                             <div class="mb-3">
                                 <small class="text-muted">
-                                    <i class="fas fa-clock"></i> Последний визит: ${new Date(user.last_seen).toLocaleString()}
+                                    <i class="fas fa-clock"></i> Последний визит: ${new Date(user.lastSeen).toLocaleString()}
                                 </small>
                             </div>
                         ` : ''}
@@ -3154,8 +3212,13 @@ if (isUserManagementPage) {
     setInterval(loadUsers, 10000);
     // Автообновление при перезапуске сервера
     let isRestarting = false;
-    const socketForUsers = io();
-    socketForUsers.on('server_restart', () => {
+    const userConnection = new signalR.HubConnectionBuilder()
+        .withUrl("/chathub", { withCredentials: true })
+        .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
+        .configureLogging(signalR.LogLevel.Warning)
+        .build();
+    userConnection.start().catch(err => console.error('SignalR user connection error:', err));
+    userConnection.on('server_restart', () => {
         isRestarting = true;
         const indicator = document.createElement('div');
         indicator.id = 'restart-indicator';
@@ -3189,7 +3252,7 @@ if (isUserManagementPage) {
             catch (e) { }
         }, 1000);
     });
-    socketForUsers.on('disconnect', () => {
+    userConnection.on('close', () => {
         if (!isRestarting) {
             const msg = document.createElement('div');
             msg.className = 'alert alert-warning';

@@ -22,10 +22,8 @@ Log.Logger = new LoggerConfiguration()
 builder.Host.UseSerilog();
 
 // ===== Configuration =====
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? "Host=localhost;Port=5432;Database=chat;Username=postgres;Password=1";
-var redisConnection = builder.Configuration.GetConnectionString("Redis")
-    ?? "localhost:6379";
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+var redisConnection = builder.Configuration.GetConnectionString("Redis");
 
 // ===== Database =====
 builder.Services.AddDbContext<ChatDbContext>(options =>
@@ -161,7 +159,7 @@ using (var scope = app.Services.CreateScope())
 }
 
 // ===== HTTPS Configuration =====
-var port = builder.Configuration.GetValue<int>("Server:Port", 5555);
+var port = builder.Configuration.GetValue<int>("Server:Port");
 var useHttps = builder.Configuration.GetValue<bool>("Server:UseHttps", false);
 
 Console.WriteLine($"[START] Chat: {(useHttps ? "https" : "http")}://localhost:{port} (ASP.NET Core + Redis + SignalR)");
