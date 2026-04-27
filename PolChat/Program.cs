@@ -9,6 +9,8 @@ using Serilog;
 using StackExchange.Redis;
 using System.Text;
 
+// test 16:03
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Host.UseSerilog();
