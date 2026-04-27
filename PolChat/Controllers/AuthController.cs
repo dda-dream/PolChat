@@ -26,11 +26,13 @@ public class AuthController : ControllerBase
     [HttpGet("/login")]
     public IActionResult LoginPage()
     {
-        return Content(LoginHtml(), "text/html");
+        //return Content(LoginHtml(), "text/html");
+        return File("~/login.html", "text/html");
     }
 
     // POST /api/auth/login
-    [HttpPost("/api/auth/login")]
+    //[HttpPost("/api/auth/login")]
+    [HttpPost("/login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
         var user = await _db.users.FindAsync(request.Username);
@@ -79,7 +81,8 @@ public class AuthController : ControllerBase
     [HttpGet("/register")]
     public IActionResult RegisterPage()
     {
-        return Content(RegisterHtml(), "text/html");
+        //return Content(RegisterHtml(), "text/html");
+        return File("~/register.html", "text/html");
     }
 
     // POST /api/auth/register
