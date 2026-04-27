@@ -1049,7 +1049,6 @@ if (isChatPage) {
         if (!input) return;
 
         let content = input.value;
-        // Санитайзим но сохраняем структуру
         content = sanitizeInput(content);
 
         const hasFile = pendingFileBlob !== null;
@@ -1082,17 +1081,45 @@ if (isChatPage) {
         // ОТПРАВКА НОВОГО СООБЩЕНИЯ
         isSending = true;
         const sendBtn = document.getElementById('sendButton') as HTMLButtonElement | null;
+
+        // Генерируем tempId один раз
+        const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+        const replyData = replyToMessageData ? { id: replyToMessageData.id, username: replyToMessageData.username, content: replyToMessageData.content } : null;
+
+        // Создаем временное сообщение для немедленного отображения
+        const tempMessage: Message = {
+            id: tempId,
+            channelId: currentChannel,
+            username: currentUsername,
+            content: content,
+            fileUrl: null,
+            timestamp: new Date().toISOString(),
+            reactions: [],
+            readBy: [],
+            deliveredTo: [],
+            isTemp: true,
+            edited: false
+        };
+
+        // Добавляем временное сообщение в чат сразу
+        const messagesDiv = document.getElementById('messages-area');
+        if (messagesDiv && messagesDiv.innerHTML.includes('Нет сообщений')) {
+            messagesDiv.innerHTML = '';
+        }
+        if (messagesDiv) {
+            messagesDiv.insertAdjacentHTML('beforeend', formatMessage(tempMessage));
+            scrollToBottomSafely(false);
+        }
+
         if (sendBtn) {
             sendBtn.disabled = true;
             const originalHtml = sendBtn.innerHTML;
             sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
-            const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
-            const replyData = replyToMessageData ? { id: replyToMessageData.id, username: replyToMessageData.username, content: replyToMessageData.content } : null;
-
             if (hasFile && pendingFileBlob) {
                 const file = pendingFileBlob;
                 const fileName = pendingFileName || 'file';
+                const caption = content; // content уже содержит текст из input
                 cancelFilePreview();
 
                 const formData = new FormData();
@@ -1103,21 +1130,26 @@ if (isChatPage) {
                     const uploadData = await response.json();
 
                     if (uploadData.success) {
-                        pendingMessages.set(tempId, {
-                            content: content,
-                            fileUrl: uploadData.fileUrl,
-                            replyTo: replyData,
-                            channelId: currentChannel
-                        });
-                        connection.invoke('SendMessage', {
+                        // Обновляем временное сообщение, добавляя URL файла
+                        const tempMsgElement = document.getElementById(`msg-${tempId}`);
+                        if (tempMsgElement) {
+                            // Обновляем содержимое сообщения с файлом
+                            const updatedMessage = { ...tempMessage, fileUrl: uploadData.fileUrl };
+                            tempMsgElement.outerHTML = formatMessage(updatedMessage);
+                        }
+
+                        await connection.invoke('SendMessage', {
                             tempId: tempId,
                             channelId: currentChannel,
-                            content: content,
+                            content: caption,
                             fileUrl: uploadData.fileUrl,
                             replyTo: replyData
                         });
                     } else {
                         showNotification(uploadData.error || 'Ошибка загрузки файла', 'danger');
+                        // Удаляем временное сообщение
+                        const tempMsgElement = document.getElementById(`msg-${tempId}`);
+                        if (tempMsgElement) tempMsgElement.remove();
                         isSending = false;
                         sendBtn.disabled = false;
                         sendBtn.innerHTML = originalHtml;
@@ -1126,19 +1158,16 @@ if (isChatPage) {
                 } catch (e) {
                     console.error(e);
                     showNotification('Ошибка загрузки файла', 'danger');
+                    const tempMsgElement = document.getElementById(`msg-${tempId}`);
+                    if (tempMsgElement) tempMsgElement.remove();
                     isSending = false;
                     sendBtn.disabled = false;
                     sendBtn.innerHTML = originalHtml;
                     return;
                 }
             } else {
-                pendingMessages.set(tempId, {
-                    content: content,
-                    fileUrl: null,
-                    replyTo: replyData,
-                    channelId: currentChannel
-                });
-                connection.invoke('SendMessage', {
+                // Отправка текстового сообщения
+                await connection.invoke('SendMessage', {
                     tempId: tempId,
                     channelId: currentChannel,
                     content: content,
@@ -1151,8 +1180,6 @@ if (isChatPage) {
             autoResizeTextarea();
             input.focus();
             cancelReply();
-
-            showNotification('📤 Сообщение отправляется...', 'info');
 
             setTimeout(() => {
                 sendBtn.disabled = false;
@@ -1938,8 +1965,10 @@ if (isChatPage) {
     }
 
     function openChannelSettings() {
-        if (!currentChannel || currentChannelType !== 'channel') { showNotification('Открыть настройки можно только в канале', 'warning'); return; }
-        window.location.href = `/channel_settings?id=${currentChannel}`;
+        if (!currentChannel || currentChannelType !== 'channel') {
+            return;
+        }
+        window.location.href = `/channel_settings.html?id=${currentChannel}`;
     }
 
     // ============ ЗАГРУЗКА СООБЩЕНИЙ ============
@@ -2130,14 +2159,23 @@ if (isChatPage) {
         receivedMessages.add(message.id);
 
         const isCurrent = message.channelId === currentChannel;
-        if (isCurrent) {
-            const msgDiv = document.getElementById('messages-area');
-            if (msgDiv && msgDiv.innerHTML.includes('Нет сообщений')) msgDiv.innerHTML = '';
-            if (msgDiv) {
-                msgDiv.insertAdjacentHTML('beforeend', formatMessage(message));
-                msgDiv.scrollTop = msgDiv.scrollHeight;
 
-                // Авто-прочтение только для ВХОДЯЩИХ сообщений
+        // Если сообщение в текущем канале - показываем сразу
+        if (isCurrent) {
+            const messagesDiv = document.getElementById('messages-area');
+            if (messagesDiv && messagesDiv.innerHTML.includes('Нет сообщений')) messagesDiv.innerHTML = '';
+
+            if (messagesDiv) {
+                // Добавляем сообщение в конец
+                messagesDiv.insertAdjacentHTML('beforeend', formatMessage(message));
+
+                // Прокручиваем вниз только если пользователь был внизу
+                const isNearBottom = messagesDiv.scrollHeight - messagesDiv.scrollTop - messagesDiv.clientHeight < 100;
+                if (isNearBottom) {
+                    scrollToBottomSafely(false);
+                }
+
+                // Отмечаем как прочитанное, если видимо
                 setTimeout(() => {
                     const mdiv = document.getElementById(`msg-${message.id}`);
                     if (mdiv && isElementInViewport(mdiv) && message.username !== currentUsername) {
@@ -2147,21 +2185,17 @@ if (isChatPage) {
             }
         }
 
+        // Обновляем статусы для своих сообщений
         if (message.username === currentUsername) {
-            // Если сообщение уже имеет статус DELIVERED или READ, не сбрасываем его на SENT
             const existingStatus = messageStatuses.get(message.id);
-            if (existingStatus === MESSAGE_STATUS.READ || existingStatus === MESSAGE_STATUS.DELIVERED) {
-                // Статус уже высокий, просто выходим, чтобы не перезаписать
-                // (Сообщение уже отрендерено или будет отрендерено с правильным статусом)
-            } else {
-                // Иначе ставим базовый статус SENT
+            if (existingStatus !== MESSAGE_STATUS.READ && existingStatus !== MESSAGE_STATUS.DELIVERED) {
                 updateMessageStatus(message.id, MESSAGE_STATUS.SENT);
             }
-            return; // Возврат, чтобы не дублировать рендеринг
+            return;
         }
 
-        // Обновляем счетчики и уведомления (только для входящих)
-        if (message.username !== currentUsername) {
+        // Обновляем счетчики непрочитанных для входящих сообщений
+        if (message.username !== currentUsername && !isCurrent) {
             const isDM = message.channelId?.includes('-') || false;
             let isParticipant = false;
 
@@ -2180,7 +2214,7 @@ if (isChatPage) {
                 updateChannelUnreadCount(message.channelId || '', newCnt, isDM);
             }
 
-            if (notificationsEnabled) {
+            if (notificationsEnabled && !document.hasFocus()) {
                 showFullNotification(`${message.username}`, message.content || (message.fileUrl ? '📎 Файл' : ''));
                 if (audio) audio.play().catch(() => { });
             }
@@ -2191,17 +2225,53 @@ if (isChatPage) {
         const { tempId, id } = data;
         if (!tempId || !id) return;
 
-        // Удаляем временную запись
-        pendingMessages.delete(tempId);
+        console.log(`Message sent: tempId=${tempId}, realId=${id}`);
 
-        // Явно ставим статус SENT, если сообщение еще не прочитано/доставлено
-        if (currentChannelType === 'dm' && currentChannel) {
-            const curStatus = messageStatuses.get(id);
-            if (curStatus !== MESSAGE_STATUS.READ && curStatus !== MESSAGE_STATUS.DELIVERED) {
-                messageStatuses.set(id, MESSAGE_STATUS.SENT);
-                updateMessageStatus(id, MESSAGE_STATUS.SENT);
+        // Заменяем временное сообщение на реальное
+        const tempMsgDiv = document.getElementById(`msg-${tempId}`);
+        if (tempMsgDiv) {
+            // Обновляем ID в DOM
+            tempMsgDiv.id = `msg-${id}`;
+
+            // Обновляем статус, если есть индикатор
+            const statusSpan = tempMsgDiv.querySelector('.message-status');
+            if (statusSpan && currentChannelType === 'dm') {
+                statusSpan.innerHTML = '<i class="fas fa-check" style="color: #95a5a6; font-size: 11px;"></i>';
+            }
+
+            // Обновляем ID кнопок действий
+            const actionDiv = tempMsgDiv.querySelector(`#actions-${tempId}`);
+            if (actionDiv) {
+                actionDiv.id = `actions-${id}`;
+            }
+
+            // Обновляем onclick в кнопках
+            const replyBtn = tempMsgDiv.querySelector(`button[onclick*="replyToMessage('${tempId}']`);
+            if (replyBtn) {
+                const newOnclick = replyBtn.getAttribute('onclick')?.replace(tempId, id);
+                if (newOnclick) replyBtn.setAttribute('onclick', newOnclick);
+            }
+
+            const editBtn = tempMsgDiv.querySelector(`button[onclick*="editMessage('${tempId}']`);
+            if (editBtn) {
+                const newOnclick = editBtn.getAttribute('onclick')?.replace(tempId, id);
+                if (newOnclick) editBtn.setAttribute('onclick', newOnclick);
+            }
+
+            const deleteBtn = tempMsgDiv.querySelector(`button[onclick*="deleteMessage('${tempId}']`);
+            if (deleteBtn) {
+                const newOnclick = deleteBtn.getAttribute('onclick')?.replace(tempId, id);
+                if (newOnclick) deleteBtn.setAttribute('onclick', newOnclick);
+            }
+
+            const reactionBtn = tempMsgDiv.querySelector(`button[onclick*="showReactionPanel('${tempId}']`);
+            if (reactionBtn) {
+                const newOnclick = reactionBtn.getAttribute('onclick')?.replace(tempId, id);
+                if (newOnclick) reactionBtn.setAttribute('onclick', newOnclick);
             }
         }
+
+        pendingMessages.delete(tempId);
     });
 
     // TODO: Requires Hub event - currently not broadcast by backend
@@ -3007,6 +3077,16 @@ if (isSettingsPage) {
 
     const urlParams = new URLSearchParams(window.location.search);
     const channelId = urlParams.get('id');
+
+    if (!channelId) {
+        console.error('No channel ID in URL');
+        showGlobalNotification('Канал не указан', 'danger');
+        setTimeout(() => {
+            window.location.href = '/';
+        }, 1500);
+    } else {
+        console.log('Loading channel settings for ID:', channelId);
+    }
 
     (async () => {
         try {

@@ -122,25 +122,6 @@ public class AuthController : ControllerBase
         return Ok(new { success = true, message = "Регистрация успешна!" });
     }
 
-    private async Task<SessionData?> GetSession()
-    {
-        Request.Cookies.TryGetValue("SESSION_ID", out var sid);
-        return await _sessionService.GetSessionAsync(sid);
-    }
-
-    // GET /chat - отдает chat.html с подставленным username
-    [HttpGet("/chat")]
-    public async Task<IActionResult> ChatPage()
-    {
-        var session = await GetSession();
-        if (session == null) return Redirect("/login");
-
-        var html = await System.IO.File.ReadAllTextAsync("wwwroot/chat.html");
-        html = html.Replace("{{ username }}", session.Username);
-
-        return Content(html, "text/html");
-    }
-
     // GET / - main chat page (requires auth)
     [HttpGet("/")]
     public IActionResult Index()
