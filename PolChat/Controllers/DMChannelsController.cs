@@ -16,17 +16,19 @@ public class DMChannelsController : ControllerBase
     private readonly ChatDbContext _db;
     private readonly ISessionService _sessionService;
     private readonly IHubContext<ChatHub> _hub;
+    IHttpContextAccessor _httpContextAccessor;
 
-    public DMChannelsController(ChatDbContext db, ISessionService sessionService, IHubContext<ChatHub> hub)
+    public DMChannelsController(ChatDbContext db, ISessionService sessionService, IHubContext<ChatHub> hub, IHttpContextAccessor httpContextAccessor)
     {
         _db = db;
         _sessionService = sessionService;
         _hub = hub;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     private async Task<SessionData?> GetSession()
     {
-        Request.Cookies.TryGetValue($"SESSION_ID_PORT_{Request.Host.Port}", out var sid);
+        Request.Cookies.TryGetValue($"SESSION_ID_PORT_{_httpContextAccessor.HttpContext?.Connection.LocalPort}", out var sid);
         return await _sessionService.GetSessionAsync(sid);
     }
 

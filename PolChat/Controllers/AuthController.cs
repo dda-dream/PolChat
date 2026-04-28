@@ -13,13 +13,16 @@ public class AuthController : ControllerBase
     private readonly ISessionService _sessionService;
     private readonly IConfiguration _config;
     private readonly ILogger<AuthController> _logger;
+    IHttpContextAccessor _httpContextAccessor;
 
-    public AuthController(ChatDbContext db, ISessionService sessionService, IConfiguration config, ILogger<AuthController> logger)
+    public AuthController(ChatDbContext db, ISessionService sessionService, IConfiguration config, ILogger<AuthController> logger,
+        IHttpContextAccessor httpContextAccessor)
     {
         _db = db;
         _sessionService = sessionService;
         _config = config;
         _logger = logger;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     // GET /login - return simple HTML page (in production, serve from wwwroot)
@@ -54,7 +57,7 @@ public class AuthController : ControllerBase
         user.last_seen = now;
         await _db.SaveChangesAsync();
 
-        Response.Cookies.Append($"SESSION_ID_PORT_{Request.Host.Port}", sessionId, new CookieOptions
+        Response.Cookies.Append($"SESSION_ID_PORT_{_httpContextAccessor.HttpContext?.Connection.LocalPort}", sessionId, new CookieOptions
         {
             HttpOnly = true,
             MaxAge = TimeSpan.FromDays(Constants.SessionTtlDays),
@@ -69,10 +72,10 @@ public class AuthController : ControllerBase
     [HttpGet("/logout")]
     public async Task<IActionResult> Logout()
     {
-        if (Request.Cookies.TryGetValue($"SESSION_ID_PORT_{Request.Host.Port}", out var sid) && !string.IsNullOrEmpty(sid))
+        if (Request.Cookies.TryGetValue($"SESSION_ID_PORT_{_httpContextAccessor.HttpContext?.Connection.LocalPort}", out var sid) && !string.IsNullOrEmpty(sid))
         {
             await _sessionService.DeleteSessionAsync(sid);
-            Response.Cookies.Delete($"SESSION_ID_PORT_{Request.Host.Port}");
+            Response.Cookies.Delete($"SESSION_ID_PORT_{_httpContextAccessor.HttpContext?.Connection.LocalPort}");
         }
         return Redirect("/login");
     }
