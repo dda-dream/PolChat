@@ -54,7 +54,7 @@ public class AuthController : ControllerBase
         user.last_seen = now;
         await _db.SaveChangesAsync();
 
-        Response.Cookies.Append("SESSION_ID", sessionId, new CookieOptions
+        Response.Cookies.Append($"SESSION_ID_PORT_{Request.Host.Port}", sessionId, new CookieOptions
         {
             HttpOnly = true,
             MaxAge = TimeSpan.FromDays(Constants.SessionTtlDays),
@@ -69,10 +69,10 @@ public class AuthController : ControllerBase
     [HttpGet("/logout")]
     public async Task<IActionResult> Logout()
     {
-        if (Request.Cookies.TryGetValue("SESSION_ID", out var sid) && !string.IsNullOrEmpty(sid))
+        if (Request.Cookies.TryGetValue($"SESSION_ID_PORT_{Request.Host.Port}", out var sid) && !string.IsNullOrEmpty(sid))
         {
             await _sessionService.DeleteSessionAsync(sid);
-            Response.Cookies.Delete("SESSION_ID");
+            Response.Cookies.Delete($"SESSION_ID_PORT_{Request.Host.Port}");
         }
         return Redirect("/login");
     }
@@ -131,6 +131,7 @@ public class AuthController : ControllerBase
     }
 
     // GET /api/time
+    //[ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
     [HttpGet("/api/time")]
     public IActionResult ServerTime()
     {

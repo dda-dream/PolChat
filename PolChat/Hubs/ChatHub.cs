@@ -12,15 +12,17 @@ public class ChatHub : Hub
     private readonly ChatDbContext _db;
     private readonly ISessionService _sessionService;
     private readonly ILogger<ChatHub> _logger;
+    IHttpContextAccessor _httpContextAccessor;
 
     // Track connections: ConnectionId -> SessionData
     private static readonly Dictionary<string, SessionData> _connections = new();
 
-    public ChatHub(ChatDbContext db, ISessionService sessionService, ILogger<ChatHub> logger)
+    public ChatHub(ChatDbContext db, ISessionService sessionService, ILogger<ChatHub> logger, IHttpContextAccessor httpContextAccessor)
     {
         _db = db;
         _sessionService = sessionService;
         _logger = logger;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     public override async Task OnConnectedAsync()
@@ -380,7 +382,7 @@ public class ChatHub : Hub
         var httpContext = Context.GetHttpContext();
         if (httpContext == null) return null;
 
-        httpContext.Request.Cookies.TryGetValue("SESSION_ID", out var sessionId);
+        httpContext.Request.Cookies.TryGetValue($"SESSION_ID_PORT_{_httpContextAccessor.HttpContext?.Connection.LocalPort}", out var sessionId);
         if (string.IsNullOrEmpty(sessionId)) return null;
 
         return await _sessionService.GetSessionAsync(sessionId);
