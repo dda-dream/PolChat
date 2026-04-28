@@ -21,7 +21,7 @@ public class UploadController : ControllerBase
 
     private async Task<SessionData?> GetSession()
     {
-        Request.Cookies.TryGetValue("SESSION_ID", out var sid);
+        Request.Cookies.TryGetValue($"SESSION_ID_PORT_{Request.Host.Port}", out var sid);
         return await _sessionService.GetSessionAsync(sid);
     }
 
