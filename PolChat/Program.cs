@@ -83,24 +83,6 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-
-app.UseRouting();
-
-app.UseStaticFiles();
-/*
-app.UseStaticFiles(new StaticFileOptions
-{
-    FileProvider = new PhysicalFileProvider(@"C:\0\PolChat\uploads\"),
-    RequestPath = "/uploads"
-});
-*/
-
-
-
-
-
-
-
 // ===== Middleware =====
 if (app.Environment.IsDevelopment())
 {
@@ -108,17 +90,14 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "Chat API v1"));
 }
 
+
+app.UseRouting();
+app.UseStaticFiles();
 app.UseCors();
-
-
-
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<ChatHub>("/chathub");
-
-
-
 
 app.MapGet("/_debug/routes/details", (IEnumerable<EndpointDataSource> endpointSources) =>
 {
