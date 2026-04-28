@@ -50,6 +50,7 @@ if (isChatPage) {
         .build();
     // Start connection
     connection.start().then(() => {
+        console.log('SignalR Connected');
         updateConnectionStatus(true);
         updateUserStatusOnServer(STATUS.ONLINE);
         loadUsersWithStatus();
@@ -1248,7 +1249,9 @@ if (isChatPage) {
             currentlyActiveMessageActions = null;
         }
     }
-    function addReaction(mid, emoji) { connection.invoke('AddReaction', mid, emoji); }
+    async function addReaction(mid, emoji) {
+        await connection.invoke('AddReaction', mid, emoji);
+    }
     function showReactionPanel(mid, ev) {
         ev.stopPropagation();
         if (activeReactionPanel) {
@@ -1425,7 +1428,7 @@ if (isChatPage) {
         try {
             await fetch(`/api/unread/${channelId}/read`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
             await forceRefreshUnreadCounts();
-            connection.invoke('MarkChannelRead', channelId);
+            await connection.invoke('MarkChannelRead', channelId);
         }
         catch (e) {
             console.error(e);
@@ -1804,12 +1807,12 @@ if (isChatPage) {
             const res = await fetch('/api/dm_channels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ other_user: username }) });
             const data = await res.json();
             if (res.ok) {
-                loadDMChannels();
-                joinChannel('dm', data.id, username, '');
+                await loadDMChannels();
+                await joinChannel('dm', data.id, username, '');
             }
             else if (res.status === 409 && data.dmId) {
-                loadDMChannels();
-                joinChannel('dm', data.dmId, username, '');
+                await loadDMChannels();
+                await joinChannel('dm', data.dmId, username, '');
             }
             else
                 showNotification(data.error || 'Ошибка', 'danger');
@@ -1835,7 +1838,7 @@ if (isChatPage) {
                         if (messageInput)
                             messageInput.disabled = true;
                     }
-                    loadDMChannels();
+                    await loadDMChannels();
                 }
             }
             catch (e) {
@@ -1860,7 +1863,7 @@ if (isChatPage) {
                         if (messageInput)
                             messageInput.disabled = true;
                     }
-                    loadChannels(true);
+                    await loadChannels(true);
                 }
             }
             catch (e) {
@@ -1872,7 +1875,10 @@ if (isChatPage) {
         const name = prompt('Название канала:');
         if (name && name.trim()) {
             const desc = prompt('Описание:');
-            fetch('/api/channels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim(), description: desc || '', isPrivate: false }) }).then(() => loadChannels(true));
+            fetch('/api/channels', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: name.trim(), description: desc || '', isPrivate: false })
+            }).then(async () => await loadChannels(true));
         }
     }
     function openChannelSettings() {
@@ -2007,9 +2013,9 @@ if (isChatPage) {
         });
     }
     function startHeartbeat() {
-        setInterval(() => {
+        setInterval(async () => {
             if (isActiveTab && currentUserStatus === STATUS.ONLINE) {
-                fetch('/api/user/heartbeat', { method: 'POST' }).catch(() => { });
+                await fetch('/api/user/heartbeat', { method: 'POST' }).catch(() => { });
             }
         }, 30000);
     }
@@ -2071,7 +2077,7 @@ if (isChatPage) {
     connection.on('new_message', async (message) => {
         if (receivedMessages.has(message.id))
             return;
-        receivedMessages.add(message.id);
+        await receivedMessages.add(message.id);
         const isCurrent = message.channelId === currentChannel;
         // Если сообщение в текущем канале - показываем сразу
         if (isCurrent) {
@@ -2266,9 +2272,9 @@ if (isChatPage) {
             }
         }
     });
-    connection.on('user_status', (data) => {
+    connection.on('user_status', async (data) => {
         if (data.username !== currentUsername)
-            loadUsersWithStatus();
+            await loadUsersWithStatus();
     });
     // TODO: Requires Hub event - currently not broadcast by backend
     connection.on('channel_renamed', (data) => {
@@ -2314,8 +2320,8 @@ if (isChatPage) {
             showNotification(`Описание канала обновлено`, 'info');
         }
     });
-    connection.on('unread_counts_updated', () => {
-        forceRefreshUnreadCounts();
+    connection.on('unread_counts_updated', async () => {
+        await forceRefreshUnreadCounts();
     });
     // DM unread count update event from backend
     connection.on('unread_update_dm', (data) => {
@@ -2325,18 +2331,18 @@ if (isChatPage) {
         }
     });
     // TODO: Requires Hub event - currently not broadcast by backend
-    connection.on('channel_created', () => loadChannels(true));
+    connection.on('channel_created', async () => await loadChannels(true));
     // TODO: Requires Hub event - currently not broadcast by backend
-    connection.on('channel_deleted', () => { if (currentChannelType === 'channel') {
+    connection.on('channel_deleted', async () => { if (currentChannelType === 'channel') {
         currentChannel = null;
-        loadChannels(true);
+        await loadChannels(true);
     } });
     // TODO: Requires Hub event - currently not broadcast by backend
     connection.on('dm_channel_created', () => loadDMChannels());
     // TODO: Requires Hub event - currently not broadcast by backend
-    connection.on('dm_channel_deleted', () => { if (currentChannelType === 'dm') {
+    connection.on('dm_channel_deleted', async () => { if (currentChannelType === 'dm') {
         currentChannel = null;
-        loadDMChannels();
+        await loadDMChannels();
     } });
     connection.on('typing', (data) => {
         if (data.channelId === currentChannel && data.username !== currentUsername) {
@@ -2357,6 +2363,15 @@ if (isChatPage) {
     // ============ ИНИЦИАЛИЗАЦИЯ ЧАТА ============
     async function initChat() {
         await loadCurrentUser();
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("/chathub", {
+            withCredentials: true,
+            // Добавьте транспорты явно, если есть проблемы с WebSocket
+            transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling
+        })
+            .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
+            .configureLogging(signalR.LogLevel.Information) // Включите Info логирование для отладки
+            .build();
         setupActivityTracking();
         setupVisibilityTracking();
         startHeartbeat();
