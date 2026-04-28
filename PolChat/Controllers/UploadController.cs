@@ -1,7 +1,9 @@
-using Microsoft.AspNetCore.Mvc;
 using ChatApp.Data;
-using ChatApp.Services;
+using ChatApp.Hubs;
 using ChatApp.Models;
+using ChatApp.Services;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 
 namespace ChatApp.Controllers;
 
@@ -11,14 +13,21 @@ public class UploadController : ControllerBase
     private readonly ISessionService _sessionService;
     private readonly ILogger<UploadController> _logger;
     private readonly string _uploadFolder;
-    IHttpContextAccessor _httpContextAccessor;
+    private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IHubContext<ChatHub> _hubContext;
 
-    public UploadController(ISessionService sessionService, ILogger<UploadController> logger, IConfiguration config, IHttpContextAccessor httpContextAccessor)
+    public UploadController(
+        ISessionService sessionService,
+        ILogger<UploadController> logger,
+        IConfiguration config,
+        IHttpContextAccessor httpContextAccessor,
+        IHubContext<ChatHub> hubContext)
     {
         _sessionService = sessionService;
         _logger = logger;
         _uploadFolder = config.GetValue<string>("Uploads:Folder", "uploads");
         _httpContextAccessor = httpContextAccessor;
+        _hubContext = hubContext;
     }
 
     private async Task<SessionData?> GetSession()
@@ -27,11 +36,10 @@ public class UploadController : ControllerBase
         return await _sessionService.GetSessionAsync(sid);
     }
 
-    // POST /upload
     [HttpPost("/upload")]
-    [RequestSizeLimit(200 * 1024 * 1024)] // 200MB
+    [RequestSizeLimit(200 * 1024 * 1024)]
     [RequestFormLimits(MultipartBodyLengthLimit = 200 * 1024 * 1024)]
-    public async Task<IActionResult> Upload(IFormFile? file)
+    public async Task<IActionResult> Upload(IFormFile? file, [FromForm] string? channelId = null)
     {
         var session = await GetSession();
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
@@ -49,7 +57,7 @@ public class UploadController : ControllerBase
 
         if (!Directory.Exists(_uploadFolder))
             Directory.CreateDirectory(_uploadFolder);
-        
+
         var safeName = $"{DateTime.UtcNow:yyyy-MM-dd-HH-mm-ss}-{Guid.NewGuid():N}.{ext}";
         var filepath = Path.Combine(_uploadFolder, safeName);
 
@@ -57,18 +65,36 @@ public class UploadController : ControllerBase
         await file.CopyToAsync(stream);
 
         var fileUrl = $"/uploads/{safeName}";
-        return Ok(new UploadResponse
+        var fileType = Constants.GetFileType(filename);
+        var isImage = fileType == "image";
+
+        var response = new UploadResponse
         {
             Success = true,
             FileUrl = fileUrl,
             Filename = filename.Length > 50 ? filename[..50] : filename,
             OriginalFilename = filename,
-            FileType = Constants.GetFileType(filename),
+            FileType = fileType,
             FileSize = file.Length
+        };
+
+        // 🔔 Отправляем уведомление через SignalR о новом файле
+        await _hubContext.Clients.Group("all_users").SendAsync("new_file_uploaded", new
+        {
+            fileUrl = fileUrl,
+            filename = filename,
+            fileType = fileType,
+            fileSize = file.Length,
+            isImage = isImage,
+            uploadedBy = session.Username,
+            uploadedAt = DateTime.UtcNow.ToString("O"),
+            channelId = channelId
         });
+
+        return Ok(response);
     }
 
-    // GET /uploads/{filename}
+    // GET /uploads/{filename} - только один раз!
     [HttpGet("/uploads/{filename}")]
     public IActionResult GetUploadedFile(string filename)
     {
@@ -77,7 +103,6 @@ public class UploadController : ControllerBase
         if (!System.IO.File.Exists(filepath))
             return NotFound();
 
-        // Security: prevent path traversal
         var fullPath = Path.GetFullPath(filepath);
         var uploadFullPath = Path.GetFullPath(_uploadFolder);
         if (!fullPath.StartsWith(uploadFullPath))

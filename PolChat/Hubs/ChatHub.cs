@@ -50,57 +50,85 @@ public class ChatHub : Hub
                 .SetProperty(u => u.status, "online")
                 .SetProperty(u => u.last_seen, now));
 
-        await Clients.All.SendAsync("user_status", new
-        {
-            username,
-            status = "online",
-            last_seen = now.ToString("O")
-        });
+        await Clients.All.SendAsync("user_status",
+            new
+                {
+                    username
+                });
 
-        // Check pending deliveries for DM channels using ADO.NET (JOIN query)
-        var conn = _db.Database.GetDbConnection();
-        await conn.OpenAsync();
-        await using (var cmd = conn.CreateCommand())
+        // Check pending deliveries for DM channels
+        List<(string Id, string ChannelId, string MsgUsername)> pendingList = new();
+
+        // Используем отдельное соединение, которое НЕ закрываем до конца работы
+        var connection = _db.Database.GetDbConnection();
+        await connection.OpenAsync();
+
+        try
         {
-            cmd.CommandText = @"
+            await using (var cmd = connection.CreateCommand())
+            {
+                cmd.CommandText = @"
                 SELECT m.id, m.channel_id, m.username FROM messages m
                 JOIN dm_channels d ON m.channel_id = d.id
                 WHERE @username = ANY(d.participants)
                 AND m.username != @username
                 AND NOT (@username = ANY(m.delivered_to))
                 AND NOT (@username = ANY(m.read_by))";
-            var p = cmd.CreateParameter();
-            p.ParameterName = "username";
-            p.Value = username;
-            cmd.Parameters.Add(p);
+                var p = cmd.CreateParameter();
+                p.ParameterName = "username";
+                p.Value = username;
+                cmd.Parameters.Add(p);
 
-            await using var reader = await cmd.ExecuteReaderAsync();
-            var pendingList = new List<(string Id, string ChannelId, string MsgUsername)>();
-            while (await reader.ReadAsync())
-            {
-                pendingList.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2)));
+                await using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    pendingList.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2)));
+                }
             }
+            // Reader закрыт, команда закрыта. Соединение всё ещё открыто и им можно пользоваться.
 
             if (pendingList.Count > 0)
             {
                 var ids = pendingList.Select(p => p.Id).ToList();
 
-                // Mark as delivered
-                await _db.Database.ExecuteSqlRawAsync(@"
-                    UPDATE messages SET delivered_to = array_append(delivered_to, {0})
-                    WHERE id = ANY({1}) AND NOT ({0} = ANY(delivered_to))",
-                    username, ids);
+                // Используем ТО ЖЕ САМОЕ соединение напрямую
+                await using (var cmd = connection.CreateCommand())
+                {
+                    // PostgreSQL с массивом строк
+                    cmd.CommandText = @"
+                    UPDATE messages SET delivered_to = array_append(delivered_to, @username)
+                    WHERE id = ANY(@ids) AND NOT (@username = ANY(delivered_to))";
 
-                // Notify senders
+                    var pUsername = cmd.CreateParameter();
+                    pUsername.ParameterName = "username";
+                    pUsername.Value = username;
+                    cmd.Parameters.Add(pUsername);
+
+                    var pIds = cmd.CreateParameter();
+                    pIds.ParameterName = "ids";
+                    pIds.Value = ids.ToArray(); // массив строк
+                    cmd.Parameters.Add(pIds);
+
+                    await cmd.ExecuteNonQueryAsync();
+                }
+
+                // Отправка уведомлений
                 foreach (var msg in pendingList)
                 {
-                    await Clients.Group($"user_{msg.MsgUsername}").SendAsync("messages_delivered", new
-                    {
-                        channel_id = msg.ChannelId,
-                        message_ids = new[] { msg.Id }
-                    });
+                    await Clients.Group($"user_{msg.MsgUsername}").SendAsync("messages_delivered", 
+                        new
+                            {
+                                channelId = msg.ChannelId,
+                                messageIds = new[] { msg.Id }
+                            });
                 }
             }
+        }
+        finally
+        {
+            // Закрываем соединение только после ВСЕХ операций
+            await connection.CloseAsync();
+            await connection.DisposeAsync();
         }
 
         await base.OnConnectedAsync();
@@ -126,12 +154,11 @@ public class ChatHub : Hub
                         .SetProperty(u => u.status, "offline")
                         .SetProperty(u => u.last_seen, now));
 
-                await Clients.All.SendAsync("user_status", new
-                {
-                    username,
-                    status = "offline",
-                    last_seen = now.ToString("O")
-                });
+                await Clients.All.SendAsync("user_status", 
+                    new
+                        {
+                            username
+                       }); 
             }
         }
 
@@ -227,11 +254,12 @@ public class ChatHub : Hub
                             WHERE id = {1} AND NOT ({0} = ANY(delivered_to))",
                             otherUser, msgId);
 
-                        await Clients.Group($"user_{username}").SendAsync("messages_delivered", new
-                        {
-                            channel_id = channelId,
-                            message_ids = new[] { msgId }
-                        });
+                        await Clients.Group($"user_{username}").SendAsync("messages_delivered", 
+                            new
+                                {
+                                    channelId = channelId,
+                                    messageIds = new[] { msgId }
+                                });
                     }
                 }
             }
@@ -244,17 +272,28 @@ public class ChatHub : Hub
             channelId = channelId,
             username,
             content,
-            file_url = fileUrl,
+            fileUrl = fileUrl,
             timestamp = now.ToString("O"),
             edited = false,
             reactions = new List<Reaction>(),
-            read_by = new List<string>()
+            readBy = new List<string>()
         };
 
         object messageObj = messageForSend;
         if (replyToInfo != null)
         {
-            messageObj = new { messageForSend.id, messageForSend.channelId, messageForSend.username, messageForSend.content, messageForSend.file_url, messageForSend.timestamp, messageForSend.edited, messageForSend.reactions, messageForSend.read_by, reply_to = replyToInfo };
+            messageObj = new { 
+                messageForSend.id, 
+                messageForSend.channelId, 
+                messageForSend.username, 
+                messageForSend.content, 
+                messageForSend.fileUrl, 
+                messageForSend.timestamp, 
+                messageForSend.edited, 
+                messageForSend.reactions, 
+                messageForSend.readBy, 
+                replyTo = replyToInfo 
+            };
         }
 
         await Clients.Group(channelId).SendAsync("new_message", messageObj);
@@ -262,12 +301,12 @@ public class ChatHub : Hub
         // Send temp_id mapping to sender
         if (tempId != null)
         {
-            await Clients.Caller.SendAsync("message_sent", new
-            {
-                temp_id = tempId,
-                id = msgId,
-                channel_id = channelId
-            });
+            await Clients.Caller.SendAsync("message_sent", 
+                new
+                    {
+                        tempId = tempId,
+                        id = msgId
+                    });
         }
 
         // DM unread notification
@@ -283,11 +322,12 @@ public class ChatHub : Hub
                     if (existingUsers.Contains(otherUser))
                     {
                         var uc = await GetUnreadCountForChannel(channelId, otherUser);
-                        await Clients.Group($"user_{otherUser}").SendAsync("unread_update_dm", new
-                        {
-                            dm_id = channelId,
-                            count = uc
-                        });
+                        await Clients.Group($"user_{otherUser}").SendAsync("unread_update_dm", 
+                            new
+                                {
+                                    dmId = channelId,
+                                    count = uc
+                                });
                     }
                 }
             }
@@ -334,11 +374,12 @@ public class ChatHub : Hub
             UPDATE messages SET reactions = {0}::jsonb WHERE id = {1}",
             JsonSerializer.Serialize(reactions), messageId);
 
-        await Clients.All.SendAsync("message_reaction_updated", new
-        {
-            id = messageId,
-            reactions
-        });
+        await Clients.All.SendAsync("message_reaction_updated", 
+            new
+                {
+                    id = messageId,
+                    reactions
+                });
     }
 
     public async Task Typing(string channelId)
@@ -348,11 +389,12 @@ public class ChatHub : Hub
 
         if (!string.IsNullOrEmpty(channelId))
         {
-            await Clients.Group(channelId).SendAsync("typing", new
-            {
-                channel_id = channelId,
-                username = userInfo.Username
-            });
+            await Clients.Group(channelId).SendAsync("typing", 
+                new
+                    {
+                        channelId = channelId,
+                        username = userInfo.Username
+                    });
         }
     }
 
@@ -369,10 +411,11 @@ public class ChatHub : Hub
             username, channelId, username);
 
         var unreadCounts = await GetRealUnreadCounts(username);
-        await Clients.Group($"user_{username}").SendAsync("unread_counts_updated", new
-        {
-            unread_counts = unreadCounts
-        });
+        await Clients.Group($"user_{username}").SendAsync("unread_counts_updated", 
+            new
+                {
+                    unread_counts = unreadCounts
+                });
     }
 
     // === Helper methods ===

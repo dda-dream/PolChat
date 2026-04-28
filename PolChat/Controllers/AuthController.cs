@@ -127,10 +127,15 @@ public class AuthController : ControllerBase
 
     // GET / - main chat page (requires auth)
     [HttpGet("/")]
-    public IActionResult Index()
+    public async Task<IActionResult> Index()
     {
-        //return Content(ChatHtml(), "text/html");
-        return Redirect("/login.html");
+        Request.Cookies.TryGetValue($"SESSION_ID_PORT_{_httpContextAccessor.HttpContext?.Connection.LocalPort}", out var sid);
+        var session = string.IsNullOrEmpty(sid) ? null : await _sessionService.GetSessionAsync(sid);
+
+        if (session == null)
+            return Redirect("/login.html");
+
+        return File("~/chat.html", "text/html");
     }
 
     // GET /api/time
