@@ -241,7 +241,7 @@ public class ChatHub : Hub
         var messageForSend = new
         {
             id = msgId,
-            channel_id = channelId,
+            channelId = channelId,
             username,
             content,
             file_url = fileUrl,
@@ -254,7 +254,7 @@ public class ChatHub : Hub
         object messageObj = messageForSend;
         if (replyToInfo != null)
         {
-            messageObj = new { messageForSend.id, messageForSend.channel_id, messageForSend.username, messageForSend.content, messageForSend.file_url, messageForSend.timestamp, messageForSend.edited, messageForSend.reactions, messageForSend.read_by, reply_to = replyToInfo };
+            messageObj = new { messageForSend.id, messageForSend.channelId, messageForSend.username, messageForSend.content, messageForSend.file_url, messageForSend.timestamp, messageForSend.edited, messageForSend.reactions, messageForSend.read_by, reply_to = replyToInfo };
         }
 
         await Clients.Group(channelId).SendAsync("new_message", messageObj);
