@@ -1842,7 +1842,7 @@ if (isChatPage) {
             return;
         }
         try {
-            const res = await fetch('/api/dm_channels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ other_user: username }) });
+            const res = await fetch('/api/dm_channels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ otherUser: username }) });
             const data = await res.json();
             if (res.ok) {
                 await loadDMChannels();
