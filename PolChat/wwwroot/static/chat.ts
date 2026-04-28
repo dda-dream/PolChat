@@ -2024,7 +2024,16 @@ if (isChatPage) {
             return;
         }
         if (currentChannel === id && currentChannelType === type) return;
-        connection.invoke('LeaveChannel', currentChannel);
+
+        // Добавляем проверку состояния соединения
+        if (connection.state === signalR.HubConnectionState.Connected && currentChannel) {
+            try {
+                await connection.invoke('LeaveChannel', currentChannel);
+            } catch (error) {
+                console.error('Failed to leave channel:', error);
+            }
+        }
+
         currentChannel = id;
         currentChannelType = type;
         currentChannelName = name;

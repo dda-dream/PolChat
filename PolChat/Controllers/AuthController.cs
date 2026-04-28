@@ -131,6 +131,7 @@ public class AuthController : ControllerBase
     }
 
     // GET /api/time
+    //[ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
     [HttpGet("/api/time")]
     public IActionResult ServerTime()
     {
