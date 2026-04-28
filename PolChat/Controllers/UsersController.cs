@@ -12,16 +12,18 @@ public class UsersController : ControllerBase
 {
     private readonly ChatDbContext _db;
     private readonly ISessionService _sessionService;
+    IHttpContextAccessor _httpContextAccessor;
 
-    public UsersController(ChatDbContext db, ISessionService sessionService)
+    public UsersController(ChatDbContext db, ISessionService sessionService, IHttpContextAccessor httpContextAccessor)
     {
         _db = db;
         _sessionService = sessionService;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     private async Task<SessionData?> GetSession()
     {
-        Request.Cookies.TryGetValue($"SESSION_ID_PORT_{Request.Host.Port}", out var sid);
+        Request.Cookies.TryGetValue($"SESSION_ID_PORT_{_httpContextAccessor.HttpContext?.Connection.LocalPort}", out var sid);
         return await _sessionService.GetSessionAsync(sid);
     }
 

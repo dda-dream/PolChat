@@ -11,17 +11,19 @@ public class UploadController : ControllerBase
     private readonly ISessionService _sessionService;
     private readonly ILogger<UploadController> _logger;
     private readonly string _uploadFolder;
+    IHttpContextAccessor _httpContextAccessor;
 
-    public UploadController(ISessionService sessionService, ILogger<UploadController> logger, IConfiguration config)
+    public UploadController(ISessionService sessionService, ILogger<UploadController> logger, IConfiguration config, IHttpContextAccessor httpContextAccessor)
     {
         _sessionService = sessionService;
         _logger = logger;
         _uploadFolder = config.GetValue<string>("Uploads:Folder", "uploads");
+        _httpContextAccessor = httpContextAccessor;
     }
 
     private async Task<SessionData?> GetSession()
     {
-        Request.Cookies.TryGetValue($"SESSION_ID_PORT_{Request.Host.Port}", out var sid);
+        Request.Cookies.TryGetValue($"SESSION_ID_PORT_{_httpContextAccessor.HttpContext?.Connection.LocalPort}", out var sid);
         return await _sessionService.GetSessionAsync(sid);
     }
 
