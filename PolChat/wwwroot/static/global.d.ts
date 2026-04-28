@@ -14,7 +14,7 @@ declare global {
         channelId?: string;
         username: string;
         content: string;
-        fileUrl?: string | null;
+        fileUrl?: string | null;  
         timestamp: string;
         edited?: boolean;
         editedAt?: string;
