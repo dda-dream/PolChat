@@ -2486,17 +2486,6 @@ if (isChatPage) {
     async function initChat() {
         await loadCurrentUser();
 
-        const connection = new signalR.HubConnectionBuilder()
-            .withUrl("/chathub", {
-                withCredentials: true,
-                // Добавьте транспорты явно, если есть проблемы с WebSocket
-                transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling
-            })
-            .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
-            .configureLogging(signalR.LogLevel.Information) // Включите Info логирование для отладки
-            .build();
-
-
         setupActivityTracking();
         setupVisibilityTracking();
         startHeartbeat();
