@@ -44,9 +44,12 @@ if (isChatPage) {
     // ============ СОЗДАНИЕ SIGNALR CONNECTION ============
     // SignalR connection to ASP.NET Core backend
     const connection = new signalR.HubConnectionBuilder()
-        .withUrl("/chathub", { withCredentials: true })
+        .withUrl("/chathub", {
+        withCredentials: true,
+        transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling
+    })
         .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
-        .configureLogging(signalR.LogLevel.Warning)
+        .configureLogging(signalR.LogLevel.Information)
         .build();
     // Start connection
     connection.start().then(() => {
@@ -3363,9 +3366,12 @@ if (isUserManagementPage) {
     // Автообновление при перезапуске сервера
     let isRestarting = false;
     const userConnection = new signalR.HubConnectionBuilder()
-        .withUrl("/chathub", { withCredentials: true })
+        .withUrl("/chathub", {
+        withCredentials: true,
+        transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling
+    })
         .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
-        .configureLogging(signalR.LogLevel.Warning)
+        .configureLogging(signalR.LogLevel.Information)
         .build();
     userConnection.start().catch(err => console.error('SignalR user connection error:', err));
     userConnection.on('server_restart', () => {
