@@ -21,7 +21,6 @@
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
 
-
     "noEmitOnError": false
 
   },
