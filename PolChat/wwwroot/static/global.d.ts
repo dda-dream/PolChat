@@ -1,10 +1,9 @@
-import * as signalRTypes from '@microsoft/signalr';
-
+import * as _signalR from '@microsoft/signalr';
+import * as _bootstrap from 'bootstrap';
 
 declare global {
-
-    //const bootstrapTypes: typeof import('bootstrap');
-    const signalR: typeof import('@microsoft/signalr');
+    const signalR: typeof _signalR;
+    //const bootstrap: typeof _bootstrap;
 
     interface Message {
         id: string;
@@ -63,6 +62,7 @@ declare global {
 
     // ====================== WINDOW ======================
     interface Window {
+        bootstrap: typeof _bootstrap;
         CURRENT_USER?: string;
         toggleSidebar?: () => void;
         closeSidebar?: () => void;
