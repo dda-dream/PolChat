@@ -1,10 +1,7 @@
 declare global {
-    //import { HubConnection } from '@microsoft/signalr';
-    //import * as bootstrap from 'bootstrap';
-    const bootstrap: typeof import('bootstrap');
-    const signalR: typeof import('@microsoft/signalr');
-    //type HubConnectionBuilder = import('@microsoft/signalr').HubConnection;
-    //console.log(HubConnectionBuilder);
+
+    //const bootstrapTypes: typeof import('bootstrap');
+    //const signalrTypes: typeof import('@microsoft/signalr');
 
     // ====================== ИНТЕРФЕЙСЫ ======================
     // ASP.NET Core System.Text.Json сериализует в camelCase
