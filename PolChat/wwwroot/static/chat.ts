@@ -777,7 +777,7 @@ if (isChatPage) {
 
         const modalEl = document.getElementById('readByModal');
         if (modalEl) {
-            const modal = new bootstrap.Modal(modalEl);
+            const modal = new window.bootstrap.Modal(modalEl);
             modal.show();
 
             // Use arrow function and reference modalEl directly
@@ -1211,9 +1211,10 @@ if (isChatPage) {
             const pastePreview = document.getElementById('pastePreview');
             if (pastePreview) pastePreview.style.display = 'none';
 
-        } catch (err) {
+        } catch (err ) {
             console.error('[sendMessage] Error:', err);
-            showNotification(err.message || 'Ошибка отправки', 'danger');
+            const errorMessage = err instanceof Error ? err.message : 'Ошибка отправки';
+            showNotification(errorMessage  || 'Ошибка отправки', 'danger');
             // Удаляем временное сообщение при ошибке
             if (messageElement) messageElement.remove();
         } finally {
@@ -3362,7 +3363,7 @@ if (isSettingsPage) {
                 showGlobalNotification('Канал переименован!', 'success');
                 const modalEl = document.getElementById('renameModal');
                 if (modalEl) {
-                    const modal = bootstrap.Modal.getInstance(modalEl);
+                    const modal = window.bootstrap.Modal.getInstance(modalEl);
                     if (modal) modal.hide();
                 }
 
@@ -3408,7 +3409,7 @@ if (isSettingsPage) {
                 showGlobalNotification('Описание обновлено!', 'success');
                 const modalEl = document.getElementById('descriptionModal');
                 if (modalEl) {
-                    const modal = bootstrap.Modal.getInstance(modalEl);
+                    const modal = window.bootstrap.Modal.getInstance(modalEl);
                     if (modal) modal.hide();
                 }
 
@@ -3489,7 +3490,7 @@ if (isSettingsPage) {
         if (newChannelNameInput && channelData) newChannelNameInput.value = channelData.name;
         const modalEl = document.getElementById('renameModal');
         if (modalEl) {
-            renameModal = new bootstrap.Modal(modalEl);
+            renameModal = new window.bootstrap.Modal(modalEl);
             renameModal.show();
         }
     }
@@ -3499,7 +3500,7 @@ if (isSettingsPage) {
         if (newChannelDescInput && channelData) newChannelDescInput.value = channelData.description || '';
         const modalEl = document.getElementById('descriptionModal');
         if (modalEl) {
-            descriptionModal = new bootstrap.Modal(modalEl);
+            descriptionModal = new window.bootstrap.Modal(modalEl);
             descriptionModal.show();
         }
     }
@@ -3507,7 +3508,7 @@ if (isSettingsPage) {
     function showChannelInfo() {
         const modalEl = document.getElementById('infoModal');
         if (modalEl) {
-            infoModal = new bootstrap.Modal(modalEl);
+            infoModal = new window.bootstrap.Modal(modalEl);
             infoModal.show();
         }
     }
@@ -3515,7 +3516,7 @@ if (isSettingsPage) {
     async function showMembersModal() {
         const modalEl = document.getElementById('membersModal');
         if (modalEl) {
-            membersModal = new bootstrap.Modal(modalEl);
+            membersModal = new window.bootstrap.Modal(modalEl);
             await loadMembers();
             membersModal.show();
         }

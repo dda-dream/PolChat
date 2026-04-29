@@ -26,6 +26,18 @@ builder.Host.UseSerilog();
 // ===== Configuration =====
 var connectionString = builder.Configuration.GetConnectionString("PostgreSQL");
 var redisConnection = builder.Configuration.GetConnectionString("Redis");
+if (redisConnection != null)
+{
+    builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
+    {
+        var config = ConfigurationOptions.Parse(redisConnection);
+        return ConnectionMultiplexer.Connect(config);
+    });
+}
+else
+{
+    Console.WriteLine($"[ERROR] Redis redisConnection string NULL.");
+}
 
 builder.Services.AddHttpContextAccessor();
 
@@ -36,12 +48,6 @@ builder.Services.AddDbContext<ChatDbContext>(options =>
            .UseSnakeCaseNamingConvention();
     });
 
-// ===== Redis =====
-builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
-{
-    var config = ConfigurationOptions.Parse(redisConnection);
-    return ConnectionMultiplexer.Connect(config);
-});
 builder.Services.AddSingleton<ISessionService, SessionService>();
 
 // ===== SignalR =====

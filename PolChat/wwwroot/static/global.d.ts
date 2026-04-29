@@ -1,13 +1,9 @@
-declare global {
-    //import { HubConnection } from '@microsoft/signalr';
-    //import * as bootstrap from 'bootstrap';
-    const bootstrap: typeof import('bootstrap');
-    const signalR: typeof import('@microsoft/signalr');
-    //type HubConnectionBuilder = import('@microsoft/signalr').HubConnection;
-    //console.log(HubConnectionBuilder);
+import * as _signalR from '@microsoft/signalr';
+import * as _bootstrap from 'bootstrap';
 
-    // ====================== ИНТЕРФЕЙСЫ ======================
-    // ASP.NET Core System.Text.Json сериализует в camelCase
+declare global {
+    const signalR: typeof _signalR;
+    //const bootstrap: typeof _bootstrap;
 
     interface Message {
         id: string;
@@ -66,6 +62,7 @@ declare global {
 
     // ====================== WINDOW ======================
     interface Window {
+        bootstrap: typeof _bootstrap;
         CURRENT_USER?: string;
         toggleSidebar?: () => void;
         closeSidebar?: () => void;
