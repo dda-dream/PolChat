@@ -194,17 +194,17 @@ public class ChatHub : Hub
         // Insert message
         var message = new Message
         {
-            id = msgId,
-            channel_id = channelId,
-            username = username,
-            content = content,
-            file_url = fileUrl,
-            reply_to_id = replyToId,
-            timestamp = now,
-            edited = false,
-            reactions = new List<Reaction>(),
-            read_by = Array.Empty<string>(),//new List<string>(),
-            delivered_to = new List<string>()
+            Id = msgId,
+            ChannelId = channelId,
+            Username = username,
+            Content = content,
+            FileUrl = fileUrl,
+            ReplyToId = replyToId,
+            Timestamp = now,
+            Edited = false,
+            Reactions = new List<Reaction>(),
+            ReadBy = Array.Empty<string>(),//new List<string>(),
+            DeliveredTo = new List<string>()
         };
 
         _db.messages.Add(message);
@@ -215,8 +215,8 @@ public class ChatHub : Hub
         if (replyToId != null)
         {
             var rm = await _db.messages
-                .Where(m => m.id == replyToId)
-                .Select(m => new { m.id, m.username, m.content, m.file_url })
+                .Where(m => m.Id == replyToId)
+                .Select(m => new { m.Id, m.Username, m.Content, m.FileUrl })
                 .FirstOrDefaultAsync();
 
             if (rm != null)
@@ -224,11 +224,11 @@ public class ChatHub : Hub
                 var existingUsers = await _db.users.Select(u => u.Username).ToListAsync();
                 replyToInfo = new ReplyToInfo
                 {
-                    Id = rm.id,
-                    Username = GetSafeUsername(rm.username, !existingUsers.Contains(rm.username)),
-                    Content = rm.content ?? "",
-                    FileUrl = rm.file_url,
-                    IsDeleted = !existingUsers.Contains(rm.username)
+                    Id = rm.Id,
+                    Username = GetSafeUsername(rm.Username, !existingUsers.Contains(rm.Username)),
+                    Content = rm.Content ?? "",
+                    FileUrl = rm.FileUrl,
+                    IsDeleted = !existingUsers.Contains(rm.Username)
                 };
             }
         }
@@ -342,8 +342,8 @@ public class ChatHub : Hub
         var username = userInfo.Username;
 
         var row = await _db.messages
-            .Where(m => m.id == messageId)
-            .Select(m => m.reactions)
+            .Where(m => m.Id == messageId)
+            .Select(m => m.Reactions)
             .FirstOrDefaultAsync();
 
         if (row == null) return;

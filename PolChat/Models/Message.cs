@@ -5,27 +5,27 @@ namespace ChatApp.Models;
 
 public class Message
 {
-    public string id { get; set; } = null!;
+    public string Id { get; set; } = null!;
 
-    [ForeignKey(nameof(Channel))]
-    [Column("channel_id")]
-    public string channel_id { get; set; } = null!;
-    public string username { get; set; } = null!;
-    public string? content { get; set; }
-    public string? file_url { get; set; }
-    public DateTime timestamp { get; set; }
-    public bool edited { get; set; }
-    public DateTime? edited_at { get; set; }
-    public string? reply_to_id { get; set; }
+    //[ForeignKey(nameof(Channel))]
+    //[Column("channel_id")]
+    public string ChannelId { get; set; } = null!;
+    public string Username { get; set; } = null!;
+    public string? Content { get; set; }
+    public string? FileUrl { get; set; }
+    public DateTime Timestamp { get; set; }
+    public bool Edited { get; set; }
+    public DateTime? EditedAt { get; set; }
+    public string? ReplyToId { get; set; }
 
     // PostgreSQL arrays
-    public List<Reaction> reactions { get; set; } = new();
+    public List<Reaction> Reactions { get; set; } = new();
 
 
-    public string[] read_by { get; set; } = Array.Empty<string>();
+    public string[] ReadBy { get; set; } = Array.Empty<string>();
 
 
-    public List<string> delivered_to { get; set; } = new();
+    public List<string> DeliveredTo { get; set; } = new();
 
     // Navigation
     [JsonIgnore]
