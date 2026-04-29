@@ -1554,6 +1554,7 @@ if (isChatPage) {
             usersCacheTime = now;
             return usersCache;
         } catch (e) {
+            console.error(e);
             return usersCache || [];
         }
     }
@@ -1869,7 +1870,9 @@ if (isChatPage) {
             channelsCache = channels;
             channelsCacheTime = now;
             renderChannels(channels);
-        } catch (e) { console.error(e); }
+        } catch (e) { 
+            console.error(e); 
+            }
     }
 
     function renderChannels(channels: Channel[]) {
@@ -1950,7 +1953,8 @@ if (isChatPage) {
     async function startDMWithUser(username: string) {
         if (username === currentUsername) { showNotification('Нельзя создать чат с самим собой', 'warning'); return; }
         try {
-            const res = await fetch('/api/dm_channels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ other_user: username }) });
+            const res = await fetch('/api/dm_channels',
+                { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ otherUser: username }) });
             const data = await res.json();
             if (res.ok) {
                 await loadDMChannels();
@@ -1961,7 +1965,10 @@ if (isChatPage) {
                 await joinChannel('dm', data.dmId, username, '');
             }
             else showNotification(data.error || 'Ошибка', 'danger');
-        } catch (e) { showNotification('Ошибка', 'danger'); }
+        } catch (e) { 
+            console.error(e);
+            showNotification('Ошибка', 'danger'); 
+            }
     }
 
     async function deleteDMChannel(dmId: string, username: string) {
@@ -1980,7 +1987,10 @@ if (isChatPage) {
                     }
                     await loadDMChannels();
                 }
-            } catch (e) { showNotification('Ошибка', 'danger'); }
+            } catch (e) { 
+                console.error(e);
+                showNotification('Ошибка', 'danger'); 
+                }
         }
     }
 
@@ -2000,7 +2010,10 @@ if (isChatPage) {
                     }
                     await loadChannels(true);
                 }
-            } catch (e) { showNotification('Ошибка', 'danger'); }
+            } catch (e) { 
+                console.error(e);
+                showNotification('Ошибка', 'danger'); 
+                }
         }
     }
 
@@ -2131,7 +2144,10 @@ if (isChatPage) {
         try {
             await fetch('/api/user/status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) });
             currentUserStatus = status as any;
-        } catch (e) { }
+        } catch (e) 
+        {
+            console.error(e);
+        }
     }
 
     function setupActivityTracking() {
@@ -2177,7 +2193,10 @@ if (isChatPage) {
         try {
             audio = new Audio('/static/notification.mp3');
             audio.volume = 0.7;
-        } catch (e) { }
+        } catch (e) 
+        {
+            console.error(e);
+        }
     }
 
     function testNotification() {
@@ -2799,7 +2818,9 @@ if (isChatPage) {
                         joinChannel('dm', last.channelId, last.channelName || 'Чат', '');
                     }
                 }
-            } catch (e) { }
+            } catch (e) {
+                console.error(e);
+            }
         }
 
         if (!currentChannel) {
@@ -2808,7 +2829,9 @@ if (isChatPage) {
                 const channels = await res.json();
                 const general = channels.find((c: Channel) => c.name === 'Общий');
                 if (general) joinChannel('channel', general.id, general.name, general.description || '');
-            } catch (e) { }
+            } catch (e) {
+                console.error(e);
+            }
         }
 
         updateActivity();
@@ -2924,9 +2947,11 @@ if (isLoginPage) {
                 if (data.success) {
                     window.location.href = data.redirect;
                 } else {
+                    console.error("isLoginPage() - error #1");
                     alert('Неверное имя пользователя или пароль');
                 }
             } catch (error) {
+                console.error(error);
                 alert('Ошибка соединения с сервером');
             }
         });
@@ -3692,7 +3717,7 @@ if (isUserManagementPage) {
         .configureLogging(signalR.LogLevel.Information)
         .build();
 
-    userConnection.start().catch(err => console.error('SignalR user connection error:', err));
+    userConnection.start().catch(err => { console.error('SignalR user connection error:', err) });
 
     userConnection.on('server_restart', () => {
         isRestarting = true;
