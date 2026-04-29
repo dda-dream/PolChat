@@ -172,10 +172,10 @@ if (isChatPage) {
     let titleUpdateInterval: number | null = null;
     let lastUnreadCount = 0;
 
-    let lastReceivedMessageId: string | null = null;
+    //let lastReceivedMessageId: string | null = null;
     let lastMessageTimestamp: string | null = null;
-    let isReconnecting = false;
-    let pendingMessagesBatch: Message[] = [];
+    //let isReconnecting = false;
+    //let pendingMessagesBatch: Message[] = [];
 
     const DELETED_USER_DISPLAY = "Удаленный аккаунт";
     const DELETED_USER_AVATAR = "?";
@@ -2541,31 +2541,6 @@ if (isChatPage) {
             timestamp: number;
         }> = [];
 
-        // Перехватываем отправку сообщений при офлайне
-        async function sendMessageWithRetry(data: any) {
-            if (connection.state !== signalR.HubConnectionState.Connected) {
-                // Сохраняем в очередь
-                offlineMessagesQueue.push({
-                    ...data,
-                    timestamp: Date.now()
-                });
-        
-                showNotification('Сообщение сохранено и будет отправлено после восстановления соединения', 'info');
-                return;
-            }
-    
-            try {
-                await connection.invoke('SendMessage', data);
-            } catch (error) {
-                console.error('Failed to send message:', error);
-                // Сохраняем для повторной отправки
-                offlineMessagesQueue.push({
-                    ...data,
-                    timestamp: Date.now()
-                });
-                throw error;
-            }
-        }
 
         // Отправляем накопленные сообщения после переподключения
         async function flushOfflineMessages() {
@@ -2713,7 +2688,6 @@ if (isChatPage) {
     connection.on('close', () => updateConnectionStatus(false));
 
     connection.on('new_message', async (message: Message) => {
-        lastReceivedMessageId = message.id;
         lastMessageTimestamp = message.timestamp;
         if (message.id && message.id.startsWith('temp_') && message.username === currentUsername) {
             console.log(`Ignoring own temp message in new_message: ${message.id}`);
@@ -2807,7 +2781,6 @@ if (isChatPage) {
         // Настраиваем reconnect с параметрами
         connection.onreconnecting((error) => {
             console.log('SignalR reconnecting...', error);
-            isReconnecting = true;
             updateConnectionStatus(false);
             showNotification('Потеря соединения. Переподключение...', 'warning');
         });
@@ -2815,7 +2788,6 @@ if (isChatPage) {
         connection.onreconnected(async (connectionId) => {
             console.log('SignalR reconnected, connectionId:', connectionId);
             updateConnectionStatus(true);
-            isReconnecting = false;
     
             // Запрашиваем пропущенные сообщения
             if (currentChannel && lastMessageTimestamp) {
@@ -2830,7 +2802,6 @@ if (isChatPage) {
 
         connection.onclose(async (error) => {
             console.log('SignalR connection closed', error);
-            isReconnecting = false;
             updateConnectionStatus(false);
     
             // Пытаемся переподключиться вручную

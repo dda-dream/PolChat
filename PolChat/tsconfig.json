@@ -21,7 +21,7 @@
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
 
-    "noEmitOnError": false
+    "noEmitOnError": true
 
   },
   "include": [ "./wwwroot/static/global.d.ts", "./wwwroot/static/chat.ts" ],
