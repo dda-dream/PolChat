@@ -5,11 +5,11 @@
 //import { HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
 /// <reference path="./global.d.ts" />
 /* global window, document, bootstrap, localStorage, sessionStorage, fetch, alert, confirm, prompt, FileReader, URL, FormData, MutationObserver, Set, Map, console */
-"use strict";
+"use strict";  
  
-//   Расширение глобального объекта window
-   
-// ============ ОПРЕДЕЛЕНИЕ ТИПА СТРАНИЦЫ ============  
+// Расширение глобального объекта window
+// @ts-nocheck
+// ============ ОПРЕДЕЛЕНИЕ ТИПА СТРАНИЦЫ ============
 
 const isChatPage = document.querySelector('.chat-container') !== null;
 const isSettingsPage = document.querySelector('.settings-container') !== null;
@@ -125,7 +125,8 @@ if (isChatPage) {
     let currentChannelType: 'dm' | 'channel' | null = null;
     let currentChannelName = '';
     let currentUsername = '';
-    let editingMessageId: string | null = null;
+    let editingMessageData: { id: string; channelId: string; channelType: 'dm' | 'channel' | null; content: string } | null = null;
+    let editingIndicator: HTMLElement | null = null;
     let typingTimeout: number | null = null;
     let isTyping = false;
     let receivedMessages = new Set<string>();
@@ -170,6 +171,11 @@ if (isChatPage) {
     let serverTimeOffset = 0;           // разница между серверным и локальным временем (мс)
     let titleUpdateInterval: number | null = null;
     let lastUnreadCount = 0;
+
+    let lastReceivedMessageId: string | null = null;
+    let lastMessageTimestamp: string | null = null;
+    let isReconnecting = false;
+    let pendingMessagesBatch: Message[] = [];
 
     const DELETED_USER_DISPLAY = "Удаленный аккаунт";
     const DELETED_USER_AVATAR = "?";
@@ -544,7 +550,7 @@ if (isChatPage) {
             <button class="message-action-btn" onclick="showReactionPanel('${escapeHtml(msg.id)}', event); closeAllMessageActions();"><i class="far fa-smile"></i> Реакция</button>
         </div>`;
 
-        return `<div class="message ${isOwn ? 'message-own' : ''}" id="msg-${escapeHtml(msg.id)}">
+        return `<div class="message ${isOwn ? 'message-own' : ''}" id="msg-${escapeHtml(msg.id)}" data-channel-id="${escapeHtml(msg.channelId || currentChannel || '')}" data-channel-type="${escapeHtml(currentChannelType || 'channel')}">
             <div class="message-wrapper">
                 <div class="message-avatar">${escapeHtml(avatarLetter)}</div>
                 <div class="message-content-wrapper">
@@ -580,63 +586,65 @@ if (isChatPage) {
         return f;
     }
 
-    function displayMessages(msgs: Message[]) {
-        initMessageStatuses(msgs);
+        // ЗАМЕНИТЕ существующую функцию displayMessages на эту:
+        function displayMessages(msgs: Message[]) {
+            initMessageStatuses(msgs);
 
-        const div = document.getElementById('messages-area');
-        if (!msgs || msgs.length === 0) {
-            if (div) div.innerHTML = '<div class="text-center text-muted mt-5">Нет сообщений. Напишите первое!</div>';
-            return;
-        }
-
-        msgs.forEach(msg => {
-            if (msg.readBy) messageReadBy.set(msg.id, msg.readBy);
-        });
-
-        if (div) div.innerHTML = msgs.map(m => formatMessage(m)).join('');
-
-        msgs.forEach(msg => {
-            if (currentChannelType === 'channel') {
-                updateReadByDisplay(msg.id);
+            const div = document.getElementById('messages-area');
+            if (!msgs || msgs.length === 0) {
+                if (div) div.innerHTML = '<div class="text-center text-muted mt-5">Нет сообщений. Напишите первое!</div>';
+                return;
             }
-        });
 
-        scrollToBottomSafely(true);
-        setTimeout(() => markVisibleMessagesAsRead(), 500);
-    }
+            msgs.forEach((msg: Message) => {
+                if (msg.readBy) messageReadBy.set(msg.id, msg.readBy);
+            });
 
-    function prependMessages(messages: Message[]) {
-        const messagesDiv = document.getElementById('messages-area');
-        if (!messagesDiv) return;
+            if (div) div.innerHTML = msgs.map((m: Message) => formatMessage(m)).join('');
 
-        const oldScrollHeight = messagesDiv.scrollHeight;
-        const oldScrollTop = messagesDiv.scrollTop;
-
-        const newMessages = messages.filter(msg => !receivedMessages.has(msg.id));
-        if (newMessages.length === 0) return;
-
-        initMessageStatuses(newMessages);
-
-        for (const msg of newMessages) {
-            if (msg.readBy) messageReadBy.set(msg.id, msg.readBy);
-        }
-        let newMessagesHtml = '';
-        for (const msg of newMessages) {
-            receivedMessages.add(msg.id);
-            newMessagesHtml += formatMessage(msg);
-        }
-        if (newMessagesHtml) {
-            messagesDiv.insertAdjacentHTML('afterbegin', newMessagesHtml);
-            for (const msg of newMessages) {
-                if (msg.username === currentUsername) {
+            msgs.forEach((msg: Message) => {
+                if (currentChannelType === 'channel') {
                     updateReadByDisplay(msg.id);
                 }
-            }
-            const newScrollHeight = messagesDiv.scrollHeight;
-            const heightDiff = newScrollHeight - oldScrollHeight;
-            messagesDiv.scrollTop = oldScrollTop + heightDiff;
+            });
+
+            scrollToBottomSafely(true);
+            setTimeout(() => markVisibleMessagesAsRead(), 500);
         }
-    }
+
+        // ЗАМЕНИТЕ существующую функцию prependMessages на эту:
+        function prependMessages(messages: Message[]) {
+            const messagesDiv = document.getElementById('messages-area');
+            if (!messagesDiv) return;
+
+            const oldScrollHeight = messagesDiv.scrollHeight;
+            const oldScrollTop = messagesDiv.scrollTop;
+
+            const newMessages = messages.filter((msg: Message) => !receivedMessages.has(msg.id));
+            if (newMessages.length === 0) return;
+
+            initMessageStatuses(newMessages);
+
+            for (const msg of newMessages) {
+                if (msg.readBy) messageReadBy.set(msg.id, msg.readBy);
+            }
+            let newMessagesHtml = '';
+            for (const msg of newMessages) {
+                receivedMessages.add(msg.id);
+                newMessagesHtml += formatMessage(msg);
+            }
+            if (newMessagesHtml) {
+                messagesDiv.insertAdjacentHTML('afterbegin', newMessagesHtml);
+                for (const msg of newMessages) {
+                    if (msg.username === currentUsername) {
+                        updateReadByDisplay(msg.id);
+                    }
+                }
+                const newScrollHeight = messagesDiv.scrollHeight;
+                const heightDiff = newScrollHeight - oldScrollHeight;
+                messagesDiv.scrollTop = oldScrollTop + heightDiff;
+            }
+        }
 
     function updateReadByDisplay(messageId: string) {
         if (currentChannelType !== 'channel') return;
@@ -911,100 +919,277 @@ if (isChatPage) {
     }
 
     function showFilePreview(file: File) {
-        if (file.size > 500 * 1024 * 1024) {
-            showNotification('Файл слишком большой. Максимум 500MB', 'danger');
-            return;
-        }
-
-        const url = URL.createObjectURL(file);
-        const div = document.getElementById('pastePreview');
-        const isImage = file.type.startsWith('image/');
-        const isVideo = file.type.startsWith('video/');
-
-        let content = '';
-        if (isImage) {
-            content = `<img src="${url}" style="max-width:100%; max-height:200px; border-radius:8px; object-fit:contain;">`;
-        } else if (isVideo) {
-            content = `<video src="${url}" style="max-width:100%; max-height:200px; border-radius:8px;" controls></video>`;
-        } else {
-            content = `<div style="padding:20px; text-align:center; background:#f0f2f5; border-radius:8px;">
-                <i class="fas fa-file fa-3x" style="color:#6c757d;"></i>
-                <div style="margin-top:8px; font-size:12px; color:#666;">${escapeHtml(file.name)}</div>
-            </div>`;
-        }
-
-        // Добавляем поле для ввода текста к файлу
-        if (div) {
-            div.innerHTML = `<div class="preview-content">
-                ${content}
-                <div style="margin-top: 12px;">
-                    <textarea id="fileCaptionInput" placeholder="Введите подпись к файлу..." style="width:100%; padding:8px; border-radius:8px; border:1px solid #ddd; resize:none; font-family:inherit; font-size:14px;" rows="2"></textarea>
-                </div>
-                <div class="preview-actions" style="margin-top: 12px; display: flex; gap: 8px; justify-content: flex-end;">
-                    <button class="btn-send" onclick="sendFileFromPreview()">Отправить</button>
-                    <button class="btn-cancel" onclick="cancelFilePreview()">Отмена</button>
-                </div>
-            </div>`;
-            div.style.display = 'block';
-        }
-
-        pendingFileBlob = file;
-        pendingFileUrl = url;
-        pendingFileName = file.name;
-    }
-
-    async function sendFileFromPreview() {
-        if (!pendingFileBlob) return;
-        if (!currentChannel) {
-            showNotification('Выберите чат для отправки', 'warning');
-            cancelFilePreview();
-            return;
-        }
-
-        const file = pendingFileBlob;
-        const fileName = pendingFileName || 'file';
-        const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
-
-        // Получаем текст подписи из textarea
-        const captionInput = document.getElementById('fileCaptionInput') as HTMLTextAreaElement | null;
-        let caption = captionInput ? captionInput.value.trim() : '';
-        caption = sanitizeInput(caption);
-
-        const replyData = replyToMessageData ? { id: replyToMessageData.id, username: replyToMessageData.username, content: replyToMessageData.content } : null;
-        cancelReply();
-        cancelFilePreview();
-
-        const formData = new FormData();
-        formData.append('file', file, fileName);
-        formData.append('channelId', currentChannel || '');
-
-        try {
-            const response = await fetch('/upload', { method: 'POST', body: formData });
-            const data = await response.json();
-
-            if (data.success) {
-                pendingMessages.set(tempId, {
-                    content: caption,
-                    fileUrl: data.fileUrl,
-                    replyTo: replyData,
-                    channelId: currentChannel
-                });
-                connection.invoke('SendMessage', {
-                    tempId: tempId,
-                    channelId: currentChannel,
-                    content: caption,
-                    fileUrl: data.fileUrl,
-                    replyTo: replyData
-                });
-                showNotification(caption ? 'Файл с подписью отправлен!' : 'Файл отправлен!', 'success');
-            } else {
-                showNotification(data.error || 'Ошибка загрузки файла', 'danger');
+            if (file.size > 500 * 1024 * 1024) {
+                showNotification('Файл слишком большой. Максимум 500MB', 'danger');
+                return;
             }
-        } catch (e) {
-            console.error(e);
-            showNotification('Ошибка загрузки файла', 'danger');
+
+            const url = URL.createObjectURL(file);
+            const div = document.getElementById('pastePreview');
+            const isImage = file.type.startsWith('image/');
+            const isVideo = file.type.startsWith('video/');
+
+            let content = '';
+            if (isImage) {
+                content = `<img src="${url}" style="max-width:100%; max-height:200px; border-radius:8px; object-fit:contain;">`;
+            } else if (isVideo) {
+                content = `<video src="${url}" style="max-width:100%; max-height:200px; border-radius:8px;" controls></video>`;
+            } else {
+                content = `<div style="padding:20px; text-align:center; background:#f0f2f5; border-radius:8px;">
+            <i class="fas fa-file fa-3x" style="color:#6c757d;"></i>
+            <div style="margin-top:8px; font-size:12px; color:#666;">${escapeHtml(file.name)}</div>
+        </div>`;
+            }
+
+            if (div) {
+                div.innerHTML = `<div class="preview-content">
+            ${content}
+            <div class="preview-actions" style="margin-top: 12px; display: flex; gap: 8px; justify-content: flex-end;">
+                <button class="btn-send" onclick="sendFileMessage()">Отправить</button>
+                <button class="btn-cancel" onclick="cancelFilePreview()">Отмена</button>
+            </div>
+        </div>`;
+                div.style.display = 'block';
+            }
+
+            pendingFileBlob = file;
+            pendingFileUrl = url;
+            pendingFileName = file.name;
+    
+            // Фокусируемся на основном поле ввода для текста
+            const messageInput = document.getElementById('messageInput') as HTMLTextAreaElement | null;
+            if (messageInput) messageInput.focus();
         }
-    }
+
+        async function sendFileFromPreview() {
+            if (!pendingFileBlob) {
+                showNotification('Нет файла для отправки', 'warning');
+                return;
+            }
+            if (!currentChannel) {
+                showNotification('Выберите чат для отправки', 'warning');
+                return;
+            }
+
+            const file = pendingFileBlob;
+            const fileName = pendingFileName || 'file';
+    
+            // Получаем текст подписи из textarea
+            const captionInput = document.getElementById('fileCaptionInput') as HTMLTextAreaElement | null;
+            let caption = captionInput ? captionInput.value.trim() : '';
+            caption = sanitizeInput(caption);
+
+            const replyData = replyToMessageData ? { id: replyToMessageData.id, username: replyToMessageData.username, content: replyToMessageData.content } : null;
+    
+            // Сохраняем caption во временное хранилище, чтобы использовать после загрузки файла
+            const tempCaption = caption;
+    
+            cancelReply();
+            cancelFilePreview();
+
+            const formData = new FormData();
+            formData.append('file', file, fileName);
+            formData.append('channelId', currentChannel || '');
+
+            // Показываем индикатор загрузки
+            const progressContainer = document.getElementById('uploadProgressContainer');
+            if (progressContainer) {
+                progressContainer.classList.add('show');
+                const fileNameSpan = document.getElementById('uploadFileName');
+                if (fileNameSpan) fileNameSpan.textContent = fileName;
+                const progressBar = document.getElementById('uploadProgressBar');
+                if (progressBar) progressBar.style.width = '0%';
+                const percentSpan = document.getElementById('uploadPercent');
+                if (percentSpan) percentSpan.textContent = '0';
+                const statusSpan = document.getElementById('uploadStatus');
+                if (statusSpan) statusSpan.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка файла...';
+            }
+
+            try {
+                // Используем XMLHttpRequest для отслеживания прогресса
+                const xhr = new XMLHttpRequest();
+        
+                const uploadPromise = new Promise<{ success: boolean; fileUrl: string; error?: string }>((resolve, reject) => {
+                    xhr.upload.addEventListener('progress', (e) => {
+                        if (e.lengthComputable) {
+                            const percent = Math.round((e.loaded / e.total) * 100);
+                            const progressBar = document.getElementById('uploadProgressBar');
+                            if (progressBar) progressBar.style.width = percent + '%';
+                            const percentSpan = document.getElementById('uploadPercent');
+                            if (percentSpan) percentSpan.textContent = percent.toString();
+                        }
+                    });
+            
+                    xhr.onload = () => {
+                        try {
+                            const data = JSON.parse(xhr.responseText);
+                            if (xhr.status === 200 && data.success) {
+                                resolve(data);
+                            } else {
+                                reject(new Error(data.error || 'Ошибка загрузки файла'));
+                            }
+                        } catch (e) {
+                            reject(new Error('Ошибка обработки ответа сервера'));
+                        }
+                    };
+            
+                    xhr.onerror = () => reject(new Error('Ошибка сети'));
+                    xhr.onabort = () => reject(new Error('Загрузка отменена'));
+            
+                    xhr.open('POST', '/upload', true);
+                    xhr.send(formData);
+                });
+        
+                const data = await uploadPromise;
+
+                // Скрываем прогресс
+                if (progressContainer) progressContainer.classList.remove('show');
+
+                if (data.success) {
+                    const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+            
+                    // Сохраняем во временные сообщения с подписью
+                    pendingMessages.set(tempId, {
+                        content: tempCaption,
+                        fileUrl: data.fileUrl,
+                        replyTo: replyData,
+                        channelId: currentChannel
+                    });
+            
+                    // Отправляем SignalR сообщение с подписью
+                    await connection.invoke('SendMessage', {
+                        tempId: tempId,
+                        channelId: currentChannel,
+                        content: tempCaption,
+                        fileUrl: data.fileUrl,
+                        replyTo: replyData
+                    });
+            
+                    showNotification(tempCaption ? 'Файл с подписью отправлен!' : 'Файл отправлен!', 'success');
+                } else {
+                    showNotification(data.error || 'Ошибка загрузки файла', 'danger');
+                }
+            } catch (e) {
+                if (progressContainer) progressContainer.classList.remove('show');
+                console.error(e);
+                showNotification((e as Error).message || 'Ошибка загрузки файла', 'danger');
+            }
+        }
+
+    async function sendFileMessage() {
+            if (!pendingFileBlob) {
+                showNotification('Нет файла для отправки', 'warning');
+                return;
+            }
+            if (!currentChannel) {
+                showNotification('Выберите чат для отправки', 'warning');
+                return;
+            }
+
+            const file = pendingFileBlob;
+            const fileName = pendingFileName || 'file';
+    
+            // Берем текст из основного поля ввода
+            const messageInput = document.getElementById('messageInput') as HTMLTextAreaElement | null;
+            let textContent = messageInput ? messageInput.value.trim() : '';
+            textContent = sanitizeInput(textContent);
+    
+            const replyData = replyToMessageData ? { id: replyToMessageData.id, username: replyToMessageData.username, content: replyToMessageData.content } : null;
+    
+            // Очищаем preview и reply перед отправкой
+            cancelReply();
+            cancelFilePreview();
+    
+            // Очищаем поле ввода
+            if (messageInput) {
+                messageInput.value = '';
+                autoResizeTextarea();
+            }
+
+            const formData = new FormData();
+            formData.append('file', file, fileName);
+            formData.append('channelId', currentChannel || '');
+
+            // Показываем индикатор загрузки
+            const progressContainer = document.getElementById('uploadProgressContainer');
+            if (progressContainer) {
+                progressContainer.classList.add('show');
+                const fileNameSpan = document.getElementById('uploadFileName');
+                if (fileNameSpan) fileNameSpan.textContent = fileName;
+                const progressBar = document.getElementById('uploadProgressBar');
+                if (progressBar) progressBar.style.width = '0%';
+                const percentSpan = document.getElementById('uploadPercent');
+                if (percentSpan) percentSpan.textContent = '0';
+                const statusSpan = document.getElementById('uploadStatus');
+                if (statusSpan) statusSpan.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка файла...';
+            }
+
+            try {
+                const xhr = new XMLHttpRequest();
+        
+                const uploadPromise = new Promise<{ success: boolean; fileUrl: string; error?: string }>((resolve, reject) => {
+                    xhr.upload.addEventListener('progress', (e) => {
+                        if (e.lengthComputable) {
+                            const percent = Math.round((e.loaded / e.total) * 100);
+                            const progressBar = document.getElementById('uploadProgressBar');
+                            if (progressBar) progressBar.style.width = percent + '%';
+                            const percentSpan = document.getElementById('uploadPercent');
+                            if (percentSpan) percentSpan.textContent = percent.toString();
+                        }
+                    });
+            
+                    xhr.onload = () => {
+                        try {
+                            const data = JSON.parse(xhr.responseText);
+                            if (xhr.status === 200 && data.success) {
+                                resolve(data);
+                            } else {
+                                reject(new Error(data.error || 'Ошибка загрузки файла'));
+                            }
+                        } catch (e) {
+                            reject(new Error('Ошибка обработки ответа сервера'));
+                        }
+                    };
+            
+                    xhr.onerror = () => reject(new Error('Ошибка сети'));
+                    xhr.onabort = () => reject(new Error('Загрузка отменена'));
+            
+                    xhr.open('POST', '/upload', true);
+                    xhr.send(formData);
+                });
+        
+                const data = await uploadPromise;
+
+                if (progressContainer) progressContainer.classList.remove('show');
+
+                if (data.success) {
+                    const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+            
+                    pendingMessages.set(tempId, {
+                        content: textContent,
+                        fileUrl: data.fileUrl,
+                        replyTo: replyData,
+                        channelId: currentChannel
+                    });
+            
+                    await connection.invoke('SendMessage', {
+                        tempId: tempId,
+                        channelId: currentChannel,
+                        content: textContent,
+                        fileUrl: data.fileUrl,
+                        replyTo: replyData
+                    });
+            
+                    showNotification(textContent ? 'Сообщение с файлом отправлено!' : 'Файл отправлен!', 'success');
+                } else {
+                    showNotification(data.error || 'Ошибка загрузки файла', 'danger');
+                }
+            } catch (e) {
+                if (progressContainer) progressContainer.classList.remove('show');
+                console.error(e);
+                showNotification((e as Error).message || 'Ошибка загрузки файла', 'danger');
+            }
+        }
 
     function cancelFilePreview() {
         const div = document.getElementById('pastePreview');
@@ -1028,242 +1213,351 @@ if (isChatPage) {
     }
 
     function handlePaste(e: ClipboardEvent) {
-        const items = (e.clipboardData || (e as any).originalEvent?.clipboardData)?.items;
-        if (!items) return;
-        for (let i = 0; i < items.length; i++) {
-            const item = items[i];
-            if (item.type.indexOf('image') !== -1) {
-                e.preventDefault();
-                const blob = item.getAsFile();
-                if (blob) {
-                    const now = new Date();
-                    const dateStr = now.toISOString().slice(0, 19).replace(/:/g, '-');
-                    const ext = blob.type.split('/')[1] || 'png';
-                    const filename = `pasted-${dateStr}.${ext}`;
-                    const file = new File([blob], filename, { type: blob.type });
-                    showFilePreview(file);
-                    // Автоматически фокусируемся на поле ввода подписи
-                    setTimeout(() => {
-                        const captionInput = document.getElementById('fileCaptionInput');
-                        if (captionInput) captionInput.focus();
-                    }, 100);
+            const items = (e.clipboardData || (e as any).originalEvent?.clipboardData)?.items;
+            if (!items) return;
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                if (item.type.indexOf('image') !== -1) {
+                    e.preventDefault();
+                    const blob = item.getAsFile();
+                    if (blob) {
+                        const now = new Date();
+                        const dateStr = now.toISOString().slice(0, 19).replace(/:/g, '-');
+                        const ext = blob.type.split('/')[1] || 'png';
+                        const filename = `pasted-${dateStr}.${ext}`;
+                        const file = new File([blob], filename, { type: blob.type });
+                        showFilePreview(file);
+                    }
+                    break;
                 }
-                break;
             }
         }
-    }
+
+        function showEditingIndicator(messageContent: string) {
+            if (editingIndicator) editingIndicator.remove();
+
+            // Если открыт reply preview – скрываем его
+            const replyPreview = document.getElementById('replyPreview');
+            if (replyPreview && replyPreview.style.display === 'flex') cancelReply();
+
+            editingIndicator = document.createElement('div');
+            editingIndicator.id = 'editingPreview';
+            editingIndicator.className = 'editing-preview';
+    
+            // Обрезаем длинный текст для отображения
+            const previewText = messageContent.length > 50 ? messageContent.substring(0, 47) + '...' : messageContent;
+    
+            editingIndicator.innerHTML = `
+        <div class="editing-preview-content" onclick="scrollToEditingMessage()">
+            <i class="fas fa-edit" style="color: #28a745;"></i>
+            <div class="editing-info">
+                <span class="editing-label">Редактирование сообщения</span>
+                <span class="editing-preview-text">${escapeHtml(previewText) || 'Файл'}</span>
+            </div>
+        </div>
+        <button class="cancel-editing-btn" onclick="cancelEditing()">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+
+            // Вставляем перед .input-wrapper
+            const inputWrapper = document.querySelector('.input-wrapper');
+            if (inputWrapper && inputWrapper.parentElement) {
+                inputWrapper.parentElement.insertBefore(editingIndicator, inputWrapper);
+            } else {
+                const inputArea = document.querySelector('.input-area');
+                if (inputArea) inputArea.insertBefore(editingIndicator, inputArea.firstChild);
+            }
+        }
+
+        function cancelEditing() {
+            if (!editingMessageData) return;
+
+            editingMessageData = null;
+
+            if (editingIndicator) {
+                editingIndicator.remove();
+                editingIndicator = null;
+            }
+
+            const input = document.getElementById('messageInput') as HTMLTextAreaElement;
+            if (input) {
+                input.value = '';
+                autoResizeTextarea();
+            }
+
+            // Убираем подсветку
+            document.querySelectorAll('.message-editing-highlight').forEach(el => {
+                el.classList.remove('message-editing-highlight');
+            });
+
+            showNotification('Редактирование отменено', 'info');
+        }
+
+        function scrollToEditingMessage() {
+            if (editingMessageData) {
+                const msgElement = document.getElementById(`msg-${editingMessageData.id}`);
+                if (msgElement) {
+                    msgElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    msgElement.classList.add('message-editing-highlight');
+                    setTimeout(() => {
+                        msgElement.classList.remove('message-editing-highlight');
+                    }, 2000);
+                }
+            }
+        }
 
     // ============ ОТПРАВКА СООБЩЕНИЙ ============
 
     async function sendMessage() {
-        if (isSending) return;
+            if (isSending) return;
 
-        const input = document.getElementById('messageInput') as HTMLTextAreaElement | null;
-        if (!input) return;
+            // Если есть файл в preview, отправляем через специальную функцию
+            if (pendingFileBlob) {
+                await sendFileMessage();
+                return;
+            }
 
-        let content = input.value;
-        content = sanitizeInput(content);
+            const input = document.getElementById('messageInput') as HTMLTextAreaElement | null;
+            if (!input) return;
 
-        // БЕРЁМ ФАЙЛ НАПРЯМУЮ ИЗ INPUT, а не из pendingFileBlob
-        const fileInput = document.getElementById('fileInput') as HTMLInputElement | null;
-        const selectedFile = fileInput?.files?.[0];
-        const hasFile = !!selectedFile;
-        const hasText = !!content;
-        const hasReply = !!replyToMessageData;
+            let content = input.value;
+            content = sanitizeInput(content);
 
-        console.log('[sendMessage] hasFile:', hasFile, 'file:', selectedFile?.name);
+            const fileInput = document.getElementById('fileInput') as HTMLInputElement | null;
+            const selectedFile = fileInput?.files?.[0];
+            const hasFile = !!selectedFile;
+            const hasText = !!content;
+            const hasReply = !!replyToMessageData;
 
-        if (!hasText && !hasReply && !hasFile) return;
-        if (!currentChannel) {
-            showNotification('Выберите чат', 'warning');
-            return;
-        }
+            if (!hasText && !hasReply && !hasFile) return;
+            if (!currentChannel) {
+                showNotification('Выберите чат', 'warning');
+                return;
+            }
 
-        // Редактирование сообщения
-        if (editingMessageId) {
-            const response = await fetch(`/api/messages/${editingMessageId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ content: content })
-            });
-            if (response.ok) {
-                editingMessageId = null;
+            // *** РЕДАКТИРОВАНИЕ СООБЩЕНИЯ ***
+            if (editingMessageData) {
+                // Проверяем, что мы всё ещё в том же чате
+                if (editingMessageData.channelId !== currentChannel || editingMessageData.channelType !== currentChannelType) {
+                    showNotification('Нельзя редактировать сообщение из другого чата. Редактирование отменено.', 'warning');
+                    cancelEditing();
+                    return;
+                }
+        
+                const response = await fetch(`/api/messages/${editingMessageData.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content: content })
+                });
+        
+                if (response.ok) {
+                    cancelEditing();
+                    input.value = '';
+                    autoResizeTextarea();
+                    input.focus();
+                    cancelReply();
+                    showNotification('✅ Сообщение отредактировано', 'success');
+                } else {
+                    const error = await response.json();
+                    showNotification(error.error || 'Ошибка редактирования', 'danger');
+                }
+                return;
+            }
+
+            // ---------- НОВОЕ СООБЩЕНИЕ ----------
+            isSending = true;
+            const sendBtn = document.getElementById('sendButton') as HTMLButtonElement | null;
+            if (sendBtn) sendBtn.disabled = true;
+
+            const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+            const replyData = replyToMessageData
+                ? { id: replyToMessageData.id, username: replyToMessageData.username, content: replyToMessageData.content }
+                : null;
+
+            // ---- ВРЕМЕННОЕ СООБЩЕНИЕ (показываем сразу, если есть текст или скоро будет файл) ----
+            const messagesDiv = document.getElementById('messages-area');
+            if (messagesDiv && messagesDiv.innerHTML.includes('Нет сообщений')) {
+                messagesDiv.innerHTML = '';
+            }
+
+            // Если есть файл, используем его локальный blob для предпросмотра
+            let blobUrl: string | null = null;
+            if (hasFile && selectedFile) {
+                blobUrl = URL.createObjectURL(selectedFile);
+            }
+
+            const tempMessage: any = {
+                id: tempId,
+                channelId: currentChannel,
+                username: currentUsername,
+                content: content,
+                fileUrl: blobUrl,
+                timestamp: new Date().toISOString(),
+                reactions: [],
+                readBy: [],
+                deliveredTo: [],
+                isTemp: true,
+                edited: false
+            };
+
+            if (messagesDiv) {
+                const existing = document.getElementById(`msg-${tempId}`);
+                if (!existing) {
+                    messagesDiv.insertAdjacentHTML('beforeend', formatMessage(tempMessage));
+                    scrollToBottomSafely(false);
+                }
+            }
+
+            let messageElement = document.getElementById(`msg-${tempId}`);
+
+            try {
+                if (hasFile && selectedFile) {
+                    const formData = new FormData();
+                    formData.append('file', selectedFile);
+                    formData.append('channelId', currentChannel);
+
+                    const uploadResponse = await fetch('/upload', { method: 'POST', body: formData });
+                    const uploadData = await uploadResponse.json();
+
+                    if (!uploadData.success) {
+                        throw new Error(uploadData.error || 'Ошибка загрузки файла');
+                    }
+
+                    if (messageElement) {
+                        const img = messageElement.querySelector('.message-image');
+                        if (img) {
+                            img.setAttribute('src', uploadData.fileUrl);
+                            img.setAttribute('onclick', `event.stopPropagation(); openMediaModal('${uploadData.fileUrl.replace(/'/g, "\\'")}', 'image')`);
+                        } else {
+                            const videoSource = messageElement.querySelector('video source');
+                            if (videoSource) {
+                                videoSource.setAttribute('src', uploadData.fileUrl);
+                                (videoSource.parentElement as HTMLVideoElement)?.load();
+                            } else {
+                                const fileLink = messageElement.querySelector('a');
+                                if (fileLink) fileLink.setAttribute('href', uploadData.fileUrl);
+                            }
+                        }
+                    }
+
+                    await connection.invoke('SendMessage', {
+                        tempId: tempId,
+                        channelId: currentChannel,
+                        content: content,
+                        fileUrl: uploadData.fileUrl,
+                        replyTo: replyData
+                    });
+
+                    if (fileInput) fileInput.value = '';
+                } else {
+                    await connection.invoke('SendMessage', {
+                        tempId: tempId,
+                        channelId: currentChannel,
+                        content: content,
+                        fileUrl: null,
+                        replyTo: replyData
+                    });
+                }
+
                 input.value = '';
                 autoResizeTextarea();
                 input.focus();
                 cancelReply();
-                showNotification('✅ Сообщение отредактировано', 'success');
-            } else {
-                const error = await response.json();
-                showNotification(error.error || 'Ошибка редактирования', 'danger');
-            }
-            return;
-        }
 
-        // ---------- НОВОЕ СООБЩЕНИЕ ----------
-        isSending = true;
-        const sendBtn = document.getElementById('sendButton') as HTMLButtonElement | null;
-        if (sendBtn) sendBtn.disabled = true;
+                const pastePreview = document.getElementById('pastePreview');
+                if (pastePreview) pastePreview.style.display = 'none';
 
-        const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
-        const replyData = replyToMessageData
-            ? { id: replyToMessageData.id, username: replyToMessageData.username, content: replyToMessageData.content }
-            : null;
-
-        // ---- ВРЕМЕННОЕ СООБЩЕНИЕ (показываем сразу, если есть текст или скоро будет файл) ----
-        const messagesDiv = document.getElementById('messages-area');
-        if (messagesDiv && messagesDiv.innerHTML.includes('Нет сообщений')) {
-            messagesDiv.innerHTML = '';
-        }
-
-        // Если есть файл, используем его локальный blob для предпросмотра
-        let blobUrl: string | null = null;
-        if (hasFile && selectedFile) {
-            blobUrl = URL.createObjectURL(selectedFile);
-        }
-
-        const tempMessage: any = {
-            id: tempId,
-            channelId: currentChannel,
-            username: currentUsername,
-            content: content,
-            fileUrl: blobUrl, // временный blob URL
-            timestamp: new Date().toISOString(),
-            reactions: [],
-            readBy: [],
-            deliveredTo: [],
-            isTemp: true,
-            edited: false
-        };
-
-        if (messagesDiv) {
-            const existing = document.getElementById(`msg-${tempId}`);
-            if (!existing) {
-                messagesDiv.insertAdjacentHTML('beforeend', formatMessage(tempMessage));
-                scrollToBottomSafely(false);
-            }
-        }
-
-        let messageElement = document.getElementById(`msg-${tempId}`);
-
-        // ---- ОТПРАВКА НА СЕРВЕР (файл или текст) ----
-        try {
-            if (hasFile && selectedFile) {
-                // Загружаем файл
-                const formData = new FormData();
-                formData.append('file', selectedFile);
-                formData.append('channelId', currentChannel);
-
-                const uploadResponse = await fetch('/upload', { method: 'POST', body: formData });
-                const uploadData = await uploadResponse.json();
-
-                if (!uploadData.success) {
-                    throw new Error(uploadData.error || 'Ошибка загрузки файла');
-                }
-
-                // Обновляем картинку в сообщении (blob -> реальный URL)
-                if (messageElement) {
-                    const img = messageElement.querySelector('.message-image');
-                    if (img) {
-                        img.setAttribute('src', uploadData.fileUrl);
-                        img.setAttribute('onclick', `event.stopPropagation(); openMediaModal('${uploadData.fileUrl.replace(/'/g, "\\'")}', 'image')`);
-                    } else {
-                        const videoSource = messageElement.querySelector('video source');
-                        if (videoSource) {
-                            videoSource.setAttribute('src', uploadData.fileUrl);
-                            (videoSource.parentElement as HTMLVideoElement)?.load();
-                        } else {
-                            const fileLink = messageElement.querySelector('a');
-                            if (fileLink) fileLink.setAttribute('href', uploadData.fileUrl);
-                        }
-                    }
-                }
-
-                // Отправляем SignalR сообщение с реальным URL
-                await connection.invoke('SendMessage', {
-                    tempId: tempId,
-                    channelId: currentChannel,
-                    content: content,
-                    fileUrl: uploadData.fileUrl,
-                    replyTo: replyData
-                });
-
-                // Очищаем input
-                if (fileInput) fileInput.value = '';
-            } else {
-                // Только текст
-                await connection.invoke('SendMessage', {
-                    tempId: tempId,
-                    channelId: currentChannel,
-                    content: content,
-                    fileUrl: null,
-                    replyTo: replyData
-                });
-            }
-
-            // Успех: очищаем UI
-            input.value = '';
-            autoResizeTextarea();
-            input.focus();
-            cancelReply();
-
-            // Скрываем предпросмотр, если он был открыт
-            const pastePreview = document.getElementById('pastePreview');
-            if (pastePreview) pastePreview.style.display = 'none';
-
-        } catch (err ) {
-            console.error('[sendMessage] Error:', err);
-            const errorMessage = err instanceof Error ? err.message : 'Ошибка отправки';
-            showNotification(errorMessage  || 'Ошибка отправки', 'danger');
-            // Удаляем временное сообщение при ошибке
-            if (messageElement) messageElement.remove();
-        } finally {
-            if (blobUrl) URL.revokeObjectURL(blobUrl);
-            if (sendBtn) {
-                setTimeout(() => {
-                    sendBtn.disabled = false;
+            } catch (err) {
+                console.error('[sendMessage] Error:', err);
+                const errorMessage = err instanceof Error ? err.message : 'Ошибка отправки';
+                showNotification(errorMessage || 'Ошибка отправки', 'danger');
+                if (messageElement) messageElement.remove();
+            } finally {
+                if (blobUrl) URL.revokeObjectURL(blobUrl);
+                if (sendBtn) {
+                    setTimeout(() => {
+                        sendBtn.disabled = false;
+                        isSending = false;
+                    }, 500);
+                } else {
                     isSending = false;
-                }, 500);
-            } else {
-                isSending = false;
+                }
             }
         }
-    }
 
     function editMessage(mid: string) {
-        editingMessageId = mid;
-        const msgDiv = document.getElementById(`msg-${mid}`);
-        if (!msgDiv) {
-            showNotification('Сообщение не найдено', 'danger');
-            return;
-        }
-        const textDiv = msgDiv.querySelector('.message-text');
-        if (!textDiv) {
-            showNotification('Редактирование недоступно для этого сообщения', 'warning');
-            return;
-        }
+            // Сначала проверяем, есть ли уже активное редактирование
+            if (editingMessageData) {
+                if (editingMessageData.id === mid) {
+                    // То же сообщение - просто фокусируемся
+                    const input = document.getElementById('messageInput') as HTMLTextAreaElement;
+                    if (input) input.focus();
+                    return;
+                }
+                // Разное сообщение - отменяем текущее
+                cancelEditing();
+            }
 
-        // Берём HTML из отображаемого текста
-        let htmlContent = textDiv.innerHTML;
-        // Заменяем <br> на \n
-        let plainText = htmlContent.replace(/<br\s*\/?>/gi, '\n');
-        // Удаляем все остальные HTML-теги
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = plainText;
-        plainText = tempDiv.textContent || tempDiv.innerText || '';
-        // Декодируем HTML-сущности (например, &amp; → &)
-        const textarea = document.createElement('textarea');
-        textarea.innerHTML = plainText;
-        plainText = textarea.value;
+            const msgDiv = document.getElementById(`msg-${mid}`);
+            if (!msgDiv) {
+                showNotification('Сообщение не найдено', 'danger');
+                return;
+            }
 
-        const inp = document.getElementById('messageInput') as HTMLTextAreaElement | null;
-        if (!inp) return;
-        inp.value = plainText;
-        inp.focus();
-        inp.selectionStart = inp.selectionEnd = inp.value.length;
-        autoResizeTextarea();
-        showNotification('✏️ Редактирование сообщения... Нажмите Enter для сохранения', 'info');
-    }
+            // Получаем канал сообщения из атрибутов
+            const msgChannelId = msgDiv.getAttribute('data-channel-id');
+            const msgChannelType = msgDiv.getAttribute('data-channel-type');
+
+            // Проверяем, что сообщение из текущего чата
+            if (msgChannelId !== currentChannel || msgChannelType !== currentChannelType) {
+                showNotification('Нельзя редактировать сообщение из другого чата', 'warning');
+                return;
+            }
+
+            const textDiv = msgDiv.querySelector('.message-text');
+            if (!textDiv) {
+                showNotification('Редактирование недоступно для этого сообщения', 'warning');
+                return;
+            }
+
+            // Извлекаем текст
+            let htmlContent = textDiv.innerHTML;
+            let plainText = htmlContent.replace(/<br\s*\/?>/gi, '\n');
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = plainText;
+            plainText = tempDiv.textContent || tempDiv.innerText || '';
+            const textarea = document.createElement('textarea');
+            textarea.innerHTML = plainText;
+            plainText = textarea.value;
+
+            // Сохраняем данные редактирования
+            editingMessageData = {
+                id: mid,
+                channelId: currentChannel!,
+                channelType: currentChannelType,
+                content: plainText
+            };
+
+            // Заполняем поле ввода
+            const inp = document.getElementById('messageInput') as HTMLTextAreaElement;
+            if (inp) {
+                inp.value = plainText;
+                inp.focus();
+                inp.selectionStart = inp.selectionEnd = inp.value.length;
+                autoResizeTextarea();
+            }
+
+            // Показываем зеленую плашку
+            showEditingIndicator(plainText);
+
+            // Подсвечиваем редактируемое сообщение
+            document.querySelectorAll('.message-editing-highlight').forEach(el => el.classList.remove('message-editing-highlight'));
+            msgDiv.classList.add('message-editing-highlight');
+            msgDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+            showNotification('✏️ Редактирование... Enter – сохранить, Esc – отмена', 'info');
+        }
 
     async function deleteMessage(mid: string) {
         if (confirm('Удалить сообщение?')) {
@@ -1876,47 +2170,56 @@ if (isChatPage) {
             }
     }
 
-    function renderChannels(channels: Channel[]) {
-        const div = document.getElementById('channels-list');
-        if (!channels || channels.length === 0) { if (div) div.innerHTML = '<div class="text-center text-muted py-3">Нет каналов</div>'; return; }
-        let html = '';
-        for (const ch of channels) {
-            const active = currentChannel === ch.id && currentChannelType === 'channel';
-            const unread = unreadCounts[ch.id] || 0;
-            channelNamesCache.set(ch.id, ch.name);
-            html += `<div class="channel-item ${active ? 'active' : ''}" data-channel-id="${escapeHtml(ch.id)}">
-                <div class="channel-info" onclick="joinChannel('channel','${escapeHtml(ch.id)}','${escapeHtml(ch.name)}','${escapeHtml(ch.description || '')}')">
-                    <div class="channel-name"><i class="fas fa-hashtag"></i> ${escapeHtml(ch.name)}${unread > 0 ? `<span class="unread-badge">${unread > 99 ? '99+' : unread}</span>` : ''}</div>
-                    <div class="channel-description">${escapeHtml(ch.description) || 'Нет описания'}</div>
-                </div>
-                ${ch.name !== 'Общий' ? `<div class="channel-actions"><button class="action-btn delete-btn" onclick="event.stopPropagation(); deleteChannel('${escapeHtml(ch.id)}','${escapeHtml(ch.name)}')"><i class="fas fa-trash"></i></button></div>` : ''}
-            </div>`;
-        }
-        if (div) div.innerHTML = html;
-    }
-
-    async function loadDMChannels() {
-        try {
-            const res = await fetch('/api/dm_channels');
-            const dms = await res.json();
-            const div = document.getElementById('dm-list');
-            if (!dms || dms.length === 0) { if (div) div.innerHTML = '<div class="text-center text-muted py-3">Нет личных чатов</div>'; return; }
-            if (div) {
-                div.innerHTML = dms.map((dm: DMChannel) => {
-                    const active = currentChannel === dm.id && currentChannelType === 'dm';
-                    const unread = unreadCounts[dm.id] || 0;
-                    const displayName = dm.isDeleted ? DELETED_USER_DISPLAY : dm.name;
-                    return `<div class="dm-item ${active ? 'active' : ''}" data-dm-id="${escapeHtml(dm.id)}">
-                        <div class="dm-info" onclick="joinChannel('dm','${escapeHtml(dm.id)}','${escapeHtml(displayName)}','')">
-                            <div class="dm-name"><i class="fas fa-user"></i> ${escapeHtml(displayName)}${unread > 0 ? `<span class="unread-badge">${unread > 99 ? '99+' : unread}</span>` : ''}</div>
-                            <div class="dm-preview">Личный чат</div>
-                        </div>
-                        <div class="dm-actions"><button class="action-btn delete-btn" onclick="event.stopPropagation(); deleteDMChannel('${escapeHtml(dm.id)}','${escapeHtml(displayName)}')"><i class="fas fa-trash"></i></button></div>
-                    </div>`;
-                }).join('');
+        // ЗАМЕНИТЕ существующую функцию renderChannels на эту:
+        function renderChannels(channels: Channel[]) {
+            const div = document.getElementById('channels-list');
+            if (!channels || channels.length === 0) { 
+                if (div) div.innerHTML = '<div class="text-center text-muted py-3">Нет каналов</div>'; 
+                return; 
             }
-        } catch (e) { console.error(e); }
-    }
+            let html = '';
+            for (const ch of channels) {
+                const active = currentChannel === ch.id && currentChannelType === 'channel';
+                const unread = unreadCounts[ch.id] || 0;
+                channelNamesCache.set(ch.id, ch.name);
+                html += `<div class="channel-item ${active ? 'active' : ''}" data-channel-id="${escapeHtml(ch.id)}">
+                <div class="channel-info" onclick="joinChannel('channel', '${escapeHtml(ch.id)}', '${escapeHtml(ch.name)}', '${escapeHtml(ch.description || '')}')">
+                <div class="channel-name"><i class="fas fa-hashtag"></i> ${escapeHtml(ch.name)}${unread > 0 ? `<span class="unread-badge">${unread > 99 ? '99+' : unread}</span>` : ''}</div>
+                <div class="channel-description">${escapeHtml(ch.description) || 'Нет описания'}</div>
+            </div>
+            ${ch.name !== 'Общий' ? `<div class="channel-actions"><button class="action-btn delete-btn" onclick="event.stopPropagation(); deleteChannel('${escapeHtml(ch.id)}','${escapeHtml(ch.name)}')"><i class="fas fa-trash"></i></button></div>` : ''}
+        </div>`;
+            }
+            if (div) div.innerHTML = html;
+        }
+
+        async function loadDMChannels() {
+            try {
+                const res = await fetch('/api/dm_channels');
+                const dms = await res.json() as DMChannel[];
+                const div = document.getElementById('dm-list');
+                if (!dms || dms.length === 0) { 
+                    if (div) div.innerHTML = '<div class="text-center text-muted py-3">Нет личных чатов</div>'; 
+                    return; 
+                }
+                if (div) {
+                    div.innerHTML = dms.map((dm: DMChannel) => {
+                        const active = currentChannel === dm.id && currentChannelType === 'dm';
+                        const unread = unreadCounts[dm.id] || 0;
+                        const displayName = dm.isDeleted ? DELETED_USER_DISPLAY : dm.name;
+                        return `<div class="dm-item ${active ? 'active' : ''}" data-dm-id="${escapeHtml(dm.id)}">
+                    <div class="dm-info" onclick="joinChannel('dm','${escapeHtml(dm.id)}','${escapeHtml(displayName)}','')">
+                        <div class="dm-name"><i class="fas fa-user"></i> ${escapeHtml(displayName)}${unread > 0 ? `<span class="unread-badge">${unread > 99 ? '99+' : unread}</span>` : ''}</div>
+                        <div class="dm-preview">Личный чат</div>
+                    </div>
+                    <div class="dm-actions"><button class="action-btn delete-btn" onclick="event.stopPropagation(); deleteDMChannel('${escapeHtml(dm.id)}','${escapeHtml(displayName)}')"><i class="fas fa-trash"></i></button></div>
+                </div>`;
+                    }).join('');
+                }
+            } catch (e) { 
+                console.error(e); 
+            }
+        }
 
     async function loadUsersWithStatus() {
         try {
@@ -2082,44 +2385,58 @@ if (isChatPage) {
         }
     }
 
-    async function joinChannel(type: string, id: string, name: string, desc: string): Promise<void> {
-        // Добавляем проверку внутри
-        if (type !== "dm" && type !== "channel") {
-            console.error("Invalid channel type:", type);
-            return;
-        }
-        if (currentChannel === id && currentChannelType === type) return;
-
-        // Добавляем проверку состояния соединения
-        if (connection.state === signalR.HubConnectionState.Connected && currentChannel) {
-            try {
-                await connection.invoke('LeaveChannel', currentChannel);
-            } catch (error) {
-                console.error('Failed to leave channel:', error);
+        async function joinChannel(type: 'channel' | 'dm', id: string, name: string, desc: string): Promise<void> {
+            // Проверяем активное редактирование
+            if (editingMessageData) {
+                const confirmSwitch = confirm('Есть несохранённое редактирование. Отменить его и переключить чат?');
+                if (confirmSwitch) {
+                    cancelEditing();
+                } else {
+                    return;
+                }
             }
+
+            // Проверяем активный ответ
+            if (replyToMessageData) {
+                const confirmSwitch = confirm('Есть несохранённый ответ на сообщение. Отменить его и переключить чат?');
+                if (confirmSwitch) {
+                    cancelReply();
+                } else {
+                    return;
+                }
+            }
+
+            if (currentChannel === id && currentChannelType === type) return;
+
+            if (connection.state === signalR.HubConnectionState.Connected && currentChannel) {
+                try {
+                    await connection.invoke('LeaveChannel', currentChannel);
+                } catch (error) {
+                    console.error('Failed to leave channel:', error);
+                }
+            }
+
+            currentChannel = id;
+            currentChannelType = type;
+            currentChannelName = name;
+
+            const currentChannelNameEl = document.getElementById('current-channel-name');
+            const currentChannelDescEl = document.getElementById('current-channel-desc');
+            const messageInput = document.getElementById('messageInput') as HTMLInputElement | null;
+
+            if (currentChannelNameEl) currentChannelNameEl.textContent = type === 'dm' ? `Чат с ${name}` : name;
+            let newDesc = desc ? `(${desc})` : (type === 'dm' ? 'Личный чат' : '');
+            if (currentChannelDescEl) currentChannelDescEl.textContent = newDesc;
+            if (messageInput) messageInput.disabled = false;
+            await connection.invoke('JoinChannel', id);
+            currentPage = 1;
+            hasMoreMessages = true;
+            await loadMessages(id, true);
+            updateActiveChannelInList(id, type);
+            await markChannelMessagesRead(id);
+            if (window.innerWidth <= 768) closeSidebar();
+            if (messageInput) messageInput.focus();
         }
-
-        currentChannel = id;
-        currentChannelType = type;
-        currentChannelName = name;
-
-        const currentChannelNameEl = document.getElementById('current-channel-name');
-        const currentChannelDescEl = document.getElementById('current-channel-desc');
-        const messageInput = document.getElementById('messageInput') as HTMLInputElement | null;
-
-        if (currentChannelNameEl) currentChannelNameEl.textContent = type === 'dm' ? `Чат с ${name}` : name;
-        let newDesc = "(" + desc + ")" || (type === 'dm' ? 'Личный чат' : '');
-        if (currentChannelDescEl) currentChannelDescEl.textContent = newDesc;
-        if (messageInput) messageInput.disabled = false;
-        connection.invoke('JoinChannel', id);
-        currentPage = 1;
-        hasMoreMessages = true;
-        await loadMessages(id, true);
-        updateActiveChannelInList(id, type);
-        await markChannelMessagesRead(id);
-        if (window.innerWidth <= 768) closeSidebar();
-        if (messageInput) messageInput.focus();
-    }
 
     function updateActiveChannelInList(id: string, type: 'dm' | 'channel') {
         document.querySelectorAll('.channel-item, .dm-item').forEach(el => el.classList.remove('active'));
@@ -2131,6 +2448,184 @@ if (isChatPage) {
             if (el) el.classList.add('active');
         }
     }
+
+    async function fetchMissedMessages(channelId: string, since: string): Promise<void> {
+            try {
+                // Запрашиваем сообщения после указанного времени
+                const url = `/api/messages/${encodeURIComponent(channelId)}/since?timestamp=${encodeURIComponent(since)}&limit=100`;
+                const response = await fetch(url);
+        
+                if (!response.ok) {
+                    console.warn('Failed to fetch missed messages:', response.status);
+                    return;
+                }
+        
+                const data = await response.json() as { messages?: Message[]; count?: number; hasMore?: boolean };
+                const missedMessages = data.messages || [];
+        
+                if (missedMessages.length === 0) return;
+        
+                console.log(`Fetched ${missedMessages.length} missed messages`);
+        
+                // Фильтруем те, которые уже есть
+                const newMessages = missedMessages.filter((msg: Message) => !receivedMessages.has(msg.id));
+        
+                if (newMessages.length === 0) return;
+        
+                // Добавляем пропущенные сообщения
+                const messagesDiv = document.getElementById('messages-area');
+                if (messagesDiv && currentChannel === channelId) {
+                    // Проверяем последнее сообщение в DOM
+                    const lastMsgElement = messagesDiv.querySelector('.message:last-child');
+                    const lastMsgId = lastMsgElement?.id.replace('msg-', '');
+            
+                    // Если последнее сообщение в DOM совпадает с последним полученным, пропускаем
+                    if (lastMsgId && newMessages.some((m: Message) => m.id === lastMsgId)) {
+                        return;
+                    }
+            
+                    // Добавляем новые сообщения
+                    for (const msg of newMessages) {
+                        if (!receivedMessages.has(msg.id)) {
+                            receivedMessages.add(msg.id);
+                            messagesDiv.insertAdjacentHTML('beforeend', formatMessage(msg));
+                        }
+                    }
+            
+                    // Прокручиваем вниз, если пользователь был внизу
+                    const isNearBottom = messagesDiv.scrollHeight - messagesDiv.scrollTop - messagesDiv.clientHeight < 100;
+                    if (isNearBottom) {
+                        await scrollToBottomSafely(false);
+                    }
+            
+                    // Обновляем непрочитанные счётчики
+                    await forceRefreshUnreadCounts();
+                }
+        
+                // Обновляем последний ID и timestamp
+                if (newMessages.length > 0) {
+                    const lastMsg = newMessages[newMessages.length - 1];
+                    // Сохраняем в глобальные переменные (нужно объявить их вверху)
+                    (window as any).lastReceivedMessageId = lastMsg.id;
+                    (window as any).lastMessageTimestamp = lastMsg.timestamp;
+                }
+        
+            } catch (error) {
+                console.error('Error fetching missed messages:', error);
+            }
+        }
+
+        // Периодически синхронизируем время с сервером
+        async function syncServerTime() {
+            try {
+                const response = await fetch('/api/time');
+                const data = await response.json();
+                const serverTime = new Date(`${data.date} ${data.time}`);
+                const localTime = new Date();
+                serverTimeOffset = serverTime.getTime() - localTime.getTime();
+            } catch (error) {
+                console.warn('Failed to sync server time:', error);
+            }
+        }
+
+        // Периодическая синхронизация (каждые 5 минут)
+        setInterval(syncServerTime, 5 * 60 * 1000);
+
+        // Храним отправленные во время офлайна сообщения
+        let offlineMessagesQueue: Array<{
+            tempId: string;
+            channelId: string;
+            content: string;
+            fileUrl?: string | null;
+            replyTo?: any;
+            timestamp: number;
+        }> = [];
+
+        // Перехватываем отправку сообщений при офлайне
+        async function sendMessageWithRetry(data: any) {
+            if (connection.state !== signalR.HubConnectionState.Connected) {
+                // Сохраняем в очередь
+                offlineMessagesQueue.push({
+                    ...data,
+                    timestamp: Date.now()
+                });
+        
+                showNotification('Сообщение сохранено и будет отправлено после восстановления соединения', 'info');
+                return;
+            }
+    
+            try {
+                await connection.invoke('SendMessage', data);
+            } catch (error) {
+                console.error('Failed to send message:', error);
+                // Сохраняем для повторной отправки
+                offlineMessagesQueue.push({
+                    ...data,
+                    timestamp: Date.now()
+                });
+                throw error;
+            }
+        }
+
+        // Отправляем накопленные сообщения после переподключения
+        async function flushOfflineMessages() {
+            if (offlineMessagesQueue.length === 0) return;
+            if (connection.state !== signalR.HubConnectionState.Connected) return;
+    
+            console.log(`Sending ${offlineMessagesQueue.length} queued messages`);
+    
+            const messagesToSend = [...offlineMessagesQueue];
+            offlineMessagesQueue = [];
+    
+            for (const msg of messagesToSend) {
+                try {
+                    await connection.invoke('SendMessage', {
+                        tempId: msg.tempId,
+                        channelId: msg.channelId,
+                        content: msg.content,
+                        fileUrl: msg.fileUrl,
+                        replyTo: msg.replyTo
+                    });
+            
+                    // Небольшая задержка между сообщениями
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                } catch (error) {
+                    console.error('Failed to send queued message:', error);
+                    // Возвращаем в очередь
+                    offlineMessagesQueue.push(msg);
+                }
+            }
+    
+            if (offlineMessagesQueue.length === 0) {
+                showNotification('Все отложенные сообщения отправлены', 'success');
+            }
+        }
+
+        // Вызываем при переподключении
+        connection.onreconnected(async () => {
+            await flushOfflineMessages();
+        });
+
+        function updateConnectionStatus(connected: boolean, reconnecting: boolean = false) {
+            const statusDiv = document.getElementById('connectionStatus');
+            if (!statusDiv) return;
+    
+            if (reconnecting) {
+                statusDiv.className = 'connection-status reconnecting';
+                statusDiv.innerHTML = '<i class="fas fa-sync-alt fa-spin"></i>';
+                statusDiv.title = 'Переподключение...';
+            } else if (connected) {
+                statusDiv.className = 'connection-status online';
+                statusDiv.innerHTML = '<i class="fas fa-circle"></i>';
+                statusDiv.title = 'Подключено';
+        
+            } else {
+                statusDiv.className = 'connection-status offline';
+                statusDiv.innerHTML = '<i class="fas fa-exclamation-circle"></i>';
+                statusDiv.title = 'Нет соединения';
+                statusDiv.style.opacity = '1';
+            }
+        }
 
     // ============ СТАТУСЫ ============
 
@@ -2220,8 +2715,8 @@ if (isChatPage) {
                 div.style.opacity = '1';
             }
         }
-    }  
-     
+    }
+
     // ============ SOCKET СОБЫТИЯ ============
 
     connection.on('reconnected', () => { 
@@ -2235,13 +2730,15 @@ if (isChatPage) {
     connection.on('close', () => updateConnectionStatus(false));
 
     connection.on('new_message', async (message: Message) => {
+        lastReceivedMessageId = message.id;
+        lastMessageTimestamp = message.timestamp;
         if (message.id && message.id.startsWith('temp_') && message.username === currentUsername) {
             console.log(`Ignoring own temp message in new_message: ${message.id}`);
             return;
         }
 
         // Если сообщение уже есть в DOM как временное - игнорируем
-        //const existingTempMsg = document.getElementById(`msg-temp_`);
+        const existingTempMsg = document.getElementById(`msg-temp_`);
         // Более точная проверка: ищем любое сообщение с таким же содержимым от того же пользователя
         const messagesDiv = document.getElementById('messages-area');
         if (messagesDiv) {
@@ -2323,6 +2820,45 @@ if (isChatPage) {
             }
         }
     });
+
+        // Настраиваем reconnect с параметрами
+        connection.onreconnecting((error) => {
+            console.log('SignalR reconnecting...', error);
+            isReconnecting = true;
+            updateConnectionStatus(false);
+            showNotification('Потеря соединения. Переподключение...', 'warning');
+        });
+
+        connection.onreconnected(async (connectionId) => {
+            console.log('SignalR reconnected, connectionId:', connectionId);
+            updateConnectionStatus(true);
+            isReconnecting = false;
+    
+            // Запрашиваем пропущенные сообщения
+            if (currentChannel && lastMessageTimestamp) {
+                await fetchMissedMessages(currentChannel, lastMessageTimestamp);
+            }
+    
+            // Обновляем статус
+            await updateUserStatusOnServer(STATUS.ONLINE);
+            await loadUsersWithStatus();
+            await forceRefreshUnreadCounts();
+        });
+
+        connection.onclose(async (error) => {
+            console.log('SignalR connection closed', error);
+            isReconnecting = false;
+            updateConnectionStatus(false);
+    
+            // Пытаемся переподключиться вручную
+            if (error) {
+                setTimeout(() => {
+                    if (connection.state === signalR.HubConnectionState.Disconnected) {
+                        connection.start().catch(err => console.error('Manual reconnect failed:', err));
+                    }
+                }, 3000);
+            }
+        });
 
     connection.on('message_sent', (data: { tempId: string; id: string }) => {
         const { tempId, id } = data;
@@ -2443,7 +2979,7 @@ if (isChatPage) {
         if (fileInfo.channelId === currentChannel && fileInfo.uploadedBy !== currentUsername) {
             // Создаём сообщение с файлом
             const newMessage: Message = {
-                id: 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                id: 'temp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 11),
                 channelId: currentChannel,
                 username: fileInfo.uploadedBy,
                 content: '', // можно добавить подпись, если передаётся
@@ -2773,6 +3309,7 @@ if (isChatPage) {
                 const emojiPicker = document.getElementById('emojiPickerContainer');
                 if (emojiPicker) emojiPicker.style.display = 'none';
                 if (replyToMessageData) cancelReply();
+                if (editingMessageData) cancelEditing();
             }
         });
 
@@ -2878,6 +3415,7 @@ if (isChatPage) {
     window.closeSidebar = closeSidebar;
     window.joinChannel = joinChannel;
     window.sendMessage = sendMessage;
+    window.sendFileMessage = sendFileMessage;
     window.showCreateChannelModal = showCreateChannelModal;
     window.startDMWithUser = startDMWithUser;
     window.deleteDMChannel = deleteDMChannel;
@@ -2900,6 +3438,8 @@ if (isChatPage) {
     window.cancelFile = cancelFile;
     window.handleFileSelect = handleFileSelect;
     window.openMediaModal = openMediaModal;
+    window.cancelEditing = cancelEditing;
+    window.scrollToEditingMessage = scrollToEditingMessage;
 }
 
 // ============ КОД ТОЛЬКО ДЛЯ СТРАНИЦЫ ЛОГИНА ============

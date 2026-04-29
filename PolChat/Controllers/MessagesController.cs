@@ -30,6 +30,62 @@ public class MessagesController : ControllerBase
         return await _sessionService.GetSessionAsync(sid);
     }
 
+    // GET /api/messages/{channelId}/since
+    [HttpGet("/api/messages/{channelId}/since")]
+    public async Task<IActionResult> GetMessagesSince(
+        string channelId,
+        [FromQuery] string timestamp,
+        [FromQuery] int limit = 100)
+    {
+        var session = await GetSession();
+        if (session == null) return Unauthorized();
+
+        if (!DateTime.TryParse(timestamp, out var sinceTime))
+        {
+            return BadRequest(new { error = "Invalid timestamp format" });
+        }
+
+        // Получаем сообщения после указанного времени
+        var messages = await _db.messages
+            .Where(m => m.ChannelId == channelId && m.Timestamp > sinceTime)
+            .OrderBy(m => m.Timestamp)
+            .Take(limit)
+            .ToListAsync();
+
+        // Форматируем и возвращаем
+        var existingUsers = (await _db.users.Select(u => u.Username).ToListAsync()).ToHashSet();
+
+        var messageDtos = messages.Select(row =>
+        {
+            var senderExists = existingUsers.Contains(row.Username);
+            var msg = new MessageDto
+            {
+                Id = row.Id,
+                ChannelId = row.ChannelId,
+                Username = senderExists ? row.Username : Constants.DeletedUserDisplayName,
+                Content = row.Content,
+                FileUrl = row.FileUrl,
+                Timestamp = row.Timestamp.ToString("O"),
+                Edited = row.Edited,
+                EditedAt = row.EditedAt,
+                Reactions = row.Reactions ?? new List<Reaction>(),
+                ReadBy = row.ReadBy ?? Array.Empty<string>(),
+                DeliveredTo = row.DeliveredTo ?? new List<string>(),
+                IsDeletedSender = !senderExists
+            };
+
+            // Добавьте логику для ReplyTo если нужно
+            return msg;
+        }).ToList();
+
+        return Ok(new
+        {
+            messages = messageDtos,
+            count = messageDtos.Count,
+            hasMore = messages.Count >= limit
+        });
+    }
+
     // GET /api/initial_data
     [HttpGet("/api/initial_data")]
     public async Task<IActionResult> InitialData()

@@ -1,10 +1,10 @@
 import * as _signalR from '@microsoft/signalr';
-import * as _bootstrap from 'bootstrap'; 
+import * as _bootstrap from 'bootstrap';
 
 declare global {
     const signalR: typeof _signalR;
-    //const bootstrap: typeof _bootstrap;
-
+     //const bootstrap: typeof _bootstrap;
+      
     interface Message {
         id: string;
         channelId?: string;
@@ -67,7 +67,7 @@ declare global {
         CURRENT_USER?: string;
         toggleSidebar?: () => void;
         closeSidebar?: () => void;
-        joinChannel?: (type: string, id: string, name: string, desc: string) => void;
+        joinChannel?: (type: 'channel' | 'dm', id: string, name: string, desc: string) => Promise<void>;  // ИСПРАВЛЕНО
         sendMessage?: () => void;
         showCreateChannelModal?: () => void;
         startDMWithUser?: (username: string) => void;
@@ -75,8 +75,8 @@ declare global {
         deleteChannel?: (id: string, name: string) => void;
         openChannelSettings?: () => void;
         replyToMessage?: (id: string, username: string, content: string) => void;
-        cancelReply?: () => void;
-        editMessage?: (id: string, content: string) => void;
+        cancelReply?: () => void; 
+        editMessage?: (id: string) => void;
         deleteMessage?: (id: string) => void;
         addReaction?: (id: string, emoji: string) => void;
         showReactionPanel?: (id: string, event: MouseEvent) => void;
@@ -102,6 +102,9 @@ declare global {
         deleteUser?: (username: string) => void;
         typingHideTimeout?: number;
         openMediaModal: (mediaUrl: string, type: 'image' | 'video') => void;
+        sendFileMessage: () => Promise<void>; 
+        cancelEditing: () => void;     
+        scrollToEditingMessage: () => void;
     }
 }
 
