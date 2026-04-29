@@ -38,19 +38,19 @@ public class MessagesController : ControllerBase
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
         var username = session.Username;
 
-        var channels = await _db.channels.OrderBy(c => c.created_at).ToListAsync();
-        var existingUsers = (await _db.users.Select(u => u.username).ToListAsync()).ToHashSet();
+        var channels = await _db.channels.OrderBy(c => c.CreatedAt).ToListAsync();
+        var existingUsers = (await _db.users.Select(u => u.Username).ToListAsync()).ToHashSet();
 
         var channelDtos = channels.Select(ch => new ChannelDto
         {
-            Id = ch.id,
-            Name = ch.name,
-            Description = ch.description,
-            CreatedBy = ch.created_by,
-            CreatedByDisplay = (!string.IsNullOrEmpty(ch.created_by) && existingUsers.Contains(ch.created_by)) ? ch.created_by : Constants.DeletedUserDisplayName,
-            CreatedByDeleted = string.IsNullOrEmpty(ch.created_by) || !existingUsers.Contains(ch.created_by),
-            CreatedAt = ch.created_at,
-            IsPrivate = ch.is_private
+            Id = ch.Id,
+            Name = ch.Name,
+            Description = ch.Description,
+            CreatedBy = ch.CreatedBy,
+            CreatedByDisplay = (!string.IsNullOrEmpty(ch.CreatedBy) && existingUsers.Contains(ch.CreatedBy)) ? ch.CreatedBy : Constants.DeletedUserDisplayName,
+            CreatedByDeleted = string.IsNullOrEmpty(ch.CreatedBy) || !existingUsers.Contains(ch.CreatedBy),
+            CreatedAt = ch.CreatedAt,
+            IsPrivate = ch.IsPrivate
         }).ToList();
 
         // DM channels
@@ -58,32 +58,32 @@ public class MessagesController : ControllerBase
         var dmDtos = new List<DMChannelDto>();
         foreach (var dm in dmRows)
         {
-            if (!dm.participants.Contains(username)) continue;
-            var otherUser = dm.participants.FirstOrDefault(p => p != username);
+            if (!dm.Participants.Contains(username)) continue;
+            var otherUser = dm.Participants.FirstOrDefault(p => p != username);
             var isDeleted = string.IsNullOrEmpty(otherUser) || !existingUsers.Contains(otherUser);
 
             dmDtos.Add(new DMChannelDto
             {
-                Id = dm.id,
+                Id = dm.Id,
                 Name = isDeleted ? Constants.DeletedUserDisplayName : (otherUser ?? Constants.DeletedUserDisplayName),
                 OriginalName = otherUser,
-                Participants = dm.participants,
-                CreatedBy = dm.created_by,
-                CreatedAt = dm.created_at,
+                Participants = dm.Participants,
+                CreatedBy = dm.CreatedBy,
+                CreatedAt = dm.CreatedAt,
                 IsDeleted = isDeleted
             });
         }
 
         var users = await _db.users
-            .Where(u => u.username != null)
+            .Where(u => u.Username != null)
             .Select(u => new UserDto
             {
-                Username = u.username,
-                Role = u.role,
-                Status = u.status,
-                LastSeen = u.last_seen,
-                CreatedAt = u.created_at,
-                Avatar = u.avatar,
+                Username = u.Username,
+                Role = u.Role,
+                Status = u.Status,
+                LastSeen = u.LastSeen,
+                CreatedAt = u.CreatedAt,
+                Avatar = u.Avatar,
                 IsDeleted = false
             })
             .ToListAsync();
@@ -108,56 +108,55 @@ public class MessagesController : ControllerBase
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
         var offset = (page - 1) * limit;
-        var existingUsers = (await _db.users.Select(u => u.username).ToListAsync()).ToHashSet();
+        var existingUsers = (await _db.users.Select(u => u.Username).ToListAsync()).ToHashSet();
 
-        var totalCount = await _db.messages.CountAsync(m => m.channel_id == channelId);
+        var totalCount = await _db.messages.CountAsync(m => m.ChannelId == channelId);
 
         var rows = await _db.messages
-            .Where(m => m.channel_id == channelId)
-            .OrderByDescending(m => m.timestamp)
+            .Where(m => m.ChannelId == channelId)
+            .OrderByDescending(m => m.Timestamp)
             .Skip(offset)
             .Take(limit)
             .ToListAsync();
         rows.Reverse();
 
-        var replyToIds = rows.Where(r => r.reply_to_id != null).Select(r => r.reply_to_id!).Distinct().ToList();
+        var replyToIds = rows.Where(r => r.ReplyToId != null).Select(r => r.ReplyToId!).Distinct().ToList();
         var replyMessages = new Dictionary<string, Message>();
         if (replyToIds.Count > 0)
         {
-            var replyRows = await _db.messages.Where(m => replyToIds.Contains(m.id)).ToListAsync();
-            foreach (var rr in replyRows) replyMessages[rr.id] = rr;
+            var replyRows = await _db.messages.Where(m => replyToIds.Contains(m.Id)).ToListAsync();
+            foreach (var rr in replyRows) replyMessages[rr.Id] = rr;
         }
 
         var messages = new List<MessageDto>();
         foreach (var row in rows)
         {
-            var senderExists = existingUsers.Contains(row.username);
+            var senderExists = existingUsers.Contains(row.Username);
             var msg = new MessageDto
             {
-                Id = row.id,
-                ChannelId = row.channel_id,
-                Username = senderExists ? row.username : Constants.DeletedUserDisplayName,
-                Content = row.content,
-                FileUrl = row.file_url,
-                Timestamp = row.timestamp.ToString("O"),
-                Edited = row.edited,
-                //TODO: FIX IT LATER
-                EditedAt = row.edited_at,//row.EditedAt?.ToString("O"),
-                Reactions = row.reactions ?? new List<Reaction>(),
-                ReadBy = row.read_by ?? Array.Empty<string>(),
-                DeliveredTo = row.delivered_to ?? new List<string>(),
+                Id = row.Id,
+                ChannelId = row.ChannelId,
+                Username = senderExists ? row.Username : Constants.DeletedUserDisplayName,
+                Content = row.Content,
+                FileUrl = row.FileUrl,
+                Timestamp = row.Timestamp.ToString("O"),
+                Edited = row.Edited,
+                EditedAt = row.EditedAt,
+                Reactions = row.Reactions ?? new List<Reaction>(),
+                ReadBy = row.ReadBy ?? Array.Empty<string>(),
+                DeliveredTo = row.DeliveredTo ?? new List<string>(),
                 IsDeletedSender = !senderExists
             };
 
-            if (row.reply_to_id != null && replyMessages.TryGetValue(row.reply_to_id, out var rm))
+            if (row.ReplyToId != null && replyMessages.TryGetValue(row.ReplyToId, out var rm))
             {
-                var ru = rm.username;
+                var ru = rm.Username;
                 msg.ReplyTo = new ReplyToInfo
                 {
-                    Id = rm.id,
+                    Id = rm.Id,
                     Username = existingUsers.Contains(ru) ? ru : Constants.DeletedUserDisplayName,
-                    Content = rm.content ?? "",
-                    FileUrl = rm.file_url,
+                    Content = rm.Content ?? "",
+                    FileUrl = rm.FileUrl,
                     IsDeleted = !existingUsers.Contains(ru)
                 };
             }
@@ -188,16 +187,16 @@ public class MessagesController : ControllerBase
         var newContent = HtmlSanitizer.Sanitize(request.Content);
 
         var msg = await _db.messages.FindAsync(messageId);
-        if (msg == null || msg.username != session.Username)
+        if (msg == null || msg.Username != session.Username)
             return StatusCode(403, new { error = "No permission" });
 
-        msg.content = newContent;
-        msg.edited = true;
-        msg.edited_at = DateTime.UtcNow;
+        msg.Content = newContent;
+        msg.Edited = true;
+        msg.EditedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
         // Broadcast edit to channel
-        await _hub.Clients.Group(msg.channel_id).SendAsync("message_edited", new { id = messageId, content = newContent });
+        await _hub.Clients.Group(msg.ChannelId).SendAsync("message_edited", new { id = messageId, content = newContent });
 
         return Ok(new { success = true });
     }
@@ -212,10 +211,10 @@ public class MessagesController : ControllerBase
         var msg = await _db.messages.FindAsync(messageId);
         if (msg == null) return NotFound(new { error = "Not found" });
 
-        if (msg.username != session.Username && session.Role != "admin")
+        if (msg.Username != session.Username && session.Role != "admin")
             return StatusCode(403, new { error = "No permission" });
 
-        var channelId = msg.channel_id;
+        var channelId = msg.ChannelId;
         _db.messages.Remove(msg);
         await _db.SaveChangesAsync();
 
@@ -254,12 +253,12 @@ public class MessagesController : ControllerBase
         var username = session.Username;
 
         var msg = await _db.messages
-            .Where(m => m.id == messageId)
-            .Select(m => new { m.channel_id, m.username })
+            .Where(m => m.Id == messageId)
+            .Select(m => new { m.ChannelId, m.Username })
             .FirstOrDefaultAsync();
 
         if (msg == null) return NotFound(new { success = false, error = "Not found" });
-        if (msg.username == username) return Ok(new { success = true, message = "Cannot read own" });
+        if (msg.Username == username) return Ok(new { success = true, message = "Cannot read own" });
 
         await _db.Database.ExecuteSqlRawAsync(@"
             UPDATE messages SET read_by = array_append(read_by, {0})
@@ -267,8 +266,8 @@ public class MessagesController : ControllerBase
             username, messageId);
 
         // Broadcast read event
-        await _hub.Clients.Group(msg.channel_id).SendAsync("message_read", 
-                new { messageId, readBy = username, channelId = msg.channel_id });
+        await _hub.Clients.Group(msg.ChannelId).SendAsync("message_read", 
+                new { messageId, readBy = username, channelId = msg.ChannelId });
 
         return Ok(new { success = true });
     }
@@ -292,17 +291,17 @@ public class MessagesController : ControllerBase
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
         var rows = await _db.messages
-            .Where(m => m.channel_id == channelId && m.username == session.Username)
-            .Select(m => new { m.id, m.read_by, m.delivered_to })
+            .Where(m => m.ChannelId == channelId && m.Username == session.Username)
+            .Select(m => new { m.Id, m.ReadBy, m.DeliveredTo })
             .ToListAsync();
 
         var statuses = new Dictionary<string, object>();
         foreach (var r in rows)
         {
-            statuses[r.id] = new
+            statuses[r.Id] = new
             {
-                delivered = (r.delivered_to?.Count ?? 0) > 0,
-                read = (r.read_by?.Length ?? 0) > 0
+                delivered = (r.DeliveredTo?.Count ?? 0) > 0,
+                read = (r.ReadBy?.Length ?? 0) > 0
             };
         }
         return Ok(statuses);
@@ -315,7 +314,7 @@ public class MessagesController : ControllerBase
         var session = await GetSession();
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
-        var msg = await _db.messages.Where(m => m.id == messageId).Select(m => m.read_by).FirstOrDefaultAsync();
+        var msg = await _db.messages.Where(m => m.Id == messageId).Select(m => m.ReadBy).FirstOrDefaultAsync();
         var readBy = msg ?? Array.Empty<string>(); ;
         return Ok(new { read_by = readBy, read_count = readBy });
     }

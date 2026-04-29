@@ -32,8 +32,8 @@ builder.Services.AddHttpContextAccessor();
 // ===== Database =====
 builder.Services.AddDbContext<ChatDbContext>(options =>
     {
-        options.UseNpgsql(connectionString);
-           //.UseSnakeCaseNamingConvention()
+        options.UseNpgsql(connectionString)
+           .UseSnakeCaseNamingConvention();
     });
 
 // ===== Redis =====
