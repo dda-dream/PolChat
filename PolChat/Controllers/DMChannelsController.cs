@@ -40,25 +40,25 @@ public class DMChannelsController : ControllerBase
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
         var username = session.Username;
 
-        var existingUsers = (await _db.users.Select(u => u.username).ToListAsync()).ToHashSet();
+        var existingUsers = (await _db.users.Select(u => u.Username).ToListAsync()).ToHashSet();
 
         var dms = await _db.dm_channels.ToListAsync();
         var dtos = new List<DMChannelDto>();
 
         foreach (var dm in dms)
         {
-            if (!dm.participants.Contains(username)) continue;
-            var otherUser = dm.participants.FirstOrDefault(p => p != username);
+            if (!dm.Participants.Contains(username)) continue;
+            var otherUser = dm.Participants.FirstOrDefault(p => p != username);
             var isDeleted = string.IsNullOrEmpty(otherUser) || !existingUsers.Contains(otherUser);
 
             dtos.Add(new DMChannelDto
             {
-                Id = dm.id,
+                Id = dm.Id,
                 Name = isDeleted ? Constants.DeletedUserDisplayName : (otherUser ?? Constants.DeletedUserDisplayName),
                 OriginalName = otherUser,
-                Participants = dm.participants,
-                CreatedBy = dm.created_by,
-                CreatedAt = dm.created_at,
+                Participants = dm.Participants,
+                CreatedBy = dm.CreatedBy,
+                CreatedAt = dm.CreatedAt,
                 IsDeleted = isDeleted
             });
         }
@@ -77,22 +77,22 @@ public class DMChannelsController : ControllerBase
         if (string.IsNullOrEmpty(request.OtherUser) || request.OtherUser == username)
             return BadRequest(new { error = "Invalid user" });
 
-        var otherExists = await _db.users.AnyAsync(u => u.username == request.OtherUser);
+        var otherExists = await _db.users.AnyAsync(u => u.Username == request.OtherUser);
         if (!otherExists) return NotFound(new { error = "User not found" });
 
         // Check if DM already exists
         var allDms = await _db.dm_channels.ToListAsync();
         var existing = allDms.FirstOrDefault(d =>
-            d.participants.Contains(username) && d.participants.Contains(request.OtherUser));
+            d.Participants.Contains(username) && d.Participants.Contains(request.OtherUser));
         if (existing != null)
-            return Conflict(new { error = "Already exists", dm_id = existing.id });
+            return Conflict(new { error = "Already exists", dm_id = existing.Id });
 
         var dm = new DMChannel
         {
-            id = Guid.NewGuid().ToString(),
-            participants = new List<string> { username, request.OtherUser },
-            created_by = username,
-            created_at = DateTime.UtcNow
+            Id = Guid.NewGuid().ToString(),
+            Participants = new List<string> { username, request.OtherUser },
+            CreatedBy = username,
+            CreatedAt = DateTime.UtcNow
         };
         _db.dm_channels.Add(dm);
         await _db.SaveChangesAsync();
@@ -103,10 +103,10 @@ public class DMChannelsController : ControllerBase
 
         return Ok(new
         {
-            id = dm.id,
-            participants = dm.participants,
-            created_by = dm.created_by,
-            created_at = dm.created_at
+            id = dm.Id,
+            participants = dm.Participants,
+            created_by = dm.CreatedBy,
+            created_at = dm.CreatedAt
         });
     }
 
@@ -120,7 +120,7 @@ public class DMChannelsController : ControllerBase
         var dm = await _db.dm_channels.FindAsync(dmId);
         if (dm == null) return NotFound(new { error = "Not found" });
 
-        if (!dm.participants.Contains(session.Username))
+        if (!dm.Participants.Contains(session.Username))
             return StatusCode(403, new { error = "No permission" });
 
         _db.dm_channels.Remove(dm);
@@ -129,7 +129,7 @@ public class DMChannelsController : ControllerBase
         await _db.SaveChangesAsync();
 
         // Broadcast dm_channel_deleted to participants
-        foreach (var p in dm.participants)
+        foreach (var p in dm.Participants)
         {
             await _hub.Clients.Group($"user_{p}").SendAsync("dm_channel_deleted");
         }

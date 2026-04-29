@@ -18,25 +18,25 @@ public class ChatDbContext : DbContext
         // Users
         modelBuilder.Entity<User>(e =>
         {
-            e.HasKey(u => u.username);
-            e.Property(u => u.username).HasMaxLength(50);
-            e.Property(u => u.password).HasMaxLength(256);
-            e.Property(u => u.role).HasMaxLength(20).HasDefaultValue("user");
-            e.Property(u => u.avatar).HasMaxLength(500).HasDefaultValue("default.png");
-            e.Property(u => u.status).HasMaxLength(20).HasDefaultValue("offline");
-            e.HasIndex(u => u.username).IsUnique();
+            e.HasKey(u => u.Username);
+            e.Property(u => u.Username).HasMaxLength(50);
+            e.Property(u => u.Password).HasMaxLength(256);
+            e.Property(u => u.Role).HasMaxLength(20).HasDefaultValue("user");
+            e.Property(u => u.Avatar).HasMaxLength(500).HasDefaultValue("default.png");
+            e.Property(u => u.Status).HasMaxLength(20).HasDefaultValue("offline");
+            e.HasIndex(u => u.Username).IsUnique();
         });
 
         // Channels
         modelBuilder.Entity<Channel>(e =>
         {
-            e.HasKey(c => c.id);
-            e.Property(c => c.id).HasMaxLength(100);
-            e.Property(c => c.name).HasMaxLength(200);
-            e.Property(c => c.description).HasMaxLength(500);
-            e.Property(c => c.created_by).HasMaxLength(50);
-            e.HasIndex(c => c.name);
-            e.HasIndex(c => c.created_at);
+            e.HasKey(c => c.Id);
+            e.Property(c => c.Id).HasMaxLength(100);
+            e.Property(c => c.Name).HasMaxLength(200);
+            e.Property(c => c.Description).HasMaxLength(500);
+            e.Property(c => c.CreatedBy).HasMaxLength(50);
+            e.HasIndex(c => c.Name);
+            e.HasIndex(c => c.CreatedAt);
         });
 
         // Messages
@@ -94,12 +94,12 @@ public class ChatDbContext : DbContext
         // DM Channels
         modelBuilder.Entity<DMChannel>(e =>
         {
-            e.HasKey(d => d.id);
-            e.Property(d => d.id).HasMaxLength(100);
-            e.Property(d => d.created_by).HasMaxLength(50);
+            e.HasKey(d => d.Id);
+            e.Property(d => d.Id).HasMaxLength(100);
+            e.Property(d => d.CreatedBy).HasMaxLength(50);
 
             // PostgreSQL array column for participants
-            e.Property(d => d.participants)
+            e.Property(d => d.Participants)
                 .HasColumnType("text[]");
         });
 

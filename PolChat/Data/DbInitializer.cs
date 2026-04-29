@@ -24,23 +24,23 @@ public static class DbInitializer
             var now = DateTime.UtcNow;
             var admin = new User
             {
-                username = "admin",
-                password = ComputeSha256Hash("admin123"),
-                role = "admin",
-                created_at = now,
-                avatar = "default.png",
-                status = "offline"
+                Username = "admin",
+                Password = ComputeSha256Hash("admin123"),
+                Role = "admin",
+                CreatedAt = now,
+                Avatar = "default.png",
+                Status = "offline"
             };
             db.users.Add(admin);
 
             var general = new Channel
             {
-                id = "general",
-                name = "Общий",
-                description = "Общий канал для всех пользователей",
-                created_by = "admin",
-                created_at = now,
-                is_private = false
+                Id = "general",
+                Name = "Общий",
+                Description = "Общий канал для всех пользователей",
+                CreatedBy = "admin",
+                CreatedAt = now,
+                IsPrivate = false
             };
             db.channels.Add(general);
 

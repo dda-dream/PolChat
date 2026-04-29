@@ -38,19 +38,19 @@ public class MessagesController : ControllerBase
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
         var username = session.Username;
 
-        var channels = await _db.channels.OrderBy(c => c.created_at).ToListAsync();
-        var existingUsers = (await _db.users.Select(u => u.username).ToListAsync()).ToHashSet();
+        var channels = await _db.channels.OrderBy(c => c.CreatedAt).ToListAsync();
+        var existingUsers = (await _db.users.Select(u => u.Username).ToListAsync()).ToHashSet();
 
         var channelDtos = channels.Select(ch => new ChannelDto
         {
-            Id = ch.id,
-            Name = ch.name,
-            Description = ch.description,
-            CreatedBy = ch.created_by,
-            CreatedByDisplay = (!string.IsNullOrEmpty(ch.created_by) && existingUsers.Contains(ch.created_by)) ? ch.created_by : Constants.DeletedUserDisplayName,
-            CreatedByDeleted = string.IsNullOrEmpty(ch.created_by) || !existingUsers.Contains(ch.created_by),
-            CreatedAt = ch.created_at,
-            IsPrivate = ch.is_private
+            Id = ch.Id,
+            Name = ch.Name,
+            Description = ch.Description,
+            CreatedBy = ch.CreatedBy,
+            CreatedByDisplay = (!string.IsNullOrEmpty(ch.CreatedBy) && existingUsers.Contains(ch.CreatedBy)) ? ch.CreatedBy : Constants.DeletedUserDisplayName,
+            CreatedByDeleted = string.IsNullOrEmpty(ch.CreatedBy) || !existingUsers.Contains(ch.CreatedBy),
+            CreatedAt = ch.CreatedAt,
+            IsPrivate = ch.IsPrivate
         }).ToList();
 
         // DM channels
@@ -58,32 +58,32 @@ public class MessagesController : ControllerBase
         var dmDtos = new List<DMChannelDto>();
         foreach (var dm in dmRows)
         {
-            if (!dm.participants.Contains(username)) continue;
-            var otherUser = dm.participants.FirstOrDefault(p => p != username);
+            if (!dm.Participants.Contains(username)) continue;
+            var otherUser = dm.Participants.FirstOrDefault(p => p != username);
             var isDeleted = string.IsNullOrEmpty(otherUser) || !existingUsers.Contains(otherUser);
 
             dmDtos.Add(new DMChannelDto
             {
-                Id = dm.id,
+                Id = dm.Id,
                 Name = isDeleted ? Constants.DeletedUserDisplayName : (otherUser ?? Constants.DeletedUserDisplayName),
                 OriginalName = otherUser,
-                Participants = dm.participants,
-                CreatedBy = dm.created_by,
-                CreatedAt = dm.created_at,
+                Participants = dm.Participants,
+                CreatedBy = dm.CreatedBy,
+                CreatedAt = dm.CreatedAt,
                 IsDeleted = isDeleted
             });
         }
 
         var users = await _db.users
-            .Where(u => u.username != null)
+            .Where(u => u.Username != null)
             .Select(u => new UserDto
             {
-                Username = u.username,
-                Role = u.role,
-                Status = u.status,
-                LastSeen = u.last_seen,
-                CreatedAt = u.created_at,
-                Avatar = u.avatar,
+                Username = u.Username,
+                Role = u.Role,
+                Status = u.Status,
+                LastSeen = u.LastSeen,
+                CreatedAt = u.CreatedAt,
+                Avatar = u.Avatar,
                 IsDeleted = false
             })
             .ToListAsync();
@@ -108,7 +108,7 @@ public class MessagesController : ControllerBase
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
         var offset = (page - 1) * limit;
-        var existingUsers = (await _db.users.Select(u => u.username).ToListAsync()).ToHashSet();
+        var existingUsers = (await _db.users.Select(u => u.Username).ToListAsync()).ToHashSet();
 
         var totalCount = await _db.messages.CountAsync(m => m.channel_id == channelId);
 

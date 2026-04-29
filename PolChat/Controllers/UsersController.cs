@@ -35,15 +35,15 @@ public class UsersController : ControllerBase
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
         var users = await _db.users
-            .Where(u => u.username != null)
+            .Where(u => u.Username != null)
             .Select(u => new UserDto
             {
-                Username = u.username,
-                Role = u.role,
-                Status = u.status,
-                LastSeen = u.last_seen,
-                CreatedAt = u.created_at,
-                Avatar = u.avatar,
+                Username = u.Username,
+                Role = u.Role,
+                Status = u.Status,
+                LastSeen = u.LastSeen,
+                CreatedAt = u.CreatedAt,
+                Avatar = u.Avatar,
                 IsDeleted = false
             })
             .ToListAsync();
@@ -67,8 +67,8 @@ public class UsersController : ControllerBase
         var user = await _db.users.FindAsync(username);
         if (user == null) return NotFound(new { error = "User not found" });
 
-        user.status = request.Status;
-        user.last_seen = now;
+        user.Status = request.Status;
+        user.LastSeen = now;
         await _db.SaveChangesAsync();
 
         return Ok(new { success = true });
@@ -88,7 +88,7 @@ public class UsersController : ControllerBase
         var user = await _db.users.FindAsync(username);
         if (user == null) return NotFound(new { error = "User not found" });
 
-        user.role = request.Role;
+        user.Role = request.Role;
         await _db.SaveChangesAsync();
 
         return Ok(new { success = true });
@@ -132,10 +132,10 @@ public class UsersController : ControllerBase
         var user = await _db.users.FindAsync(username);
         if (user == null) return NotFound(new { error = "User not found" });
 
-        user.last_seen = now;
-        if (user.status == "away")
+        user.LastSeen = now;
+        if (user.Status == "away")
         {
-            user.status = "online";
+            user.Status = "online";
         }
         await _db.SaveChangesAsync();
 
@@ -154,12 +154,12 @@ public class UsersController : ControllerBase
 
         return Ok(new
         {
-            username = user.username,
-            role = user.role,
-            status = user.status,
-            avatar = user.avatar,
-            createdAt = user.created_at,
-            lastSeen = user.last_seen
+            username = user.Username,
+            role = user.Role,
+            status = user.Status,
+            avatar = user.Avatar,
+            createdAt = user.CreatedAt,
+            lastSeen = user.LastSeen
         });
     }
 }
