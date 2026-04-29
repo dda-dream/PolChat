@@ -5,7 +5,7 @@
     "target": "ES2020",
     "module": "nodenext",
     "lib": [ "DOM", "DOM.Iterable", "ES2020" ],
-
+     
     "outDir": ".",
     "rootDir": ".",
 
@@ -20,10 +20,10 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noImplicitReturns": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
 
 
-    //"noEmitOnError": true,
+    "noEmitOnError": false
 
   },
   "include": [ "./wwwroot/static/global.d.ts", "./wwwroot/static/chat.ts" ],

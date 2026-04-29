@@ -1,5 +1,5 @@
 import * as _signalR from '@microsoft/signalr';
-import * as _bootstrap from 'bootstrap';
+import * as _bootstrap from 'bootstrap'; 
 
 declare global {
     const signalR: typeof _signalR;
@@ -17,8 +17,9 @@ declare global {
         reactions?: { emoji: string; users: string[] }[];
         readBy?: string[];
         deliveredTo?: string[];
-        replyTo?: {
-            id: string;
+        replyTo?: 
+        {
+              id: string;
             username: string;
             content?: string;
             isDeleted?: boolean;
