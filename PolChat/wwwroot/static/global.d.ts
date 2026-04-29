@@ -1,10 +1,10 @@
+import * as signalRTypes from '@microsoft/signalr';
+
+
 declare global {
 
     //const bootstrapTypes: typeof import('bootstrap');
-    //const signalrTypes: typeof import('@microsoft/signalr');
-
-    // ====================== ИНТЕРФЕЙСЫ ======================
-    // ASP.NET Core System.Text.Json сериализует в camelCase
+    const signalR: typeof import('@microsoft/signalr');
 
     interface Message {
         id: string;
