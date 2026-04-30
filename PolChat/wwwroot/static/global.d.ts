@@ -28,7 +28,7 @@ declare global {
         isDeletedSender?: boolean;
         isTemp?: boolean;
     }
-
+     
     interface User {
         username: string;
         status: 'online' | 'away' | 'offline';

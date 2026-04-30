@@ -5,8 +5,8 @@
 //import { HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
 /// <reference path="./global.d.ts" />
 /* global window, document, bootstrap, localStorage, sessionStorage, fetch, alert, confirm, prompt, FileReader, URL, FormData, MutationObserver, Set, Map, console */
-"use strict";  
- 
+"use strict";    
+  
 // Расширение глобального объекта window
 // @ts-nocheck
 // ============ ОПРЕДЕЛЕНИЕ ТИПА СТРАНИЦЫ ============
@@ -2683,7 +2683,7 @@ if (isChatPage) {
             console.log(`Ignoring own temp message in new_message: ${message.id}`);
             return;
         }
-
+ 
         // Если сообщение уже есть в DOM как временное - игнорируем
         //const existingTempMsg = document.getElementById(`msg-temp_`);
         // Более точная проверка: ищем любое сообщение с таким же содержимым от того же пользователя
