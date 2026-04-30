@@ -72,16 +72,18 @@
             </div>
         </div>
         
-        <div class="settings-section" id="dangerSection" style="display: none;">
-            <div class="section-header">
-                <i class="fas fa-exclamation-triangle"></i> Опасная зона
-            </div>
-            <div class="setting-item danger-item" onclick="confirmDeleteChannel()">
-                <div class="setting-info">
-                    <div class="setting-label">Удалить канал</div>
-                    <div class="setting-desc">Канал будет удален без возможности восстановления</div>
+        <div id="dangerSection" style="display: none;">
+            <div class="settings-section">
+                <div class="section-header">
+                    <i class="fas fa-exclamation-triangle text-danger"></i> Опасная зона
                 </div>
-                <i class="fas fa-trash-alt setting-arrow"></i>
+                <div class="setting-item danger-item" onclick="confirmDeleteChannel()">
+                    <div class="setting-info">
+                        <div class="setting-label">Удалить канал</div>
+                        <div class="setting-desc">Это действие нельзя отменить. Все сообщения будут удалены.</div>
+                    </div>
+                    <div class="setting-arrow"><i class="fas fa-chevron-right"></i></div>
+                </div>
             </div>
         </div>
     </div>

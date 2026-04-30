@@ -168,7 +168,10 @@ public class ChatHub : Hub
     public async Task JoinChannel(string channelId)
     {
         if (!string.IsNullOrEmpty(channelId))
+        {
             await Groups.AddToGroupAsync(Context.ConnectionId, channelId);
+            _logger.LogInformation($"User {Context.ConnectionId} joined channel {channelId}");
+        }
     }
 
     public async Task LeaveChannel(string channelId)
@@ -266,7 +269,7 @@ public class ChatHub : Hub
         }
 
         // Broadcast message to channel
-        var messageForSend = new
+        var messageToSend = new
         {
             id = msgId,
             channelId = channelId,
@@ -276,27 +279,12 @@ public class ChatHub : Hub
             timestamp = now.ToString("O"),
             edited = false,
             reactions = new List<Reaction>(),
-            readBy = new List<string>()
+            readBy = new List<string>(),
+            deliveredTo = new List<string>(),
+            replyTo = replyToInfo  // может быть null
         };
 
-        object messageObj = messageForSend;
-        if (replyToInfo != null)
-        {
-            messageObj = new { 
-                messageForSend.id, 
-                messageForSend.channelId, 
-                messageForSend.username, 
-                messageForSend.content, 
-                messageForSend.fileUrl, 
-                messageForSend.timestamp, 
-                messageForSend.edited, 
-                messageForSend.reactions, 
-                messageForSend.readBy, 
-                replyTo = replyToInfo 
-            };
-        }
-
-        await Clients.Group(channelId).SendAsync("new_message", messageObj);
+        await Clients.Group(channelId).SendAsync("new_message", messageToSend);
 
         // Send temp_id mapping to sender
         if (tempId != null)

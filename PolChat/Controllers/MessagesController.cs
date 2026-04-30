@@ -45,9 +45,12 @@ public class MessagesController : ControllerBase
             return BadRequest(new { error = "Invalid timestamp format" });
         }
 
+        // Приводим к UTC для корректного сравнения с БД
+        var sinceTimeUtc = sinceTime.Kind == DateTimeKind.Utc ? sinceTime : sinceTime.ToUniversalTime();
+
         // Получаем сообщения после указанного времени
         var messages = await _db.messages
-            .Where(m => m.ChannelId == channelId && m.Timestamp > sinceTime)
+            .Where(m => m.ChannelId == channelId && m.Timestamp > sinceTimeUtc)
             .OrderBy(m => m.Timestamp)
             .Take(limit)
             .ToListAsync();
@@ -65,7 +68,7 @@ public class MessagesController : ControllerBase
                 Username = senderExists ? row.Username : Constants.DeletedUserDisplayName,
                 Content = row.Content,
                 FileUrl = row.FileUrl,
-                Timestamp = row.Timestamp.ToString("O"),
+                Timestamp = row.Timestamp.ToString("O"), // ISO 8601 format
                 Edited = row.Edited,
                 EditedAt = row.EditedAt,
                 Reactions = row.Reactions ?? new List<Reaction>(),
@@ -74,7 +77,6 @@ public class MessagesController : ControllerBase
                 IsDeletedSender = !senderExists
             };
 
-            // Добавьте логику для ReplyTo если нужно
             return msg;
         }).ToList();
 
@@ -248,7 +250,7 @@ public class MessagesController : ControllerBase
 
         msg.Content = newContent;
         msg.Edited = true;
-        msg.EditedAt = DateTime.UtcNow;
+        msg.EditedAt = DateTime.UtcNow; // Используем UTC
         await _db.SaveChangesAsync();
 
         // Broadcast edit to channel
@@ -295,7 +297,12 @@ public class MessagesController : ControllerBase
             RETURNING id",
             username, channelId, username);
 
+        // Обновляем счетчики непрочитанных
         var unreadCounts = await GetRealUnreadCounts(username);
+
+        // Отправляем обновление через SignalR всем клиентам пользователя
+        await _hub.Clients.User(username).SendAsync("unread_counts_updated", unreadCounts);
+
         return Ok(new { success = true, unread_counts = unreadCounts });
     }
 
@@ -322,7 +329,7 @@ public class MessagesController : ControllerBase
             username, messageId);
 
         // Broadcast read event
-        await _hub.Clients.Group(msg.ChannelId).SendAsync("message_read", 
+        await _hub.Clients.Group(msg.ChannelId).SendAsync("message_read",
                 new { messageId, readBy = username, channelId = msg.ChannelId });
 
         return Ok(new { success = true });
@@ -371,8 +378,8 @@ public class MessagesController : ControllerBase
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
         var msg = await _db.messages.Where(m => m.Id == messageId).Select(m => m.ReadBy).FirstOrDefaultAsync();
-        var readBy = msg ?? Array.Empty<string>(); ;
-        return Ok(new { read_by = readBy, read_count = readBy });
+        var readBy = msg ?? Array.Empty<string>();
+        return Ok(new { read_by = readBy, read_count = readBy.Length });
     }
 
     private async Task<Dictionary<string, int>> GetRealUnreadCounts(string username)
