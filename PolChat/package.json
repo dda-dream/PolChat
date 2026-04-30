@@ -25,7 +25,9 @@
     "bootstrap": "^5.3.8",
     "eslint": "^10.2.1",
     "io": "^1.5.8",
-    "socket": "^1.1.86",
-    "typescript": "5.4"
+    "socket": "^1.1.86"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
   }
 }

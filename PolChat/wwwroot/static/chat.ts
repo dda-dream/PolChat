@@ -1,12 +1,12 @@
  
 // ============ ГЛОБАЛЬНЫЕ ОБЪЯВЛЕНИЯ И ТИПЫ ============
-//import * as bootstrap from 'bootstrap';
+//import * as bootstrap from 'bootstrap'; 
 //import * as signalr from '@microsoft/signalr'
 //import { HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
 /// <reference path="./global.d.ts" />
 /* global window, document, bootstrap, localStorage, sessionStorage, fetch, alert, confirm, prompt, FileReader, URL, FormData, MutationObserver, Set, Map, console */
-"use strict";  
- 
+"use strict";    
+  
 // Расширение глобального объекта window
 // @ts-nocheck
 // ============ ОПРЕДЕЛЕНИЕ ТИПА СТРАНИЦЫ ============
@@ -358,7 +358,7 @@ if (isChatPage) {
                 }
             }
         });
-
+         
         observer.observe(messagesDiv, { childList: true, subtree: true });
         return observer;
     }
@@ -1294,18 +1294,7 @@ if (isChatPage) {
             showNotification('Редактирование отменено', 'info');
         }
 
-        function scrollToEditingMessage() {
-            if (editingMessageData) {
-                const msgElement = document.getElementById(`msg-${editingMessageData.id}`);
-                if (msgElement) {
-                    msgElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    msgElement.classList.add('message-editing-highlight');
-                    setTimeout(() => {
-                        msgElement.classList.remove('message-editing-highlight');
-                    }, 2000);
-                }
-            }
-        }
+
 
     // ============ ОТПРАВКА СООБЩЕНИЙ ============
 
@@ -2675,12 +2664,13 @@ if (isChatPage) {
         if (audio) audio.play().catch(() => { });
     }
 
+
     // ============ SOCKET СОБЫТИЯ ============
 
-    connection.on('reconnected', () => {
+    connection.on('reconnected', () => { 
         updateConnectionStatus(true);
         updateUserStatusOnServer(STATUS.ONLINE);
-        loadUsersWithStatus();
+        loadUsersWithStatus(); 
         forceRefreshUnreadCounts();
         updateServerTimeInTitle();
     });
@@ -2693,9 +2683,9 @@ if (isChatPage) {
             console.log(`Ignoring own temp message in new_message: ${message.id}`);
             return;
         }
-
+ 
         // Если сообщение уже есть в DOM как временное - игнорируем
-        //  const existingTempMsg = document.getElementById(`msg-temp_`);
+        //const existingTempMsg = document.getElementById(`msg-temp_`);
         // Более точная проверка: ищем любое сообщение с таким же содержимым от того же пользователя
         const messagesDiv = document.getElementById('messages-area');
         if (messagesDiv) {
@@ -3367,9 +3357,7 @@ if (isChatPage) {
     // Экспорт функций в глобальную область
     window.toggleSidebar = toggleSidebar;
     window.closeSidebar = closeSidebar;
-    window.joinChannel = joinChannel;
     window.sendMessage = sendMessage;
-    window.sendFileMessage = sendFileMessage;
     window.showCreateChannelModal = showCreateChannelModal;
     window.startDMWithUser = startDMWithUser;
     window.deleteDMChannel = deleteDMChannel;
@@ -3392,8 +3380,6 @@ if (isChatPage) {
     window.cancelFile = cancelFile;
     window.handleFileSelect = handleFileSelect;
     window.openMediaModal = openMediaModal;
-    window.cancelEditing = cancelEditing;
-    window.scrollToEditingMessage = scrollToEditingMessage;
 }
 
 // ============ КОД ТОЛЬКО ДЛЯ СТРАНИЦЫ ЛОГИНА ============
