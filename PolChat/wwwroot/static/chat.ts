@@ -60,7 +60,7 @@ if (isChatPage) {
             withCredentials: true,
             transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling 
         })
-        .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
+        .withAutomaticReconnect({
         .configureLogging(signalR.LogLevel.Information)
         .build();
 
