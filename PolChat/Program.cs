@@ -24,7 +24,7 @@ Log.Logger = new LoggerConfiguration()
 builder.Host.UseSerilog();
 
 // ===== Configuration =====
-var connectionString = builder.Configuration.GetConnectionString("PostgreSQL");
+var postgreSQLConnection = builder.Configuration.GetConnectionString("PostgreSQL");
 var redisConnection = builder.Configuration.GetConnectionString("Redis");
 if (redisConnection != null)
 {
@@ -44,14 +44,18 @@ builder.Services.AddHttpContextAccessor();
 // ===== Database =====
 builder.Services.AddDbContext<ChatDbContext>(options =>
     {
-        options.UseNpgsql(connectionString)
+        options.UseNpgsql(postgreSQLConnection)
            .UseSnakeCaseNamingConvention();
     });
 
 builder.Services.AddSingleton<ISessionService, SessionService>();
 
 // ===== SignalR =====
-builder.Services.AddSignalR();
+builder.Services.AddSignalR()
+    .AddStackExchangeRedis(redisConnection ?? "!!ERROR_REDIS_CONNECTION_NULL!!", options => {
+        options.Configuration.ChannelPrefix = RedisChannel.Literal("PolChatApp:");
+    });
+
 
 // ===== Background Services =====
 builder.Services.AddHostedService<InactiveUsersBackgroundService>();
