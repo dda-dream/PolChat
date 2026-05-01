@@ -507,12 +507,11 @@ if (isChatPage) {
             const replyContent = msg.replyTo.content
                 ? (msg.replyTo.content.length > 50 ? msg.replyTo.content.substring(0, 47) + '...' : msg.replyTo.content)
                 : (msg.replyTo.fileUrl ? '📎 Файл' : '');
-            replyHtml = `<div class="message-reply" onclick="scrollToMessage('${escapeHtml(msg.replyTo.id)}')">
+            replyHtml = `<div class="message-reply" data-reply-id="${escapeHtml(msg.replyTo.id)}">
             <div class="reply-header"><i class="fas fa-reply"></i> ${escapeHtml(replyDisplayName)}</div>
             <div class="reply-content">${escapeHtml(replyContent)}</div>
         </div>`;
         }
-
 
         let fileHtml = '';
         if (msg.fileUrl) {
@@ -526,14 +525,13 @@ if (isChatPage) {
 
         let reactionsHtml = '';
         if (msg.reactions && msg.reactions.length) {
-            reactionsHtml = `<div class="message-reactions">${msg.reactions.map(r => `<span class="reaction-badge" onclick="addReaction('${escapeHtml(msg.id)}','${escapeHtml(r.emoji)}')">${escapeHtml(r.emoji)} ${r.users.length}</span>`).join('')}</div>`;
+            reactionsHtml = `<div class="message-reactions">${msg.reactions.map(r => `<span class="reaction-badge" data-msg-id="${escapeHtml(msg.id)}" data-emoji="${escapeHtml(r.emoji)}">${escapeHtml(r.emoji)} ${r.users.length}</span>`).join('')}</div>`;
         }
 
         const safeUsername = escapeHtml(displayUsername);
         const safeContent = msg.content ? formatText(msg.content) : '';
         const messageStatus = getMessageStatusHtml(msg);
 
-        // Индикатор "ред." если сообщение редактировалось
         const editedIndicator = msg.edited ? '<span class="message-time">(ред.)</span>' : '';
 
         let readCounterHtml = '';
@@ -543,87 +541,48 @@ if (isChatPage) {
             const readCount = otherReaders.length;
 
             if (readCount > 0) {
-                readCounterHtml = `<span class="read-counter ms-2" style="cursor: pointer; font-size: 10px; color: #6c757d; display: inline-flex; align-items: center; gap: 3px;" onclick="event.stopPropagation(); showReadByList('${escapeHtml(msg.id)}')">
-                    <i class="fas fa-eye"></i> ${readCount}
-                </span>`;
+                readCounterHtml = `<span class="read-counter ms-2" data-msg-id="${escapeHtml(msg.id)}" style="cursor: pointer; font-size: 10px; color: #6c757d; display: inline-flex; align-items: center; gap: 3px;">
+                <i class="fas fa-eye"></i> ${readCount}
+            </span>`;
             }
         }
 
         const actionButtons = `<div class="message-actions" id="actions-${escapeHtml(msg.id)}">
-    <button class="message-action-btn" data-action="reply" data-msg-id="${escapeHtml(msg.id)}" data-username="${escapeHtml(msg.username)}" data-content='${JSON.stringify(msg.content || "").replace(/'/g, "&#39;")}'>
-        <i class="fas fa-reply"></i> Ответить
-    </button>
-    ${isOwn ? `<button class="message-action-btn" data-action="edit" data-msg-id="${escapeHtml(msg.id)}" data-content='${JSON.stringify(msg.content || "").replace(/'/g, "&#39;")}'>
-        <i class="fas fa-edit"></i> Редактировать
-    </button>
-    <button class="message-action-btn" data-action="delete" data-msg-id="${escapeHtml(msg.id)}">
-        <i class="fas fa-trash"></i> Удалить
-    </button>` : ''}
-    <button class="message-action-btn" data-action="reaction" data-msg-id="${escapeHtml(msg.id)}">
-        <i class="far fa-smile"></i> Реакция
-    </button>
-</div>`;
-
-        const messagesArea = document.getElementById('messages-area');
-        if (messagesArea) {
-            messagesArea.addEventListener('click', (e) => {
-                const target = e.target as HTMLElement;
-                const actionButton = target.closest('.message-action-btn');
-                if (!actionButton) return;
-
-                e.preventDefault();
-                e.stopPropagation();
-
-                const action = actionButton.getAttribute('data-action');
-                const msgId = actionButton.getAttribute('data-msg-id');
-                if (!msgId) return;
-
-                switch (action) {
-                    case 'reply':
-                        const username = actionButton.getAttribute('data-username') || '';
-                        const content = actionButton.getAttribute('data-content') || '';
-                        replyToMessage(msgId, username, content);
-                        closeAllMessageActions();
-                        break;
-                    case 'edit':
-                        editMessage(msgId);
-                        closeAllMessageActions();
-                        break;
-                    case 'delete':
-                        deleteMessage(msgId);
-                        closeAllMessageActions();
-                        break;
-                    case 'reaction':
-                        showReactionPanel(msgId, e);
-                        closeAllMessageActions();
-                        break;
-                    default:
-                        break;
-                }
-            });
-        }
+        <button class="message-action-btn" data-action="reply" data-msg-id="${escapeHtml(msg.id)}" data-username="${escapeHtml(msg.username)}" data-content='${JSON.stringify(msg.content || "").replace(/'/g, "&#39;")}'>
+            <i class="fas fa-reply"></i> Ответить
+        </button>
+        ${isOwn ? `<button class="message-action-btn" data-action="edit" data-msg-id="${escapeHtml(msg.id)}" data-content='${JSON.stringify(msg.content || "").replace(/'/g, "&#39;")}'>
+            <i class="fas fa-edit"></i> Редактировать
+        </button>
+        <button class="message-action-btn" data-action="delete" data-msg-id="${escapeHtml(msg.id)}">
+            <i class="fas fa-trash"></i> Удалить
+        </button>` : ''}
+        <button class="message-action-btn" data-action="reaction" data-msg-id="${escapeHtml(msg.id)}">
+            <i class="far fa-smile"></i> Реакция
+        </button>
+    </div>`;
 
         return `<div class="message ${isOwn ? 'message-own' : ''}" id="msg-${escapeHtml(msg.id)}" data-channel-id="${escapeHtml(msg.channelId || currentChannel || '')}" data-channel-type="${escapeHtml(currentChannelType || 'channel')}">
-            <div class="message-wrapper">
-                <div class="message-avatar">${escapeHtml(avatarLetter)}</div>
-                <div class="message-content-wrapper">
-                    <div class="message-bubble" onclick="toggleMessageActions('${escapeHtml(msg.id)}'); event.stopPropagation();">
-                        <div class="message-header">
-                            <span class="message-username">${safeUsername}</span>
-                            <span class="message-time">${escapeHtml(fullTime)}</span>
-                            ${editedIndicator}
-                            ${currentChannelType === 'dm' ? messageStatus : ''}
-                            ${readCounterHtml}
-                        </div>
-                        ${replyHtml}
-                        ${safeContent ? `<div class="message-text">${safeContent}</div>` : ''}
-                        ${fileHtml}
-                        ${reactionsHtml}
+        <div class="message-wrapper">
+            <div class="message-avatar">${escapeHtml(avatarLetter)}</div>
+            <div class="message-content-wrapper">
+                <div class="message-bubble">
+                    <div class="message-header">
+                        <span class="message-username">${safeUsername}</span>
+                        <span class="message-time">${escapeHtml(fullTime)}</span>
+                        ${editedIndicator}
+                        ${currentChannelType === 'dm' ? messageStatus : ''}
+                        ${readCounterHtml}
                     </div>
-                    ${actionButtons}
+                    ${replyHtml}
+                    ${safeContent ? `<div class="message-text">${safeContent}</div>` : ''}
+                    ${fileHtml}
+                    ${reactionsHtml}
                 </div>
+                ${actionButtons}
             </div>
-        </div>`;
+        </div>
+    </div>`;
     }
 
     function formatText(c: string | null | undefined): string {
@@ -639,7 +598,108 @@ if (isChatPage) {
         return f;
     }
 
-    // ЗАМЕНИТЕ существующую функцию displayMessages на эту:
+    function bindMessageEvents() {
+        // Привязываем обработчики для всех кнопок действий в сообщениях
+        const messagesArea = document.getElementById('messages-area');
+        if (!messagesArea) return;
+
+        // Используем делегирование событий вместо onclick атрибутов
+        messagesArea.removeEventListener('click', handleMessageActions);
+        messagesArea.addEventListener('click', handleMessageActions);
+    }
+
+    function handleMessageActions(e: MouseEvent) {
+        const target = e.target as HTMLElement;
+
+        // Обработка кнопок действий
+        const actionButton = target.closest('.message-action-btn');
+        if (actionButton) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const action = actionButton.getAttribute('data-action');
+            const msgId = actionButton.getAttribute('data-msg-id');
+            if (!msgId) return;
+
+            switch (action) {
+                case 'reply':
+                    const username = actionButton.getAttribute('data-username') || '';
+                    const content = actionButton.getAttribute('data-content') || '';
+                    replyToMessage(msgId, username, content);
+                    closeAllMessageActions();
+                    break;
+                case 'edit':
+                    editMessage(msgId);
+                    closeAllMessageActions();
+                    break;
+                case 'delete':
+                    deleteMessage(msgId);
+                    closeAllMessageActions();
+                    break;
+                case 'reaction':
+                    showReactionPanel(msgId, e);
+                    closeAllMessageActions();
+                    break;
+                default:
+                    break;
+            }
+            return;
+        }
+
+        // Обработка клика по сообщению (для показа действий)
+        const messageBubble = target.closest('.message-bubble');
+        if (messageBubble) {
+            const msgDiv = messageBubble.closest('.message');
+            if (msgDiv) {
+                const msgId = msgDiv.id.replace('msg-', '');
+                toggleMessageActions(msgId);
+            }
+            return;
+        }
+
+        // Обработка клика по реакции
+        const reactionBadge = target.closest('.reaction-badge');
+        if (reactionBadge) {
+            e.preventDefault();
+            e.stopPropagation();
+            const msgId = reactionBadge.getAttribute('data-msg-id');
+            const emoji = reactionBadge.getAttribute('data-emoji');
+            if (msgId && emoji) {
+                addReaction(msgId, emoji);
+            }
+            return;
+        }
+
+        // Обработка клика по счетчику прочитавших
+        const readCounter = target.closest('.read-counter');
+        if (readCounter) {
+            e.preventDefault();
+            e.stopPropagation();
+            const msgId = readCounter.getAttribute('data-msg-id');
+            if (msgId) {
+                showReadByList(msgId);
+            }
+            return;
+        }
+
+        // Обработка клика по ответу (reply) - используем переменную replyId
+        const messageReply = target.closest('.message-reply');
+        if (messageReply) {
+            e.preventDefault();
+            e.stopPropagation();
+            const replyToMsgId = messageReply.getAttribute('data-reply-id');
+            if (replyToMsgId) {
+                scrollToMessage(replyToMsgId);
+            }
+            return;
+        }
+
+        // Закрываем панель действий при клике вне
+        if (!target.closest('.message-actions')) {
+            closeAllMessageActions();
+        }
+    }
+
     function displayMessages(msgs: Message[]) {
         initMessageStatuses(msgs);
 
@@ -661,6 +721,7 @@ if (isChatPage) {
             }
         });
 
+        bindMessageEvents();
         scrollToBottomSafely(true);
         setTimeout(() => markVisibleMessagesAsRead(), 500);
     }
@@ -675,6 +736,7 @@ if (isChatPage) {
 
         const newMessages = messages.filter((msg: Message) => !receivedMessages.has(msg.id));
         if (newMessages.length === 0) return;
+
 
         initMessageStatuses(newMessages);
 
@@ -697,6 +759,7 @@ if (isChatPage) {
             const heightDiff = newScrollHeight - oldScrollHeight;
             messagesDiv.scrollTop = oldScrollTop + heightDiff;
         }
+        bindMessageEvents();
     }
 
     function updateReadByDisplay(messageId: string) {
@@ -1702,12 +1765,15 @@ if (isChatPage) {
         }
     }
 
-    function toggleMessageActions(mid: string) {
-        const d = document.getElementById(`actions-${mid}`);
-        if (d) {
-            if (currentlyActiveMessageActions && currentlyActiveMessageActions !== d) currentlyActiveMessageActions.classList.remove('show');
-            d.classList.toggle('show');
-            currentlyActiveMessageActions = d.classList.contains('show') ? d : null;
+    function toggleMessageActions(messageId: string) {
+        const actionsDiv = document.getElementById(`actions-${messageId}`);
+        if (actionsDiv) {
+            // Закрываем другие открытые меню
+            if (currentlyActiveMessageActions && currentlyActiveMessageActions !== actionsDiv) {
+                currentlyActiveMessageActions.classList.remove('show');
+            }
+            actionsDiv.classList.toggle('show');
+            currentlyActiveMessageActions = actionsDiv.classList.contains('show') ? actionsDiv : null;
         }
     }
 
@@ -2806,7 +2872,7 @@ if (isChatPage) {
                 // и передаем их через window
                 const messageHtml = formatMessage(message);
                 messagesDiv.insertAdjacentHTML('beforeend', messageHtml);
-
+                bindMessageEvents();
                 // Принудительно регистрируем обработчики для нового сообщения
                 const newMsgElement = document.getElementById(`msg-${message.id}`);
                 if (newMsgElement) {
@@ -2926,13 +2992,15 @@ if (isChatPage) {
 
         console.log(`Message sent: tempId=${tempId}, realId=${id}`);
 
-        // Заменяем временное сообщение на реальное
         const tempMsgDiv = document.getElementById(`msg-${tempId}`);
         if (tempMsgDiv) {
             // Обновляем ID в DOM
             tempMsgDiv.id = `msg-${id}`;
 
-            // Обновляем статус, если есть индикатор
+            // Обновляем data-атрибуты
+            tempMsgDiv.setAttribute('data-msg-id', id);
+
+            // Обновляем статус
             const statusSpan = tempMsgDiv.querySelector('.message-status');
             if (statusSpan && currentChannelType === 'dm') {
                 statusSpan.innerHTML = '<i class="fas fa-check" style="color: #95a5a6; font-size: 11px;"></i>';
@@ -2944,30 +3012,32 @@ if (isChatPage) {
                 actionDiv.id = `actions-${id}`;
             }
 
-            // Обновляем onclick в кнопках
-            const replyBtn = tempMsgDiv.querySelector(`button[onclick*="replyToMessage('${tempId}']`);
-            if (replyBtn) {
-                const newOnclick = replyBtn.getAttribute('onclick')?.replace(tempId, id);
-                if (newOnclick) replyBtn.setAttribute('onclick', newOnclick);
-            }
+            // Обновляем data-атрибуты всех кнопок
+            const buttons = tempMsgDiv.querySelectorAll('[data-msg-id]');
+            buttons.forEach(button => {
+                const oldMsgId = button.getAttribute('data-msg-id');
+                if (oldMsgId === tempId) {
+                    button.setAttribute('data-msg-id', id);
+                }
+            });
 
-            const editBtn = tempMsgDiv.querySelector(`button[onclick*="editMessage('${tempId}']`);
-            if (editBtn) {
-                const newOnclick = editBtn.getAttribute('onclick')?.replace(tempId, id);
-                if (newOnclick) editBtn.setAttribute('onclick', newOnclick);
-            }
+            // Обновляем счетчики прочитавших
+            const readCounters = tempMsgDiv.querySelectorAll('.read-counter');
+            readCounters.forEach(counter => {
+                const oldMsgId = counter.getAttribute('data-msg-id');
+                if (oldMsgId === tempId) {
+                    counter.setAttribute('data-msg-id', id);
+                }
+            });
 
-            const deleteBtn = tempMsgDiv.querySelector(`button[onclick*="deleteMessage('${tempId}']`);
-            if (deleteBtn) {
-                const newOnclick = deleteBtn.getAttribute('onclick')?.replace(tempId, id);
-                if (newOnclick) deleteBtn.setAttribute('onclick', newOnclick);
-            }
-
-            const reactionBtn = tempMsgDiv.querySelector(`button[onclick*="showReactionPanel('${tempId}']`);
-            if (reactionBtn) {
-                const newOnclick = reactionBtn.getAttribute('onclick')?.replace(tempId, id);
-                if (newOnclick) reactionBtn.setAttribute('onclick', newOnclick);
-            }
+            // Обновляем реакции
+            const reactions = tempMsgDiv.querySelectorAll('.reaction-badge');
+            reactions.forEach(reaction => {
+                const oldMsgId = reaction.getAttribute('data-msg-id');
+                if (oldMsgId === tempId) {
+                    reaction.setAttribute('data-msg-id', id);
+                }
+            });
         }
 
         pendingMessages.delete(tempId);
@@ -3238,6 +3308,38 @@ if (isChatPage) {
     async function initChat() {
         await loadCurrentUser();
 
+
+        // Экспорт функций в глобальную область
+        window.toggleSidebar = toggleSidebar;
+        window.closeSidebar = closeSidebar;
+        window.sendMessage = sendMessage;
+        window.showCreateChannelModal = showCreateChannelModal;
+        window.startDMWithUser = startDMWithUser;
+        window.deleteDMChannel = deleteDMChannel;
+        window.deleteChannel = deleteChannel;
+        window.openChannelSettings = openChannelSettings;
+        window.replyToMessage = replyToMessage;
+        window.cancelReply = cancelReply;
+        window.editMessage = editMessage;
+        window.deleteMessage = deleteMessage;
+        window.addReaction = addReaction;
+        window.showReactionPanel = showReactionPanel;
+        window.toggleMessageActions = toggleMessageActions;
+        window.closeAllMessageActions = closeAllMessageActions;
+        window.openImageModal = openImageModal;
+        window.scrollToMessage = scrollToMessage;
+        window.showReadByList = showReadByList;
+        window.testNotification = testNotification;
+        window.sendFileFromPreview = sendFileFromPreview;
+        window.cancelFilePreview = cancelFilePreview;
+        window.cancelFile = cancelFile;
+        window.handleFileSelect = handleFileSelect;
+        window.openMediaModal = openMediaModal;
+        window.joinChannel = joinChannel;
+        window.cancelEditing = cancelEditing;
+        window.scrollToEditingMessage = scrollToEditingMessage;
+        window.sendFileMessage = sendFileMessage;
+
         setupActivityTracking();
         setupVisibilityTracking();
         startHeartbeat();
@@ -3470,36 +3572,6 @@ if (isChatPage) {
         });
     }
 
-    // Экспорт функций в глобальную область
-    window.toggleSidebar = toggleSidebar;
-    window.closeSidebar = closeSidebar;
-    window.sendMessage = sendMessage;
-    window.showCreateChannelModal = showCreateChannelModal;
-    window.startDMWithUser = startDMWithUser;
-    window.deleteDMChannel = deleteDMChannel;
-    window.deleteChannel = deleteChannel;
-    window.openChannelSettings = openChannelSettings;
-    window.replyToMessage = replyToMessage;
-    window.cancelReply = cancelReply;
-    window.editMessage = editMessage;
-    window.deleteMessage = deleteMessage;
-    window.addReaction = addReaction;
-    window.showReactionPanel = showReactionPanel;
-    window.toggleMessageActions = toggleMessageActions;
-    window.closeAllMessageActions = closeAllMessageActions;
-    window.openImageModal = openImageModal;
-    window.scrollToMessage = scrollToMessage;
-    window.showReadByList = showReadByList;
-    window.testNotification = testNotification;
-    window.sendFileFromPreview = sendFileFromPreview;
-    window.cancelFilePreview = cancelFilePreview;
-    window.cancelFile = cancelFile;
-    window.handleFileSelect = handleFileSelect;
-    window.openMediaModal = openMediaModal;
-    window.joinChannel = joinChannel;
-    window.cancelEditing = cancelEditing;
-    window.scrollToEditingMessage = scrollToEditingMessage;
-    window.sendFileMessage = sendFileMessage;
 }
 
 // ============ КОД ТОЛЬКО ДЛЯ СТРАНИЦЫ ЛОГИНА ============
