@@ -1,15 +1,7 @@
 
-// ============ ГЛОБАЛЬНЫЕ ОБЪЯВЛЕНИЯ И ТИПЫ ============
-//import * as bootstrap from 'bootstrap'; 
-//import * as signalr from '@microsoft/signalr'
-//import { HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
 /// <reference path="./global.d.ts" />
-/* global window, document, bootstrap, localStorage, sessionStorage, fetch, alert, confirm, prompt, FileReader, URL, FormData, MutationObserver, Set, Map, console */
 "use strict";
 
-// Расширение глобального объекта window
-// @ts-nocheck
-// ============ ОПРЕДЕЛЕНИЕ ТИПА СТРАНИЦЫ ============
 
 const isChatPage = document.querySelector('.chat-container') !== null;
 const isSettingsPage = document.querySelector('.settings-container') !== null;
