@@ -1499,13 +1499,19 @@ if (isChatPage) {
             readBy: [],
             deliveredTo: [],
             isTemp: true,
-            edited: false
+            edited: false,
+            replyTo: replyToMessageData ? {
+                id: replyToMessageData.id,
+                username: replyToMessageData.username,
+                content: replyToMessageData.content
+            } : null
         };
 
         if (messagesDiv) {
             const existing = document.getElementById(`msg-${tempId}`);
             if (!existing) {
-                messagesDiv.insertAdjacentHTML('beforeend', formatMessage(tempMessage));
+                messagesDiv.insertAdjacentHTML('beforeend',
+                    formatMessage(tempMessage));
                 scrollToBottomSafely(false);
             }
         }
