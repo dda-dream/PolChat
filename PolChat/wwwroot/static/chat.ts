@@ -980,11 +980,6 @@ if (isChatPage) {
     }
 
     function showFilePreview(file: File) {
-        if (file.size > 500 * 1024 * 1024) {
-            showNotification('Файл слишком большой. Максимум 500MB', 'danger');
-            return;
-        }
-
         const url = URL.createObjectURL(file);
         const div = document.getElementById('pastePreview');
         const isImage = file.type.startsWith('image/');
