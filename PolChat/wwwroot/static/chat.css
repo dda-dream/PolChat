@@ -359,6 +359,7 @@ body.page-chat {
         background: #fafafa;
         flex-shrink: 0;
     }
+        .channel-tooltip.no-description {
 
     .section-header {
         display: flex;
