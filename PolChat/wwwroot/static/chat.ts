@@ -80,6 +80,15 @@ if (isChatPage) {
     );
 
     function toggleSidebar() {
+        // Проверка на неотправленный файл
+        if (pendingFileBlob) {
+            const confirmSwitch = confirm('У вас есть неотправленный файл. Отменить его и закрыть боковую панель?');
+            if (confirmSwitch) {
+                cancelFilePreview();
+            } else {
+                return; // Не закрываем боковую панель, если файл не отменён
+            }
+        }
         const sidebar = document.getElementById('sidebar');
         const overlay = document.getElementById('sidebarOverlay');
         if (sidebar) sidebar.classList.toggle('open');
@@ -175,15 +184,91 @@ if (isChatPage) {
     let titleUpdateInterval: number | null = null;
     let lastUnreadCount = 0;
 
-    //let lastReceivedMessageId: string | null = null;
     let lastMessageTimestamp: string | null = null;
-    //let isReconnecting = false;
-    //let pendingMessagesBatch: Message[] = [];
 
     const DELETED_USER_DISPLAY = "Удаленный аккаунт";
     const DELETED_USER_AVATAR = "?";
 
     // ============ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ЧАТА ============
+
+    // ============ КНОПКИ ПРОКРУТКИ ЧАТА ============
+    let scrollButtons: { top: HTMLElement | null; bottom: HTMLElement | null } = {
+        top: null,
+        bottom: null
+    };
+
+    function initScrollButtons() {
+        scrollButtons.top = document.getElementById('scrollToTopBtn');
+        scrollButtons.bottom = document.getElementById('scrollToBottomBtn');
+
+        if (!scrollButtons.top || !scrollButtons.bottom) return;
+
+        // Обработчики кнопок
+        scrollButtons.top.addEventListener('click', () => {
+            scrollToTop();
+        });
+
+        scrollButtons.bottom.addEventListener('click', () => {
+            scrollToBottom();
+        });
+
+        // Скрываем кнопки при скролле
+        const messagesDiv = document.getElementById('messages-area');
+        if (messagesDiv) {
+            messagesDiv.addEventListener('scroll', () => {
+                updateScrollButtonsVisibility();
+            });
+        }
+
+        // Изначально скрываем кнопки
+        updateScrollButtonsVisibility();
+    }
+
+    function scrollToTop() {
+        const messagesDiv = document.getElementById('messages-area');
+        if (messagesDiv) {
+            messagesDiv.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        }
+    }
+
+    function scrollToBottom() {
+        const messagesDiv = document.getElementById('messages-area');
+        if (messagesDiv) {
+            messagesDiv.scrollTo({
+                top: messagesDiv.scrollHeight,
+                behavior: 'smooth'
+            });
+        }
+    }
+
+    function updateScrollButtonsVisibility() {
+        const messagesDiv = document.getElementById('messages-area');
+        if (!messagesDiv || !scrollButtons.top || !scrollButtons.bottom) return;
+
+        const scrollTop = messagesDiv.scrollTop;
+        const maxScroll = messagesDiv.scrollHeight - messagesDiv.clientHeight;
+
+        // Определяем положение скролла с погрешностью в 10px
+        const isAtTop = scrollTop <= 10;
+        const isAtBottom = Math.abs(maxScroll - scrollTop) <= 10;
+
+        // Показываем кнопку "вверх" только если не в начале
+        if (!isAtTop && scrollTop > 100) {
+            scrollButtons.top.classList.add('show');
+        } else {
+            scrollButtons.top.classList.remove('show');
+        }
+
+        // Показываем кнопку "вниз" только если не в конце
+        if (!isAtBottom && maxScroll > 0) {
+            scrollButtons.bottom.classList.add('show');
+        } else {
+            scrollButtons.bottom.classList.remove('show');
+        }
+    }
 
     async function loadCurrentUser(): Promise<string> {
         try {
@@ -301,6 +386,21 @@ if (isChatPage) {
         } catch (e) {
             console.warn('[StatusSync] Ошибка синхронизации:', e);
         }
+    }
+
+    function observeMessagesForScrollButtons() {
+        const messagesDiv = document.getElementById('messages-area');
+        if (!messagesDiv) return;
+
+        const observer = new MutationObserver(() => {
+            updateScrollButtonsVisibility();
+        });
+
+        observer.observe(messagesDiv, {
+            childList: true,
+            subtree: true,
+            attributes: false
+        });
     }
 
     async function scrollToBottomSafely(force = false) {
@@ -594,7 +694,7 @@ if (isChatPage) {
             // Сохраняем переносы строк - НЕ заменяем <br> на \n
             .replace(/\n/g, '<br>')
             .replace(/(https?:\/\/[^\s]+)/g, url => `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`)
-            .replace(/([\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}])/gu, '<span style="font-size:1.2em;">$1</span>');
+            .replace(/([\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}])/gu, '<span style="font-size:2.0em;">$1</span>');
         return f;
     }
 
@@ -724,9 +824,9 @@ if (isChatPage) {
         bindMessageEvents();
         scrollToBottomSafely(true);
         setTimeout(() => markVisibleMessagesAsRead(), 500);
+        setTimeout(() => updateScrollButtonsVisibility(), 100);
     }
 
-    // ЗАМЕНИТЕ существующую функцию prependMessages на эту:
     function prependMessages(messages: Message[]) {
         const messagesDiv = document.getElementById('messages-area');
         if (!messagesDiv) return;
@@ -760,6 +860,7 @@ if (isChatPage) {
             messagesDiv.scrollTop = oldScrollTop + heightDiff;
         }
         bindMessageEvents();
+        setTimeout(() => updateScrollButtonsVisibility(), 100);
     }
 
     function updateReadByDisplay(messageId: string) {
@@ -1047,19 +1148,18 @@ if (isChatPage) {
             content = `<video src="${url}" style="max-width:100%; max-height:200px; border-radius:8px;" controls></video>`;
         } else {
             content = `<div style="padding:20px; text-align:center; background:#f0f2f5; border-radius:8px;">
-            <i class="fas fa-file fa-3x" style="color:#6c757d;"></i>
-            <div style="margin-top:8px; font-size:12px; color:#666;">${escapeHtml(file.name)}</div>
-        </div>`;
+        <i class="fas fa-file fa-3x" style="color:#6c757d;"></i>
+        <div style="margin-top:8px; font-size:12px; color:#666;">${escapeHtml(file.name)}</div>
+    </div>`;
         }
 
         if (div) {
             div.innerHTML = `<div class="preview-content">
-            ${content}
-            <div class="preview-actions" style="margin-top: 12px; display: flex; gap: 8px; justify-content: flex-end;">
-                <button class="btn-send" onclick="sendFileMessage()">Отправить</button>
-                <button class="btn-cancel" onclick="cancelFilePreview()">Отмена</button>
-            </div>
-        </div>`;
+        ${content}
+        <div class="preview-actions" style="margin-top: 12px; display: flex; gap: 8px; justify-content: flex-end;">
+            <button class="btn-cancel" onclick="cancelFilePreview()"><i class="fas fa-times"></i></button>
+        </div>
+    </div>`;
             div.style.display = 'block';
         }
 
@@ -2225,6 +2325,7 @@ if (isChatPage) {
 
         isLoadingMore = false;
         updateLoadMoreIndicator();
+        setTimeout(() => updateScrollButtonsVisibility(), 100);
     }
 
     function markVisibleMessagesAsRead() {
@@ -2306,6 +2407,7 @@ if (isChatPage) {
             channelsCache = channels;
             channelsCacheTime = now;
             renderChannels(channels);
+            attachChannelTooltips();
         } catch (e) {
             console.error(e);
         }
@@ -2323,17 +2425,133 @@ if (isChatPage) {
             const active = currentChannel === ch.id && currentChannelType === 'channel';
             const unread = unreadCounts[ch.id] || 0;
             channelNamesCache.set(ch.id, ch.name);
-            html += `<div class="channel-item ${active ? 'active' : ''}" data-channel-id="${escapeHtml(ch.id)}">
-            <div class="channel-info" onclick="joinChannel('channel', '${escapeHtml(ch.id)}', '${escapeHtml(ch.name)}', '${escapeHtml(ch.description || '')}')">
+            const description = ch.description || '';
+            const escapedDesc = escapeHtml(description);
+            const escapedName = escapeHtml(ch.name);
+
+            html += `<div class="channel-item ${active ? 'active' : ''}" data-channel-id="${escapeHtml(ch.id)}" data-channel-name="${escapedName}" data-channel-desc="${escapedDesc}">
+            <div class="channel-info" onclick="joinChannel('channel', '${escapeHtml(ch.id)}', '${escapedName}', '${escapedDesc}')">
                 <div class="channel-name">
-                    <i class="fas fa-hashtag"></i> ${escapeHtml(ch.name)}${unread > 0 ? `<span class="unread-badge">${unread > 99 ? '99+' : unread}</span>` : ''}
+                    <i class="fas fa-hashtag"></i> ${escapedName}${unread > 0 ? `<span class="unread-badge">${unread > 99 ? '99+' : unread}</span>` : ''}
                 </div>
-                <div class="channel-description">${escapeHtml(ch.description) || 'Нет описания'}</div>
+                <div class="channel-description"></div>
             </div>
             <!-- Удаляем кнопку удаления из списка каналов -->
         </div>`;
         }
         if (div) div.innerHTML = html;
+
+        // Добавляем обработчики для всплывающих подсказок
+        attachChannelTooltips();
+    }
+
+    // Переменные для управления всплывающей подсказкой
+    let currentTooltip: HTMLElement | null = null;
+    let tooltipTimeout: number | null = null;
+
+    function attachChannelTooltips() {
+        const channelItems = document.querySelectorAll('.channel-item');
+
+        channelItems.forEach(item => {
+            // Удаляем старые обработчики, если есть
+            item.removeEventListener('mouseenter', handleChannelMouseEnter as any);
+            item.removeEventListener('mouseleave', handleChannelMouseLeave as any);
+
+            // Добавляем новые обработчики
+            item.addEventListener('mouseenter', handleChannelMouseEnter as any);
+            item.addEventListener('mouseleave', handleChannelMouseLeave as any);
+        });
+    }
+
+    function handleChannelMouseEnter(e: any) {
+        const target = e.currentTarget as HTMLElement;
+        const channelDesc = target.getAttribute('data-channel-desc') || '';
+
+        // Очищаем предыдущий таймер
+        if (tooltipTimeout) {
+            clearTimeout(tooltipTimeout);
+        }
+
+        // Удаляем существующую подсказку
+        removeTooltip();
+
+        // Задержка перед показом (300мс)
+        tooltipTimeout = window.setTimeout(() => {
+            showTooltip(channelDesc, e.clientX, e.clientY);
+        }, 300);
+    }
+
+    function handleChannelMouseLeave() {
+        // Очищаем таймер
+        if (tooltipTimeout) {
+            clearTimeout(tooltipTimeout);
+            tooltipTimeout = null;
+        }
+
+        // Задержка перед скрытием (200мс)
+        setTimeout(() => {
+            removeTooltip();
+        }, 200);
+    }
+
+    function showTooltip(description: string, mouseX: number, mouseY: number) {
+        // Удаляем старую подсказку
+        removeTooltip();
+
+        // Создаём подсказку
+        const tooltip = document.createElement('div');
+        tooltip.className = 'channel-tooltip';
+
+        const hasDescription = description && description.trim().length > 0;
+
+        if (hasDescription) {
+            tooltip.innerHTML = `
+            <div style="font-size: 11px; opacity: 0.9;">${escapeHtml(description)}</div>
+        `;
+        } else {
+            tooltip.classList.add('no-description');
+            tooltip.innerHTML = `
+            <div style="font-size: 11px; opacity: 0.7; font-style: italic;">Нет описания</div>
+        `;
+        }
+
+        document.body.appendChild(tooltip);
+        currentTooltip = tooltip;
+
+        // Позиционируем подсказку
+        const rect = tooltip.getBoundingClientRect();
+        let left = mouseX + 15;
+        let top = mouseY - 10;
+
+        // Проверяем выход за правый край экрана
+        if (left + rect.width > window.innerWidth - 10) {
+            left = mouseX - rect.width - 15;
+        }
+
+        // Проверяем выход за верхний край
+        if (top < 10) {
+            top = mouseY + 20;
+            // Меняем положение стрелки, если подсказка снизу
+            tooltip.style.transform = 'none';
+            tooltip.style.setProperty('--arrow-position', 'bottom');
+        } else {
+            tooltip.style.setProperty('--arrow-position', 'top');
+        }
+
+        // Проверяем выход за нижний край
+        if (top + rect.height > window.innerHeight - 10) {
+            top = window.innerHeight - rect.height - 10;
+        }
+
+        tooltip.style.left = left + 'px';
+        tooltip.style.top = top + 'px';
+    }
+
+    function removeTooltip() {
+        if (currentTooltip) {
+            currentTooltip.remove();
+            currentTooltip = null;
+        }
     }
 
     async function loadDMChannels() {
@@ -2353,7 +2571,6 @@ if (isChatPage) {
                     return `<div class="dm-item ${active ? 'active' : ''}" data-dm-id="${escapeHtml(dm.id)}">
                     <div class="dm-info" onclick="joinChannel('dm','${escapeHtml(dm.id)}','${escapeHtml(displayName)}','')">
                         <div class="dm-name"><i class="fas fa-user"></i> ${escapeHtml(displayName)}${unread > 0 ? `<span class="unread-badge">${unread > 99 ? '99+' : unread}</span>` : ''}</div>
-                        <div class="dm-preview">Личный чат</div>
                     </div>
                     <div class="dm-actions"><button class="action-btn delete-btn" onclick="event.stopPropagation(); deleteDMChannel('${escapeHtml(dm.id)}','${escapeHtml(displayName)}')"><i class="fas fa-trash"></i></button></div>
                 </div>`;
@@ -2371,16 +2588,60 @@ if (isChatPage) {
             const div = document.getElementById('users-list');
             if (others.length === 0) { if (div) div.innerHTML = '<div class="text-center text-muted py-3">Нет других пользователей</div>'; return; }
             let html = '';
-            for (const u of others) {
+
+            // СОРТИРОВКА ПОЛЬЗОВАТЕЛЕЙ
+            const sortedUsers = [...others].sort((a, b) => {
+                // Сначала определяем "вес" статуса для сортировки
+                const getStatusWeight = (status: string) => {
+                    switch (status) {
+                        case 'online': return 3;
+                        case 'away': return 2;
+                        default: return 1;
+                    }
+                };
+
+                const weightA = getStatusWeight(a.status);
+                const weightB = getStatusWeight(b.status);
+
+                // Если статусы разные - сортируем по статусу
+                if (weightA !== weightB) {
+                    return weightB - weightA; // Выше тот, у кого больше вес
+                }
+
+                // Если статусы одинаковые (оба offline или оба away) - сортируем по времени lastSeen
+                if (a.status === 'offline' && b.status === 'offline') {
+                    const timeA = a.lastSeen ? new Date(a.lastSeen).getTime() : 0;
+                    const timeB = b.lastSeen ? new Date(b.lastSeen).getTime() : 0;
+                    return timeB - timeA; // Более недавние выше
+                }
+
+                if (a.status === 'away' && b.status === 'away') {
+                    const timeA = a.lastSeen ? new Date(a.lastSeen).getTime() : 0;
+                    const timeB = b.lastSeen ? new Date(b.lastSeen).getTime() : 0;
+                    return timeB - timeA;
+                }
+
+                // Для online можно сортировать по имени (опционально)
+                if (a.status === 'online' && b.status === 'online') {
+                    return a.username.localeCompare(b.username);
+                }
+
+                return 0;
+            });
+
+            for (const u of sortedUsers) {
                 const statusClass = u.status === 'online' ? 'status-online' : (u.status === 'away' ? 'status-away' : 'status-offline');
                 const statusText = u.status === 'online' ? 'онлайн' : (u.status === 'away' ? 'отошел' : formatLastSeen(u.lastSeen));
+
+                const displayName = `${escapeHtml(u.username)} <span style="font-size: 0.7rem; color: #6c757d;">(${escapeHtml(statusText)})</span>`;
+
                 html += `<div class="user-item">
-                    <div class="user-info" onclick="startDMWithUser('${escapeHtml(u.username)}')">
-                        <div class="user-status ${statusClass}"></div>
-                        <div><strong>${escapeHtml(u.username)}</strong>${u.role === 'admin' ? '<i class="fas fa-crown text-warning ms-1"></i>' : ''}<div class="status-text-small">${escapeHtml(statusText)}</div></div>
-                    </div>
-                    <button class="chat-user-btn" onclick="event.stopPropagation(); startDMWithUser('${escapeHtml(u.username)}')"><i class="fas fa-comment"></i></button>
-                </div>`;
+                <div class="user-info" onclick="startDMWithUser('${escapeHtml(u.username)}')">
+                    <div class="user-status ${statusClass}"></div>
+                    <div><strong>${displayName}</strong>${u.role === 'admin' ? '<i class="fas fa-crown text-warning ms-1"></i>' : ''}</div>
+                </div>
+                <button class="chat-user-btn" onclick="event.stopPropagation(); startDMWithUser('${escapeHtml(u.username)}')"><i class="fas fa-comment"></i></button>
+            </div>`;
             }
             if (div) div.innerHTML = html;
         } catch (e) { console.error(e); }
@@ -2526,9 +2787,20 @@ if (isChatPage) {
         } finally {
             isLoadingMessages = false;
         }
+        setTimeout(() => updateScrollButtonsVisibility(), 100);
     }
 
     async function joinChannel(type: 'channel' | 'dm', id: string, name: string, desc: string): Promise<void> {
+        // ПРОВЕРКА НА НЕОТПРАВЛЕННЫЙ ФАЙЛ
+        if (pendingFileBlob) {
+            const confirmSwitch = confirm('У вас есть неотправленный файл. Отменить его и переключить чат?');
+            if (confirmSwitch) {
+                cancelFilePreview();
+            } else {
+                return; // Отменяем переход
+            }
+        }
+
         // Проверяем активное редактирование
         if (editingMessageData) {
             const confirmSwitch = confirm('Есть несохранённое редактирование. Отменить его и переключить чат?');
@@ -2567,8 +2839,8 @@ if (isChatPage) {
         const currentChannelDescEl = document.getElementById('current-channel-desc');
         const messageInput = document.getElementById('messageInput') as HTMLInputElement | null;
 
-        if (currentChannelNameEl) currentChannelNameEl.textContent = type === 'dm' ? `Чат с ${name}` : name;
-        let newDesc = desc ? `(${desc})` : (type === 'dm' ? 'Личный чат' : '');
+        if (currentChannelNameEl) currentChannelNameEl.textContent = type === 'dm' ? `${name}` : name;
+        let newDesc = desc ? `(${desc})` : '';
         if (currentChannelDescEl) currentChannelDescEl.textContent = newDesc;
         if (messageInput) messageInput.disabled = false;
         await connection.invoke('JoinChannel', id);
@@ -2863,6 +3135,8 @@ if (isChatPage) {
                 }
             }
         }
+
+        setTimeout(() => updateScrollButtonsVisibility(), 100);
 
         if (receivedMessages.has(message.id)) return;
         await receivedMessages.add(message.id);
@@ -3410,6 +3684,7 @@ if (isChatPage) {
 
             messagesArea.addEventListener('scroll', function () {
                 clearTimeout(scrollTimeout);
+                updateScrollButtonsVisibility();
 
                 if (this.scrollTop === 0 && hasMoreMessages && !isLoadingMore && !isLoadingMessages && currentChannel) {
                     scrollTimeout = window.setTimeout(() => {
@@ -3542,6 +3817,12 @@ if (isChatPage) {
 
         updateActivity();
         autoResizeTextarea();
+
+        // Инициализация кнопок прокрутки
+        initScrollButtons();
+
+        // Вызовите после initScrollButtons()
+        observeMessagesForScrollButtons();
     }
 
     // Запускаем наблюдатель за изображениями
