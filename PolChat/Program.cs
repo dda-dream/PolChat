@@ -20,9 +20,6 @@ Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
     .CreateLogger();
 
-// Подключение к хосту
-builder.Host.UseSerilog();
-
 // ===== Configuration =====
 var postgreSQLConnection = builder.Configuration.GetConnectionString("PostgreSQL");
 var redisConnection = builder.Configuration.GetConnectionString("Redis");

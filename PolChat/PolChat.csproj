@@ -21,10 +21,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="bin\**" />
     <Compile Remove="wwwroot\uploads\**" />
+    <Content Remove="bin\**" />
     <Content Remove="wwwroot\uploads\**" />
+    <EmbeddedResource Remove="bin\**" />
     <EmbeddedResource Remove="wwwroot\uploads\**" />
+    <None Remove="bin\**" />
     <None Remove="wwwroot\uploads\**" />
+    <TypeScriptCompile Remove="bin\**" />
+    <TypeScriptCompile Remove="node_modules\**" />
   </ItemGroup>
 
   <ItemGroup>
