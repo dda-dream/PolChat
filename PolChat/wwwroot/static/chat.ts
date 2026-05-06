@@ -1,6 +1,5 @@
 
 //<reference path="./global.d.ts" />
-// @ts-nocheck
 "use strict";
 
 
@@ -187,12 +186,13 @@ if (isChatPage) {
 
     let pendingMessages = new Map<string, Partial<Message>>();
 
-    let lastUnreadCount = 0;
 
     let lastMessageTimestamp: string | null = null;
 
     const DELETED_USER_DISPLAY = "Удаленный аккаунт";
     const DELETED_USER_AVATAR = "?";
+
+    let currentJoinToken = 0;
 
     // ============ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ЧАТА ============
 
@@ -544,7 +544,7 @@ if (isChatPage) {
         }
     }
 
-    async function showReactionUsers(messageId: string, emoji: string) {
+    async function showReactionUsers(messageId: string, emoji: string, mouseEvent?: MouseEvent) {
         console.log('=== showReactionUsers START ===');
         console.log('messageId:', messageId);
         console.log('emoji:', emoji);
@@ -573,13 +573,199 @@ if (isChatPage) {
                 return;
             }
 
-            // Показываем модальное окно со списком пользователей
-            await showReactionUsersModal(emoji, reaction.users);
+            // Показываем всплывающую панель рядом с курсором
+            await showReactionUsersPopup(emoji, reaction.users, mouseEvent);
 
         } catch (error) {
             console.error('Error loading reaction users:', error);
             showNotification('Ошибка загрузки списка пользователей', 'danger');
         }
+    }
+
+    // Новая функция для показа всплывающей панели рядом с курсором
+    async function showReactionUsersPopup(emoji: string, users: string[], mouseEvent?: MouseEvent) {
+        if (!users || users.length === 0) {
+            showNotification('Нет пользователей с этой реакцией', 'info');
+            return;
+        }
+
+        // Получаем информацию о пользователях
+        const usersResponse = await fetch('/api/users');
+        const allUsers = await usersResponse.json() as User[];
+        const userMap = new Map<string, User>();
+        allUsers.forEach(u => userMap.set(u.username, u));
+
+        // Сортируем: текущий пользователь сверху
+        const sortedUsers = [...users].sort((a, b) => {
+            if (a === currentUsername) return -1;
+            if (b === currentUsername) return 1;
+            return 0;
+        });
+
+        // Удаляем старую панель, если есть
+        const existingPopup = document.getElementById('reactionUsersPopup');
+        if (existingPopup) existingPopup.remove();
+
+        // Создаём панель
+        const popup = document.createElement('div');
+        popup.id = 'reactionUsersPopup';
+        popup.className = 'reaction-users-popup';
+
+        // Стили для панели
+        popup.style.cssText = `
+        position: fixed;
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+        z-index: 10000;
+        min-width: 220px;
+        max-width: 280px;
+        max-height: 350px;
+        overflow-y: auto;
+        font-size: 13px;
+        border: 1px solid #e0e0e0;
+    `;
+
+        // Заголовок
+        let html = `
+        <div style="padding: 12px 16px; border-bottom: 1px solid #e0e0e0; background: #f8f9fa; border-radius: 16px 16px 0 0; position: sticky; top: 0; z-index: 1;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 1.5rem;">${escapeHtml(emoji)}</span>
+                <span style="font-weight: 600; color: #333;">${users.length} ${getUserCountText(users.length)}</span>
+            </div>
+        </div>
+        <div style="padding: 8px 0;">
+    `;
+
+        for (const username of sortedUsers) {
+            const user = userMap.get(username) || { status: 'offline', role: 'user' } as User;
+            const isOnline = user.status === 'online';
+            const isAdmin = user.role === 'admin';
+            const isCurrentUser = username === currentUsername;
+
+            html += `
+            <div class="reaction-popup-item" style="
+                display: flex; 
+                align-items: center; 
+                justify-content: space-between; 
+                padding: 10px 16px;
+                transition: background 0.2s;
+                cursor: default;
+                ${isCurrentUser ? 'background: #e8f0fe;' : ''}
+            ">
+                <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;">
+                    <div style="
+                        width: 36px; 
+                        height: 36px; 
+                        border-radius: 50%; 
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                        display: flex; 
+                        align-items: center; 
+                        justify-content: center; 
+                        color: white; 
+                        font-weight: bold;
+                        font-size: 14px;
+                        flex-shrink: 0;
+                    ">
+                        ${escapeHtml(username.charAt(0).toUpperCase())}
+                    </div>
+                    <div style="min-width: 0; flex: 1;">
+                        <div style="font-weight: 500; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                            <span style="word-break: break-word;">${escapeHtml(username)}</span>
+                            ${isCurrentUser ? '<span style="background: #007bff; color: white; font-size: 10px; padding: 2px 6px; border-radius: 12px;">Вы</span>' : ''}
+                            ${isAdmin ? '<i class="fas fa-crown" style="color: #ffc107; font-size: 12px;"></i>' : ''}
+                        </div>
+                        <div style="font-size: 11px; color: #6c757d; margin-top: 2px;">
+                            <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: ${isOnline ? '#4caf50' : '#9e9e9e'}; margin-right: 4px;"></span>
+                            ${isOnline ? 'онлайн' : (user.lastSeen ? formatLastSeen(user.lastSeen) : 'офлайн')}
+                        </div>
+                    </div>
+                </div>
+                ${isCurrentUser ? '<i class="fas fa-check-circle" style="color: #007bff; font-size: 14px;"></i>' : ''}
+            </div>
+        `;
+        }
+
+        html += `</div>`;
+        popup.innerHTML = html;
+
+        document.body.appendChild(popup);
+
+        // Позиционирование рядом с курсором
+        const positionX = mouseEvent ? mouseEvent.clientX : window.innerWidth / 2;
+        const positionY = mouseEvent ? mouseEvent.clientY : window.innerHeight / 2;
+
+        const rect = popup.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+
+        // Определяем оптимальную позицию
+        let left = positionX + 15;
+        let top = positionY - 20;
+
+        // Корректировка по горизонтали (не выходим за правый край)
+        if (left + rect.width > viewportWidth - 10) {
+            left = positionX - rect.width - 15;
+        }
+
+        // Корректировка по горизонтали (не выходим за левый край)
+        if (left < 10) {
+            left = 10;
+        }
+
+        // Корректировка по вертикали (не выходим за нижний край)
+        if (top + rect.height > viewportHeight - 10) {
+            top = positionY - rect.height - 10;
+        }
+
+        // Корректировка по вертикали (не выходим за верхний край)
+        if (top < 10) {
+            top = 10;
+        }
+
+        popup.style.left = left + 'px';
+        popup.style.top = top + 'px';
+
+        // Добавляем hover-эффект для элементов
+        popup.querySelectorAll('.reaction-popup-item').forEach(item => {
+            (item as HTMLElement).addEventListener('mouseenter', () => {
+                (item as HTMLElement).style.background = '#f5f5f5';
+            });
+            (item as HTMLElement).addEventListener('mouseleave', () => {
+                const isCurrent = (item as HTMLElement).querySelector('span')?.textContent === currentUsername;
+                (item as HTMLElement).style.background = isCurrent ? '#e8f0fe' : '';
+            });
+
+            // Клик по пользователю - можно добавить действие, например открыть DM
+            item.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const nameElement = item.querySelector('.reaction-popup-item > div > div > div:first-child > span:first-child');
+                if (nameElement && nameElement.textContent !== currentUsername) {
+                    startDMWithUser(nameElement.textContent || '');
+                    popup.remove();
+                }
+            });
+        });
+
+        // Закрытие при клике вне
+        const closePopup = (e: MouseEvent) => {
+            if (popup && !popup.contains(e.target as Node)) {
+                popup.remove();
+                document.removeEventListener('click', closePopup);
+                document.removeEventListener('scroll', closePopup);
+            }
+        };
+
+        setTimeout(() => {
+            document.addEventListener('click', closePopup);
+            document.addEventListener('scroll', closePopup);
+        }, 100);
+    }
+
+    function getUserCountText(count: number): string {
+        if (count % 10 === 1 && count % 100 !== 11) return 'пользователь';
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) return 'пользователя';
+        return 'пользователей';
     }
 
     // Вынесем показ модального окна в отдельную функцию
@@ -823,6 +1009,8 @@ if (isChatPage) {
     function handleMessageActions(e: MouseEvent) {
         const target = e.target as HTMLElement;
 
+        console.log('Click detected on:', target.className, target.tagName); // Добавьте это
+
         // Обработка клика по реакции
         const reactionBadge = target.closest('.reaction-badge');
         if (reactionBadge) {
@@ -838,8 +1026,8 @@ if (isChatPage) {
                 console.log('Reaction click:', { isCountClick, target: target.className, emoji });
 
                 if (isCountClick) {
-                    // Открываем список пользователей
-                    showReactionUsers(msgId, emoji);
+                    // Передаём mouseEvent для позиционирования рядом с курсором
+                    showReactionUsers(msgId, emoji, e);
                 } else {
                     // Добавляем/убираем реакцию (стандартное поведение)
                     addReaction(msgId, emoji);
@@ -947,6 +1135,7 @@ if (isChatPage) {
             }
         });
 
+        attachReadCounterHandlers();
         bindMessageEvents();
         scrollToBottomSafely(true);
         setTimeout(() => markVisibleMessagesAsRead(), 500);
@@ -976,6 +1165,7 @@ if (isChatPage) {
         }
         if (newMessagesHtml) {
             messagesDiv.insertAdjacentHTML('afterbegin', newMessagesHtml);
+            attachReadCounterHandlers();
             for (const msg of newMessages) {
                 if (msg.username === currentUsername) {
                     updateReadByDisplay(msg.id);
@@ -1031,111 +1221,214 @@ if (isChatPage) {
     }
 
     function showReadByList(messageId: string) {
+        console.log('=== showReadByList called ===');
+        console.log('messageId:', messageId);
+
         const msgDiv = document.getElementById(`msg-${messageId}`);
-        if (!msgDiv) return;
-
-        const msgUsername = msgDiv.querySelector('.message-username')?.textContent;
-        let readBy = messageReadBy.get(messageId) || [];
-
-        if (msgUsername) {
-            readBy = readBy.filter(u => u !== msgUsername);
-        }
-
-        if (readBy.length === 0) {
-            showNotification('Никто ещё не прочитал это сообщение', 'info');
+        if (!msgDiv) {
+            console.error('Message div not found for id:', messageId);
+            showNotification('Сообщение не найдено', 'danger');
             return;
         }
 
-        const modalHtml = `
-            <div class="modal fade" id="readByModal" tabindex="-1">
-                <div class="modal-dialog modal-dialog-centered">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title"><i class="fas fa-check-double"></i> Прочитали сообщение</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body" id="readByList" style="max-height: 60vh; overflow-y: auto;">
-                            <div class="text-center text-muted py-3">Загрузка...</div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+        const msgUsernameElem = msgDiv.querySelector('.message-username');
+        const msgUsername = msgUsernameElem?.textContent;
+        console.log('Message username:', msgUsername);
+
+        // Получаем readBy из локального кэша
+        let readBy = messageReadBy.get(messageId) || [];
+        console.log('readBy from cache:', readBy);
+
+        // Всегда делаем запрос к серверу для получения актуальных данных
+        console.log('Fetching read status from server...');
+        fetch(`/api/message/${messageId}/read_status`)
+            .then(res => {
+                console.log('Response status:', res.status);
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}`);
+                }
+                return res.json();
+            })
+            .then(data => {
+                console.log('Server response:', data);
+                let serverReadBy = data.read_by || [];
+                console.log('readBy from server:', serverReadBy);
+
+                // Обновляем локальный кэш
+                messageReadBy.set(messageId, serverReadBy);
+
+                // Фильтруем автора сообщения
+                if (msgUsername) {
+                    serverReadBy = serverReadBy.filter(u => u !== msgUsername);
+                }
+
+                console.log('Filtered readBy (without author):', serverReadBy);
+
+                if (serverReadBy.length === 0) {
+                    showNotification('Никто ещё не прочитал это сообщение', 'info');
+                    return;
+                }
+
+                // Показываем всплывающую панель
+                showReadByModal(serverReadBy);
+            })
+            .catch(err => {
+                console.error('Error fetching read status:', err);
+                // Если сервер вернул ошибку, пробуем использовать локальный кэш
+                if (readBy.length === 0) {
+                    showNotification('Не удалось загрузить список прочитавших', 'danger');
+                } else {
+                    // Фильтруем автора
+                    if (msgUsername) {
+                        readBy = readBy.filter(u => u !== msgUsername);
+                    }
+                    if (readBy.length > 0) {
+                        showReadByModal(readBy);
+                    } else {
+                        showNotification('Никто ещё не прочитал это сообщение', 'info');
+                    }
+                }
+            });
+    }
+
+    function showReadByModal(readBy: string[]) {
+        console.log('=== showReadByModal called ===');
+        console.log('Users to display:', readBy);
+
+        if (!readBy || readBy.length === 0) {
+            console.warn('No users to display');
+            return;
+        }
+
+        // Удаляем старую панель, если есть
+        const existingPopup = document.getElementById('readByPopup');
+        if (existingPopup) existingPopup.remove();
+
+        // Создаём панель
+        const popup = document.createElement('div');
+        popup.id = 'readByPopup';
+        popup.className = 'reaction-users-popup'; // используем те же стили
+
+        popup.style.cssText = `
+        position: fixed;
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+        z-index: 10000;
+        min-width: 220px;
+        max-width: 280px;
+        max-height: 350px;
+        overflow-y: auto;
+        font-size: 13px;
+        border: 1px solid #e0e0e0;
+    `;
+
+        // Заголовок
+        let html = `
+        <div style="padding: 12px 16px; border-bottom: 1px solid #e0e0e0; background: #f8f9fa; border-radius: 16px 16px 0 0; position: sticky; top: 0; z-index: 1;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <i class="fas fa-eye" style="color: #007bff; font-size: 18px;"></i>
+                <span style="font-weight: 600; color: #333;">Прочитали сообщение (${readBy.length})</span>
+            </div>
+        </div>
+        <div style="padding: 8px 0;">
+    `;
+
+        for (const username of readBy) {
+            const isCurrentUser = username === currentUsername;
+
+            html += `
+            <div class="readby-popup-item" style="
+                display: flex; 
+                align-items: center; 
+                justify-content: space-between; 
+                padding: 10px 16px;
+                transition: background 0.2s;
+                cursor: pointer;
+                ${isCurrentUser ? 'background: #e8f0fe;' : ''}
+            ">
+                <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;">
+                    <div style="
+                        width: 36px; 
+                        height: 36px; 
+                        border-radius: 50%; 
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                        display: flex; 
+                        align-items: center; 
+                        justify-content: center; 
+                        color: white; 
+                        font-weight: bold;
+                        font-size: 14px;
+                        flex-shrink: 0;
+                    ">
+                        ${escapeHtml(username.charAt(0).toUpperCase())}
+                    </div>
+                    <div style="min-width: 0; flex: 1;">
+                        <div style="font-weight: 500; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                            <span style="word-break: break-word;">${escapeHtml(username)}</span>
+                            ${isCurrentUser ? '<span style="background: #007bff; color: white; font-size: 10px; padding: 2px 6px; border-radius: 12px;">Вы</span>' : ''}
                         </div>
                     </div>
                 </div>
+                ${isCurrentUser ? '<i class="fas fa-check-circle" style="color: #007bff; font-size: 14px;"></i>' : '<i class="fas fa-check-double" style="color: #34b7f1; font-size: 14px;"></i>'}
             </div>
         `;
-
-        const oldModal = document.getElementById('readByModal');
-        if (oldModal) oldModal.remove();
-
-        document.body.insertAdjacentHTML('beforeend', modalHtml);
-
-        const container = document.getElementById('readByList');
-        if (container) {
-            getUsersCached().then(users => {
-                const userMap = new Map<string, User>();
-                users.forEach(u => userMap.set(u.username, u));
-
-                let html = '';
-                for (const username of readBy) {
-                    const user = userMap.get(username) || { status: 'offline', role: 'user' } as User;
-                    const isOnline = user.status === 'online';
-                    const isAdmin = user.role === 'admin';
-
-                    html += `
-                        <div class="read-by-item" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #e9ecef;">
-                            <div style="display: flex; align-items: center; gap: 12px;">
-                                <div class="read-by-avatar" style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">
-                                    ${escapeHtml(username.charAt(0).toUpperCase())}
-                                </div>
-                                <div>
-                                    <div class="read-by-name" style="font-weight: 500;">
-                                        ${escapeHtml(username)}
-                                        ${isAdmin ? '<i class="fas fa-crown text-warning ms-1" style="font-size: 12px;"></i>' : ''}
-                                    </div>
-                                    <div class="read-by-status" style="font-size: 11px; color: #6c757d;">
-                                        <span class="status-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; background: ${isOnline ? '#4caf50' : '#9e9e9e'};"></span>
-                                        ${isOnline ? 'онлайн' : 'офлайн'}
-                                    </div>
-                                </div>
-                            </div>
-                            <i class="fas fa-check-circle" style="color: #34b7f1;"></i>
-                        </div>
-                    `;
-                }
-                container.innerHTML = html;
-            }).catch(() => {
-                let html = '';
-                for (const username of readBy) {
-                    html += `
-                        <div class="read-by-item" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #e9ecef;">
-                            <div style="display: flex; align-items: center; gap: 12px;">
-                                <div class="read-by-avatar" style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">
-                                    ${escapeHtml(username.charAt(0).toUpperCase())}
-                                </div>
-                                <div>
-                                    <div class="read-by-name" style="font-weight: 500;">${escapeHtml(username)}</div>
-                                </div>
-                            </div>
-                            <i class="fas fa-check-circle" style="color: #34b7f1;"></i>
-                        </div>
-                    `;
-                }
-                container.innerHTML = html;
-            });
         }
 
+        html += `</div>`;
+        popup.innerHTML = html;
 
-        const modalEl = document.getElementById('readByModal');
-        if (modalEl) {
-            const modal = new window.bootstrap.Modal(modalEl);
-            modal.show();
+        document.body.appendChild(popup);
 
-            // Use arrow function and reference modalEl directly
-            modalEl.addEventListener('hidden.bs.modal', () => {
-                modalEl.remove();
+        // Позиционирование по центру экрана (для глаза - центрируем)
+        const rect = popup.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+
+        let left = (viewportWidth - rect.width) / 2;
+        let top = (viewportHeight - rect.height) / 2;
+
+        // Корректировка, чтобы не выходило за границы
+        if (left < 10) left = 10;
+        if (top < 10) top = 10;
+
+        popup.style.left = left + 'px';
+        popup.style.top = top + 'px';
+
+        // Добавляем hover-эффект для элементов
+        popup.querySelectorAll('.readby-popup-item').forEach(item => {
+            (item as HTMLElement).addEventListener('mouseenter', () => {
+                (item as HTMLElement).style.background = '#f5f5f5';
             });
-        }
+            (item as HTMLElement).addEventListener('mouseleave', () => {
+                const isCurrent = (item as HTMLElement).querySelector('span')?.textContent === currentUsername;
+                (item as HTMLElement).style.background = isCurrent ? '#e8f0fe' : '';
+            });
+
+            // Клик по пользователю - открываем DM
+            item.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const nameElement = item.querySelector('.readby-popup-item > div > div > div:first-child > span:first-child');
+                if (nameElement && nameElement.textContent !== currentUsername) {
+                    startDMWithUser(nameElement.textContent || '');
+                    popup.remove();
+                }
+            });
+        });
+
+        // Закрытие при клике вне
+        const closePopup = (e: MouseEvent) => {
+            if (popup && !popup.contains(e.target as Node)) {
+                popup.remove();
+                document.removeEventListener('click', closePopup);
+                document.removeEventListener('scroll', closePopup);
+            }
+        };
+
+        setTimeout(() => {
+            document.addEventListener('click', closePopup);
+            document.addEventListener('scroll', closePopup);
+        }, 100);
     }
 
     // ============ АВТО-РАСШИРЕНИЕ TEXTAREA ============
@@ -2610,15 +2903,16 @@ if (isChatPage) {
             const description = ch.description || '';
             const escapedDesc = escapeHtml(description);
             const escapedName = escapeHtml(ch.name);
+            const escapedId = escapeHtml(ch.id);
 
-            html += `<div class="channel-item ${active ? 'active' : ''}" data-channel-id="${escapeHtml(ch.id)}" data-channel-name="${escapedName}" data-channel-desc="${escapedDesc}">
-            <div class="channel-info" onclick="joinChannel('channel', '${escapeHtml(ch.id)}', '${escapedName}', '${escapedDesc}')">
+            // Убираем onclick из HTML - он будет обрабатываться делегированным обработчиком
+            html += `<div class="channel-item ${active ? 'active' : ''}" data-channel-id="${escapedId}" data-channel-name="${escapedName}" data-channel-desc="${escapedDesc}">
+            <div class="channel-info">
                 <div class="channel-name">
                     <i class="fas fa-hashtag"></i> ${escapedName}${unread > 0 ? `<span class="unread-badge">${unread > 99 ? '99+' : unread}</span>` : ''}
                 </div>
                 <div class="channel-description"></div>
             </div>
-            <!-- Удаляем кнопку удаления из списка каналов -->
         </div>`;
         }
         if (div) div.innerHTML = html;
@@ -2643,6 +2937,28 @@ if (isChatPage) {
             item.addEventListener('mouseenter', handleChannelMouseEnter as any);
             item.addEventListener('mouseleave', handleChannelMouseLeave as any);
         });
+    }
+
+    function attachReadCounterHandlers() {
+        const readCounters = document.querySelectorAll('.read-counter');
+        console.log(`Attaching handlers to ${readCounters.length} read counters`);
+
+        readCounters.forEach(counter => {
+            // Удаляем старый обработчик, если есть
+            counter.removeEventListener('click', handleReadCounterClick);
+            // Добавляем новый
+            counter.addEventListener('click', handleReadCounterClick);
+        });
+    }
+
+    function handleReadCounterClick(e: MouseEvent) {
+        e.preventDefault();
+        e.stopPropagation();
+        const msgId = (e.currentTarget as HTMLElement).getAttribute('data-msg-id');
+        console.log('Read counter clicked, msgId:', msgId);
+        if (msgId) {
+            showReadByList(msgId);
+        }
     }
 
     function handleChannelMouseEnter(e: any) {
@@ -2737,31 +3053,56 @@ if (isChatPage) {
     }
 
     async function loadDMChannels() {
-        try {
-            const res = await fetch('/api/dm_channels');
-            const dms = await res.json() as DMChannel[];
-            const div = document.getElementById('dm-list');
-            if (!dms || dms.length === 0) {
-                if (div) div.innerHTML = '<div class="text-center text-muted py-3">Нет личных чатов</div>';
-                return;
-            }
-            if (div) {
-                div.innerHTML = dms.map((dm: DMChannel) => {
-                    const active = currentChannel === dm.id && currentChannelType === 'dm';
-                    const unread = unreadCounts[dm.id] || 0;
-                    const displayName = dm.isDeleted ? DELETED_USER_DISPLAY : dm.name;
-                    return `<div class="dm-item ${active ? 'active' : ''}" data-dm-id="${escapeHtml(dm.id)}">
-                    <div class="dm-info" onclick="joinChannel('dm','${escapeHtml(dm.id)}','${escapeHtml(displayName)}','')">
-                        <div class="dm-name"><i class="fas fa-user"></i> ${escapeHtml(displayName)}${unread > 0 ? `<span class="unread-badge">${unread > 99 ? '99+' : unread}</span>` : ''}</div>
-                    </div>
-                    <div class="dm-actions"><button class="action-btn delete-btn" onclick="event.stopPropagation(); deleteDMChannel('${escapeHtml(dm.id)}','${escapeHtml(displayName)}')"><i class="fas fa-trash"></i></button></div>
-                </div>`;
-                }).join('');
-            }
-        } catch (e) {
-            console.error(e);
+    try {
+        const res = await fetch('/api/dm_channels');
+        const dms = await res.json() as DMChannel[];
+        const div = document.getElementById('dm-list');
+        if (!dms || dms.length === 0) {
+            if (div) div.innerHTML = '<div class="text-center text-muted py-3">Нет личных чатов</div>';
+            return;
         }
+        if (div) {
+            div.innerHTML = dms.map((dm: DMChannel) => {
+                const active = currentChannel === dm.id && currentChannelType === 'dm';
+                const unread = unreadCounts[dm.id] || 0;
+                const displayName = dm.isDeleted ? DELETED_USER_DISPLAY : dm.name;
+                const escapedId = escapeHtml(dm.id);
+                const escapedName = escapeHtml(displayName);
+                
+                // Убираем onclick из HTML
+                return `<div class="dm-item ${active ? 'active' : ''}" data-dm-id="${escapedId}" data-dm-name="${escapedName}">
+                    <div class="dm-info">
+                        <div class="dm-name"><i class="fas fa-user"></i> ${escapedName}${unread > 0 ? `<span class="unread-badge">${unread > 99 ? '99+' : unread}</span>` : ''}</div>
+                    </div>
+                    <div class="dm-actions"><button class="action-btn delete-btn" data-dm-id="${escapedId}" data-dm-name="${escapedName}"><i class="fas fa-trash"></i></button></div>
+                </div>`;
+            }).join('');
+            
+            // Привязываем обработчики для кнопок удаления
+            attachDMDeleteHandlers();
+        }
+    } catch (e) {
+        console.error(e);
     }
+}
+
+function attachDMDeleteHandlers() {
+    const deleteButtons = document.querySelectorAll('.dm-actions .delete-btn');
+    deleteButtons.forEach(btn => {
+        btn.removeEventListener('click', handleDMDelete);
+        btn.addEventListener('click', handleDMDelete);
+    });
+}
+
+function handleDMDelete(e: Event) {
+    e.stopPropagation();
+    const btn = e.currentTarget as HTMLElement;
+    const dmId = btn.getAttribute('data-dm-id');
+    const dmName = btn.getAttribute('data-dm-name');
+    if (dmId && dmName) {
+        deleteDMChannel(dmId, dmName);
+    }
+}
 
     async function loadUsersWithStatus() {
         try {
@@ -2998,7 +3339,6 @@ if (isChatPage) {
     function startServerTimeUpdater() {
         fetchServerTimeAPI();
         fetchServerTimeSignalR();
-        setTimeout(updateTitleWithTimeStatus, 500);
         setInterval(() => {
             fetchServerTimeAPI();
             fetchServerTimeSignalR();
@@ -3072,68 +3412,172 @@ if (isChatPage) {
         setTimeout(() => updateScrollButtonsVisibility(), 100);
     }
 
-    async function joinChannel(type: 'channel' | 'dm', id: string, name: string, desc: string): Promise<void> {
-        // ПРОВЕРКА НА НЕОТПРАВЛЕННЫЙ ФАЙЛ
-        if (pendingFileBlob) {
-            const confirmSwitch = confirm('У вас есть неотправленный файл. Отменить его и переключить чат?');
-            if (confirmSwitch) {
-                cancelFilePreview();
+    let joinQueue = Promise.resolve();
+    let queuedJoin = false;
+
+    async function joinChannel(type, id, name, desc) {
+        // Мгновенно обновляем UI (опционально, но улучшает отзывчивость)
+        updateUIForChannelSwitch(type, id, name, desc);
+
+        // Ставим в очередь, не блокируя следующие клики
+        joinQueue = joinQueue.then(async () => {
+            // Проверяем, не переключились ли уже на этот же канал
+            if (currentChannel === id && currentChannelType === type) return;
+
+            // ---- вся логика переключения (без confirm) ----
+            // Убираем confirm – при потере файла/редактирования просто сбрасываем состояние
+            if (pendingFileBlob) cancelFilePreview();
+            if (editingMessageData) cancelEditing();
+            if (replyToMessageData) cancelReply();
+
+            // Выход из предыдущего канала (fire-and-forget)
+            if (connection.state === signalR.HubConnectionState.Connected && currentChannel) {
+                connection.invoke('LeaveChannel', currentChannel).catch(e => console.warn(e));
+            }
+
+            // Обновляем глобальные переменные
+            currentChannel = id;
+            currentChannelType = type;
+            currentChannelName = name;
+            currentPage = 1;
+            hasMoreMessages = true;
+            receivedMessages.clear();
+
+            // Показываем индикатор загрузки
+            const messagesArea = document.getElementById('messages-area');
+            if (messagesArea) messagesArea.innerHTML = '<div class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin"></i> Загрузка...</div>';
+
+            // Подключаемся к новому каналу (не ждём)
+            if (connection.state === signalR.HubConnectionState.Connected) {
+                connection.invoke('JoinChannel', id).catch(e => console.warn(e));
+            }
+
+            // Загружаем сообщения (без отмены, но с быстрой сменой состояния)
+            await loadMessagesOptimized(id, true);
+
+            // Отмечаем прочитанным
+            markChannelMessagesRead(id).catch(e => console.warn(e));
+            updateActiveChannelInList(id, type);
+            if (window.innerWidth <= 768) closeSidebar();
+            document.getElementById('messageInput')?.focus();
+        });
+    }
+
+    // Новая оптимизированная функция загрузки сообщений
+    async function loadMessagesOptimized(chId, reset = true) {
+        if (!chId) return;
+        if (reset) {
+            currentPage = 1;
+            hasMoreMessages = true;
+            receivedMessages.clear();
+        }
+        try {
+            const url = `/api/messages/${chId}?page=${currentPage}&limit=${messagesPerPage}`;
+            const res = await fetch(url);
+            const data = await res.json();
+            const messages = data.messages || [];
+            hasMoreMessages = data.pagination?.hasMore || false;
+
+            if (reset) {
+                displayMessagesOptimized(messages);
             } else {
-                return; // Отменяем переход
+                prependMessages(messages);
+            }
+            updateLoadMoreIndicator();
+        } catch (e) {
+            console.error(e);
+            if (reset) {
+                const area = document.getElementById('messages-area');
+                if (area && area.innerHTML.includes('Загрузка'))
+                    area.innerHTML = '<div class="text-center text-danger">Ошибка</div>';
             }
         }
+    }
 
-        // Проверяем активное редактирование
-        if (editingMessageData) {
-            const confirmSwitch = confirm('Есть несохранённое редактирование. Отменить его и переключить чат?');
-            if (confirmSwitch) {
-                cancelEditing();
-            } else {
-                return;
-            }
+    // Оптимизированная функция отображения сообщений
+    function displayMessagesOptimized(msgs: Message[]) {
+        initMessageStatuses(msgs);
+
+        const div = document.getElementById('messages-area');
+        if (!msgs || msgs.length === 0) {
+            if (div) div.innerHTML = '<div class="text-center text-muted mt-5">Нет сообщений. Напишите первое!</div>';
+            return;
         }
 
-        // Проверяем активный ответ
-        if (replyToMessageData) {
-            const confirmSwitch = confirm('Есть несохранённый ответ на сообщение. Отменить его и переключить чат?');
-            if (confirmSwitch) {
-                cancelReply();
-            } else {
-                return;
-            }
+        // Используем DocumentFragment для пакетного обновления DOM
+        const fragment = document.createDocumentFragment();
+        const tempDiv = document.createElement('div');
+
+        msgs.forEach((msg: Message) => {
+            if (msg.readBy) messageReadBy.set(msg.id, msg.readBy);
+            tempDiv.innerHTML = formatMessage(msg);
+            const msgElement = tempDiv.firstElementChild;
+            if (msgElement) fragment.appendChild(msgElement);
+            tempDiv.innerHTML = '';
+        });
+
+        if (div) {
+            div.innerHTML = '';
+            div.appendChild(fragment);
         }
 
-        if (currentChannel === id && currentChannelType === type) return;
+        attachReadCounterHandlers();
+        bindMessageEvents();
 
-        if (connection.state === signalR.HubConnectionState.Connected && currentChannel) {
-            try {
-                await connection.invoke('LeaveChannel', currentChannel);
-            } catch (error) {
-                console.error('Failed to leave channel:', error);
-            }
-        }
+        // Используем requestAnimationFrame для плавной прокрутки
+        requestAnimationFrame(() => {
+            scrollToBottomSafely(true);
+            setTimeout(() => markVisibleMessagesAsRead(), 500);
+            setTimeout(() => updateScrollButtonsVisibility(), 100);
+        });
+    }
 
-        currentChannel = id;
-        currentChannelType = type;
-        currentChannelName = name;
-
+    // Функция мгновенного обновления UI при переключении
+    function updateUIForChannelSwitch(type: 'channel' | 'dm', id: string, name: string, desc: string) {
+        // Обновляем заголовок чата
         const currentChannelNameEl = document.getElementById('current-channel-name');
         const currentChannelDescEl = document.getElementById('current-channel-desc');
         const messageInput = document.getElementById('messageInput') as HTMLInputElement | null;
 
         if (currentChannelNameEl) currentChannelNameEl.textContent = type === 'dm' ? `${name}` : name;
-        let newDesc = desc ? `(${desc})` : '';
-        if (currentChannelDescEl) currentChannelDescEl.textContent = newDesc;
+        if (currentChannelDescEl) currentChannelDescEl.textContent = desc ? `(${desc})` : '';
         if (messageInput) messageInput.disabled = false;
-        await connection.invoke('JoinChannel', id);
-        currentPage = 1;
-        hasMoreMessages = true;
-        await loadMessages(id, true);
-        updateActiveChannelInList(id, type);
-        await markChannelMessagesRead(id);
-        if (window.innerWidth <= 768) closeSidebar();
-        if (messageInput) messageInput.focus();
+
+        // Визуально выделяем активный канал в списке
+        document.querySelectorAll('.channel-item, .dm-item').forEach(el => el.classList.remove('active'));
+        const selector = type === 'channel' ? `.channel-item[data-channel-id="${id}"]` : `.dm-item[data-dm-id="${id}"]`;
+        const activeItem = document.querySelector(selector);
+        if (activeItem) activeItem.classList.add('active');
     }
+
+    // Добавьте обработчик событий с использованием делегирования и throttle
+    let pendingClick = false;
+
+    document.addEventListener('click', (e) => {
+        const channelInfo = e.target.closest('.channel-info, .dm-info');
+        if (!channelInfo) return;
+
+        // Дополнительная проверка – элемент всё ещё в DOM
+        if (!document.body.contains(channelInfo)) return;
+
+        e.preventDefault();
+        e.stopPropagation();   // предотвращаем случайные двойные вызовы
+
+        const channelItem = channelInfo.closest('.channel-item, .dm-item');
+        if (!channelItem) return;
+
+        const id = channelItem.dataset.channelId || channelItem.dataset.dmId;
+        const name = channelItem.dataset.channelName || channelItem.querySelector('.channel-name, .dm-name')?.innerText.trim() || '';
+        const desc = channelItem.dataset.channelDesc || '';
+        const type = channelItem.classList.contains('channel-item') ? 'channel' : 'dm';
+
+        if (id) joinChannel(type, id, name, desc);
+    });
+
+    // Добавьте отмену запросов при размонтировании
+    window.addEventListener('beforeunload', () => {
+        currentJoinToken++; // Инвалидируем все ожидающие операции
+    });
 
     function updateActiveChannelInList(id: string, type: 'dm' | 'channel') {
         document.querySelectorAll('.channel-item, .dm-item').forEach(el => el.classList.remove('active'));
@@ -3428,6 +3872,12 @@ if (isChatPage) {
 
         const isCurrent = message.channelId === currentChannel;
 
+
+        // Инициализация readBy для нового сообщения
+        if (message.readBy) {
+            messageReadBy.set(message.id, message.readBy);
+        }
+        
         // Если сообщение в текущем канале - показываем сразу
         if (isCurrent) {
             if (messagesDiv && messagesDiv.innerHTML.includes('Нет сообщений')) messagesDiv.innerHTML = '';
@@ -3437,6 +3887,7 @@ if (isChatPage) {
                 // и передаем их через window
                 const messageHtml = formatMessage(message);
                 messagesDiv.insertAdjacentHTML('beforeend', messageHtml);
+                attachReadCounterHandlers();
                 bindMessageEvents();
                 // Принудительно регистрируем обработчики для нового сообщения
                 const newMsgElement = document.getElementById(`msg-${message.id}`);
@@ -3464,6 +3915,10 @@ if (isChatPage) {
                         markSingleMessageRead(message.id);
                     }
                 }, 100);
+            }
+
+            if (currentChannelType === 'channel') {
+                updateReadByDisplay(message.id);
             }
         }
 
@@ -3514,7 +3969,6 @@ if (isChatPage) {
             span.textContent = '--:--:--';
             span.style.color = '#ffc107';
         }
-        updateTitleWithTimeStatus(); // <-- добавить эту строку
 
         showNotification('Потеря соединения. Переподключение...', 'warning');
     });
@@ -3590,6 +4044,21 @@ if (isChatPage) {
                     reaction.setAttribute('data-msg-id', id);
                 }
             });
+
+            if (messageReadBy.has(tempId)) {
+                messageReadBy.set(id, messageReadBy.get(tempId));
+                messageReadBy.delete(tempId);
+            }
+
+            // Переносим статусы сообщений
+            if (messageStatuses.has(tempId)) {
+                messageStatuses.set(id, messageStatuses.get(tempId));
+                messageStatuses.delete(tempId);
+            }
+
+            if (currentChannelType === 'channel') {
+                updateReadByDisplay(id);
+            }
         }
 
         pendingMessages.delete(tempId);

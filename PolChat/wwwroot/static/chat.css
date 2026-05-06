@@ -487,6 +487,89 @@ body.page-chat {
     .reaction-user-item:hover .reaction-user-avatar {
         transform: scale(1.05);
     }
+    /* Стили для всплывающей панели пользователей реакций */
+    .reaction-users-popup {
+        animation: popupFadeIn 0.15s ease-out;
+    }
+
+        .reaction-users-popup::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .reaction-users-popup::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        .reaction-users-popup::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+
+            .reaction-users-popup::-webkit-scrollbar-thumb:hover {
+                background: #a1a1a1;
+            }
+
+    @keyframes popupFadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(5px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    /* Стили для всплывающей панели пользователей реакций и прочитавших */
+    .reaction-users-popup {
+        animation: popupFadeIn 0.15s ease-out;
+    }
+
+        .reaction-users-popup::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .reaction-users-popup::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        .reaction-users-popup::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+
+            .reaction-users-popup::-webkit-scrollbar-thumb:hover {
+                background: #a1a1a1;
+            }
+
+    @keyframes popupFadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(5px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    /* Добавьте в CSS для более плавного переключения */
+    .channel-item, .dm-item {
+        transition: background-color 0.15s ease;
+        cursor: pointer;
+    }
+
+        .channel-item:active, .dm-item:active {
+            background-color: rgba(0, 0, 0, 0.05);
+        }
+    /* Индикатор загрузки сообщений */
+    .loading-messages {
+        opacity: 0.7;
+        transition: opacity 0.2s;
+    }
 
     .section-header {
         display: flex;
@@ -2456,7 +2539,7 @@ body.page-user-management {
 }
 
 /* В конце chat.css добавьте: */
-.reaction-badge {
+/*.reaction-badge {
     cursor: pointer;
     user-select: none;
 }
@@ -2487,4 +2570,4 @@ body.page-user-management {
     .reaction-user-item:hover {
         background: #f8f9fa !important;
         cursor: pointer;
-    }
+    }*/
