@@ -13,6 +13,9 @@ public class ChatDbContext : DbContext
     public DbSet<Message> messages => Set<Message>();
     public DbSet<DMChannel> dm_channels => Set<DMChannel>();
 
+
+    public DbSet<Reaction> Reactions=> Set<Reaction>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         // Users
@@ -85,7 +88,7 @@ public class ChatDbContext : DbContext
             e.Property(x => x.Reactions)
             .HasConversion(
                 v => JsonSerializer.Serialize(v, JsonSerializerOptions.Default),
-                v => JsonSerializer.Deserialize<List<Reaction>>(v, JsonSerializerOptions.Default)!
+                v => JsonSerializer.Deserialize<List<ReactionInMessage>>(v, JsonSerializerOptions.Default)!
             );
 
 

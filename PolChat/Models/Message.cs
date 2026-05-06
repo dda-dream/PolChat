@@ -19,7 +19,7 @@ public class Message
     public string? ReplyToId { get; set; }
 
     // PostgreSQL arrays
-    public List<Reaction> Reactions { get; set; } = new();
+    public List<ReactionInMessage> Reactions { get; set; } = new();
 
 
     public string[] ReadBy { get; set; } = Array.Empty<string>();
@@ -36,7 +36,7 @@ public class Message
     public User? User { get; set; }
 }
 
-public class Reaction
+public class ReactionInMessage
 {
     public string Emoji { get; set; } = null!;
     public List<string> Users { get; set; } = new();
@@ -52,7 +52,7 @@ public class MessageDto
     public string Timestamp { get; set; } = null!;
     public bool Edited { get; set; }
     public DateTime? EditedAt { get; set; }
-    public List<Reaction> Reactions { get; set; } = new List<Reaction>();
+    public List<ReactionInMessage> Reactions { get; set; } = new List<ReactionInMessage>();
     public string[] ReadBy { get; set; } = Array.Empty<string>();
     public List<string> DeliveredTo { get; set; } = new();
     public ReplyToInfo? ReplyTo { get; set; }

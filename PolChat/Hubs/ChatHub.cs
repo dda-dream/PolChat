@@ -205,7 +205,7 @@ public class ChatHub : Hub
             ReplyToId = replyToId,
             Timestamp = now,
             Edited = false,
-            Reactions = new List<Reaction>(),
+            Reactions = new List<ReactionInMessage>(),
             ReadBy = Array.Empty<string>(),//new List<string>(),
             DeliveredTo = new List<string>()
         };
@@ -278,7 +278,7 @@ public class ChatHub : Hub
             fileUrl = fileUrl,
             timestamp = now.ToString("O"),
             edited = false,
-            reactions = new List<Reaction>(),
+            reactions = new List<ReactionInMessage>(),
             readBy = new List<string>(),
             deliveredTo = new List<string>(),
             replyTo = replyToInfo  // может быть null
@@ -336,7 +336,7 @@ public class ChatHub : Hub
 
         if (row == null) return;
 
-        var reactions = row ?? new List<Reaction>();
+        var reactions = row ?? new List<ReactionInMessage>();
         var existing = reactions.FirstOrDefault(r => r.Emoji == emoji);
 
         if (existing != null)
@@ -354,7 +354,7 @@ public class ChatHub : Hub
         }
         else
         {
-            reactions.Add(new Reaction { Emoji = emoji, Users = new List<string> { username } });
+            reactions.Add(new ReactionInMessage { Emoji = emoji, Users = new List<string> { username } });
         }
 
         // Save back as JSONB

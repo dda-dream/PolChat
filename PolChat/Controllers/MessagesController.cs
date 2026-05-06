@@ -71,7 +71,7 @@ public class MessagesController : ControllerBase
                 Timestamp = row.Timestamp.ToString("O"), // ISO 8601 format
                 Edited = row.Edited,
                 EditedAt = row.EditedAt,
-                Reactions = row.Reactions ?? new List<Reaction>(),
+                Reactions = row.Reactions ?? new List<ReactionInMessage>(),
                 ReadBy = row.ReadBy ?? Array.Empty<string>(),
                 DeliveredTo = row.DeliveredTo ?? new List<string>(),
                 IsDeletedSender = !senderExists
@@ -200,7 +200,7 @@ public class MessagesController : ControllerBase
                 Timestamp = row.Timestamp.ToString("O"),
                 Edited = row.Edited,
                 EditedAt = row.EditedAt,
-                Reactions = row.Reactions ?? new List<Reaction>(),
+                Reactions = row.Reactions ?? new List<ReactionInMessage>(),
                 ReadBy = row.ReadBy ?? Array.Empty<string>(),
                 DeliveredTo = row.DeliveredTo ?? new List<string>(),
                 IsDeletedSender = !senderExists
@@ -433,7 +433,7 @@ public class MessagesController : ControllerBase
 
         // Загружаем реакции (если они хранятся как JSON)
         // У вас в модели Message есть поле Reactions типа List<Reaction>
-        var reactions = message.Reactions ?? new List<Reaction>();
+        var reactions = message.Reactions ?? new List<ReactionInMessage>();
 
         var msgDto = new
         {

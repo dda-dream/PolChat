@@ -1,6 +1,5 @@
 
 //<reference path="./global.d.ts" />
-// @ts-nocheck
 "use strict";
 
 

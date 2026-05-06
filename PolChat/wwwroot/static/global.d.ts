@@ -3,7 +3,6 @@ import * as _bootstrap from 'bootstrap';
 
 declare global {
     const signalR: typeof _signalR;
-     //const bootstrap: typeof _bootstrap;
       
     interface Message {
         id: string;
@@ -109,5 +108,4 @@ declare global {
     }
 }
 
-// Обязательно оставляем export {} в конце
 export { };
