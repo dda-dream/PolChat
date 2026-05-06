@@ -105,6 +105,7 @@ declare global {
         sendFileMessage: () => Promise<void>; 
         cancelEditing: () => void;     
         scrollToEditingMessage: () => void;
+        showReactionUsers?: (messageId: string, emoji: string) => void;
     }
 }
 

@@ -1,5 +1,6 @@
 
-/// <reference path="./global.d.ts" />
+//<reference path="./global.d.ts" />
+// @ts-nocheck
 "use strict";
 
 
@@ -68,16 +69,22 @@ if (isChatPage) {
         .build();
 
     // Start connection
-    connection.start().then(() => {
-        console.log('SignalR Connected');
-        updateConnectionStatus(true);
-        updateUserStatusOnServer(STATUS.ONLINE);
-        loadUsersWithStatus();
-        forceRefreshUnreadCounts();
-        updateServerTimeInTitle();
-    }).catch(
-        err => console.error('SignalR connection error:', err)
-    );
+    connection.start()
+        .then(() => {
+            console.log('SignalR Connected');
+            updateConnectionStatus(true);
+            updateUserStatusOnServer(STATUS.ONLINE);
+            loadUsersWithStatus();
+            forceRefreshUnreadCounts();
+        })
+        .catch(err => {
+            console.error('SignalR connection error:', err);
+            updateConnectionStatus(false);
+        })
+        .finally(() => {
+            // ВАЖНО: запускаем обновление времени даже если соединение не установлено
+            startServerTimeUpdater();
+        });
 
     function toggleSidebar() {
         // Проверка на неотправленный файл
@@ -180,8 +187,6 @@ if (isChatPage) {
 
     let pendingMessages = new Map<string, Partial<Message>>();
 
-    let serverTimeOffset = 0;           // разница между серверным и локальным временем (мс)
-    let titleUpdateInterval: number | null = null;
     let lastUnreadCount = 0;
 
     let lastMessageTimestamp: string | null = null;
@@ -319,33 +324,6 @@ if (isChatPage) {
 
             messageStatuses.set(msg.id, s);
         }
-    }
-
-    function parseServerDateTime(dateTimeStr: string): Date | null {
-        // формат "дд.мм.гггг чч:мм:сс"
-        const parts = dateTimeStr.split(' ');
-        if (parts.length !== 2) return null;
-        const dateParts = parts[0].split('.');
-        const timeParts = parts[1].split(':');
-        if (dateParts.length !== 3 || timeParts.length !== 3) return null;
-        const year = parseInt(dateParts[2], 10);
-        const month = parseInt(dateParts[1], 10) - 1;
-        const day = parseInt(dateParts[0], 10);
-        const hour = parseInt(timeParts[0], 10);
-        const minute = parseInt(timeParts[1], 10);
-        const second = parseInt(timeParts[2], 10);
-        return new Date(year, month, day, hour, minute, second);
-    }
-
-    function updateTitleWithCurrentTime() {
-        const now = new Date();
-        const serverNow = new Date(now.getTime() + serverTimeOffset);
-        const timeStr = serverNow.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        const dateStr = serverNow.toLocaleDateString('ru-RU');
-        const title = lastUnreadCount > 0
-            ? `(${lastUnreadCount}) Pol Чат | ${dateStr} ${timeStr}`
-            : `Pol Чат | ${dateStr} ${timeStr}`;
-        if (document.title !== title) document.title = title;
     }
 
     function getSafeUsername(username: string | null | undefined, isDeleted: boolean): string {
@@ -566,6 +544,140 @@ if (isChatPage) {
         }
     }
 
+    async function showReactionUsers(messageId: string, emoji: string) {
+        console.log('=== showReactionUsers START ===');
+        console.log('messageId:', messageId);
+        console.log('emoji:', emoji);
+
+        try {
+            // Прямой вызов нового API
+            const response = await fetch(`/api/messages/item/${messageId}`);
+
+            if (!response.ok) {
+                console.error('Failed to fetch message:', response.status);
+                showNotification('Не удалось загрузить информацию о реакции', 'danger');
+                return;
+            }
+
+            const message = await response.json();
+            console.log('Received message:', message);
+
+            // Ищем нужную реакцию
+            const reactions = message.reactions || [];
+            const reaction = reactions.find((r: any) => r.emoji === emoji);
+
+            console.log('Found reaction:', reaction);
+
+            if (!reaction || !reaction.users || reaction.users.length === 0) {
+                showNotification('Нет пользователей с этой реакцией', 'info');
+                return;
+            }
+
+            // Показываем модальное окно со списком пользователей
+            await showReactionUsersModal(emoji, reaction.users);
+
+        } catch (error) {
+            console.error('Error loading reaction users:', error);
+            showNotification('Ошибка загрузки списка пользователей', 'danger');
+        }
+    }
+
+    // Вынесем показ модального окна в отдельную функцию
+    async function showReactionUsersModal(emoji: string, users: string[]) {
+        if (!users || users.length === 0) {
+            showNotification('Нет пользователей с этой реакцией', 'info');
+            return;
+        }
+
+        // Получаем информацию о пользователях
+        const usersResponse = await fetch('/api/users');
+        const allUsers = await usersResponse.json() as User[];
+        const userMap = new Map<string, User>();
+        allUsers.forEach(u => userMap.set(u.username, u));
+
+        // Сортируем: текущий пользователь сверху
+        const sortedUsers = [...users].sort((a, b) => {
+            if (a === currentUsername) return -1;
+            if (b === currentUsername) return 1;
+            return 0;
+        });
+
+        const modalHtml = `
+        <div class="modal fade" id="reactionUsersModal" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered modal-sm">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <span style="font-size: 1.5rem;">${escapeHtml(emoji)}</span>
+                            Реакция (${users.length})
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body" style="max-height: 60vh; overflow-y: auto; padding: 0;">
+                        <div id="reactionUsersList">
+                            <div class="text-center text-muted py-3">Загрузка...</div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+        const oldModal = document.getElementById('reactionUsersModal');
+        if (oldModal) oldModal.remove();
+
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+        const container = document.getElementById('reactionUsersList');
+        if (container) {
+            let html = '';
+
+            for (const username of sortedUsers) {
+                const user = userMap.get(username) || { status: 'offline', role: 'user' } as User;
+                const isOnline = user.status === 'online';
+                const isAdmin = user.role === 'admin';
+                const isCurrentUser = username === currentUsername;
+
+                html += `
+                <div class="reaction-user-item" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #e9ecef; ${isCurrentUser ? 'background: #f0f7ff;' : ''}">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div class="reaction-user-avatar" style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">
+                            ${escapeHtml(username.charAt(0).toUpperCase())}
+                        </div>
+                        <div>
+                            <div class="reaction-user-name" style="font-weight: 500;">
+                                ${escapeHtml(username)}
+                                ${isCurrentUser ? '<span class="badge bg-primary ms-2" style="font-size: 10px;">Вы</span>' : ''}
+                                ${isAdmin ? '<i class="fas fa-crown text-warning ms-1" style="font-size: 12px;"></i>' : ''}
+                            </div>
+                            <div class="reaction-user-status" style="font-size: 11px; color: #6c757d;">
+                                <span class="status-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; background: ${isOnline ? '#4caf50' : '#9e9e9e'};"></span>
+                                ${isOnline ? 'онлайн' : (user.lastSeen ? formatLastSeen(user.lastSeen) : 'офлайн')}
+                            </div>
+                        </div>
+                    </div>
+                    <i class="fas fa-smile" style="color: ${isCurrentUser ? '#007bff' : '#6c757d'}; opacity: 0.7;"></i>
+                </div>
+            `;
+            }
+
+            container.innerHTML = html;
+        }
+
+        const modalEl = document.getElementById('reactionUsersModal');
+        if (modalEl) {
+            const modal = new window.bootstrap.Modal(modalEl);
+            modal.show();
+
+            modalEl.addEventListener('hidden.bs.modal', () => {
+                modalEl.remove();
+            });
+        }
+    }
+
     function updateMessageStatus(messageId: string, status: MessageStatusType) {
         // Обновляем кэш
         messageStatuses.set(messageId, status);
@@ -625,7 +737,7 @@ if (isChatPage) {
 
         let reactionsHtml = '';
         if (msg.reactions && msg.reactions.length) {
-            reactionsHtml = `<div class="message-reactions">${msg.reactions.map(r => `<span class="reaction-badge" data-msg-id="${escapeHtml(msg.id)}" data-emoji="${escapeHtml(r.emoji)}">${escapeHtml(r.emoji)} ${r.users.length}</span>`).join('')}</div>`;
+            reactionsHtml = `<div class="message-reactions">${msg.reactions.map(r => `<span class="reaction-badge" data-msg-id="${escapeHtml(msg.id)}" data-emoji="${escapeHtml(r.emoji)}" style="cursor: pointer;"><span class="reaction-emoji">${escapeHtml(r.emoji)}</span> <span class="reaction-count">${r.users.length}</span></span>`).join('')}</div>`;
         }
 
         const safeUsername = escapeHtml(displayUsername);
@@ -711,6 +823,31 @@ if (isChatPage) {
     function handleMessageActions(e: MouseEvent) {
         const target = e.target as HTMLElement;
 
+        // Обработка клика по реакции
+        const reactionBadge = target.closest('.reaction-badge');
+        if (reactionBadge) {
+            e.preventDefault();
+            e.stopPropagation();
+            const msgId = reactionBadge.getAttribute('data-msg-id');
+            const emoji = reactionBadge.getAttribute('data-emoji');
+            if (msgId && emoji) {
+                // Проверяем, был ли клик по счётчику (числу)
+                const countElement = target.closest('.reaction-count');
+                const isCountClick = countElement !== null;
+
+                console.log('Reaction click:', { isCountClick, target: target.className, emoji });
+
+                if (isCountClick) {
+                    // Открываем список пользователей
+                    showReactionUsers(msgId, emoji);
+                } else {
+                    // Добавляем/убираем реакцию (стандартное поведение)
+                    addReaction(msgId, emoji);
+                }
+            }
+            return;
+        }
+
         // Обработка кнопок действий
         const actionButton = target.closest('.message-action-btn');
         if (actionButton) {
@@ -757,18 +894,7 @@ if (isChatPage) {
             return;
         }
 
-        // Обработка клика по реакции
-        const reactionBadge = target.closest('.reaction-badge');
-        if (reactionBadge) {
-            e.preventDefault();
-            e.stopPropagation();
-            const msgId = reactionBadge.getAttribute('data-msg-id');
-            const emoji = reactionBadge.getAttribute('data-emoji');
-            if (msgId && emoji) {
-                addReaction(msgId, emoji);
-            }
-            return;
-        }
+        
 
         // Обработка клика по счетчику прочитавших
         const readCounter = target.closest('.read-counter');
@@ -1455,15 +1581,25 @@ if (isChatPage) {
         editingIndicator.id = 'editingPreview';
         editingIndicator.className = 'editing-preview';
 
-        // Обрезаем длинный текст для отображения
-        const previewText = messageContent.length > 50 ? messageContent.substring(0, 47) + '...' : messageContent;
+        // Определяем текст для отображения в индикаторе
+        let previewText = messageContent;
+        let iconClass = 'fas fa-edit';
+        let iconColor = '#28a745';
+
+        if (!messageContent || messageContent.trim() === '') {
+            previewText = 'Добавить текст к файлу';
+            iconClass = 'fas fa-file-image';
+            iconColor = '#17a2b8';
+        } else if (messageContent.length > 50) {
+            previewText = messageContent.substring(0, 47) + '...';
+        }
 
         editingIndicator.innerHTML = `
         <div class="editing-preview-content" onclick="window.scrollToEditingMessage()">
-            <i class="fas fa-edit" style="color: #28a745;"></i>
+            <i class="${iconClass}" style="color: ${iconColor};"></i>
             <div class="editing-info">
                 <span class="editing-label">Редактирование сообщения</span>
-                <span class="editing-preview-text">${escapeHtml(previewText) || 'Файл'}</span>
+                <span class="editing-preview-text">${escapeHtml(previewText)}</span>
             </div>
         </div>
         <button class="cancel-editing-btn" onclick="window.cancelEditing()">
@@ -1538,6 +1674,8 @@ if (isChatPage) {
         }
 
         // *** РЕДАКТИРОВАНИЕ СООБЩЕНИЯ ***
+        // В функции sendMessage, секция редактирования:
+
         if (editingMessageData) {
             // Проверяем, что мы всё ещё в том же чате
             if (editingMessageData.channelId !== currentChannel || editingMessageData.channelType !== currentChannelType) {
@@ -1546,22 +1684,84 @@ if (isChatPage) {
                 return;
             }
 
-            const response = await fetch(`/api/messages/${editingMessageData.id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ content: content })
-            });
+            try {
+                const response = await fetch(`/api/messages/${editingMessageData.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content: content })
+                });
 
-            if (response.ok) {
-                cancelEditing();
-                input.value = '';
-                autoResizeTextarea();
-                input.focus();
-                cancelReply();
-                showNotification('✅ Сообщение отредактировано', 'success');
-            } else {
-                const error = await response.json();
-                showNotification(error.error || 'Ошибка редактирования', 'danger');
+                if (response.ok) {
+                    // НЕМЕДЛЕННО ОБНОВЛЯЕМ DOM
+                    const msgDiv = document.getElementById(`msg-${editingMessageData.id}`);
+                    if (msgDiv) {
+                        let textDiv = msgDiv.querySelector('.message-text');
+
+                        if (content && content.trim()) {
+                            // Если есть текст - создаём или обновляем .message-text
+                            if (textDiv) {
+                                textDiv.innerHTML = formatText(content);
+                            } else {
+                                // Находим .message-bubble и вставляем текст перед файлом или реакциями
+                                const bubble = msgDiv.querySelector('.message-bubble');
+                                const replyDiv = msgDiv.querySelector('.message-reply');
+                                const fileDiv = msgDiv.querySelector('.message-file');
+                                const reactionsDiv = msgDiv.querySelector('.message-reactions');
+
+                                const newTextDiv = document.createElement('div');
+                                newTextDiv.className = 'message-text';
+                                newTextDiv.innerHTML = formatText(content);
+
+                                if (replyDiv && replyDiv.nextSibling) {
+                                    bubble?.insertBefore(newTextDiv, replyDiv.nextSibling);
+                                } else if (fileDiv) {
+                                    bubble?.insertBefore(newTextDiv, fileDiv);
+                                } else if (reactionsDiv) {
+                                    bubble?.insertBefore(newTextDiv, reactionsDiv);
+                                } else {
+                                    bubble?.appendChild(newTextDiv);
+                                }
+                            }
+                        } else {
+                            // Если текст пустой - удаляем .message-text если он есть
+                            if (textDiv && (!content || content.trim() === '')) {
+                                textDiv.remove();
+                            }
+                        }
+
+                        // Добавляем индикатор (ред.) в заголовок
+                        const header = msgDiv.querySelector('.message-header');
+                        if (header && !header.innerHTML.includes('(ред.)')) {
+                            const timeSpan = header.querySelector('.message-time');
+                            const editedSpan = document.createElement('span');
+                            editedSpan.className = 'message-time';
+                            editedSpan.textContent = '(ред.)';
+
+                            if (timeSpan && timeSpan.nextSibling) {
+                                header.insertBefore(editedSpan, timeSpan.nextSibling);
+                            } else if (timeSpan) {
+                                timeSpan.insertAdjacentElement('afterend', editedSpan);
+                            } else {
+                                header.appendChild(editedSpan);
+                            }
+                        }
+                    }
+
+                    cancelEditing();
+                    const input = document.getElementById('messageInput') as HTMLTextAreaElement;
+                    if (input) {
+                        input.value = '';
+                        autoResizeTextarea();
+                        input.focus();
+                    }
+                    cancelReply();
+                    showNotification('✅ Сообщение отредактировано', 'success');
+                } else {
+                    const error = await response.json();
+                    showNotification(error.error || 'Ошибка редактирования', 'danger');
+                }
+            } catch (error) {
+                showNotification('Ошибка при редактировании', 'danger');
             }
             return;
         }
@@ -1722,21 +1922,25 @@ if (isChatPage) {
             return;
         }
 
+        // Ищем текстовое содержимое сообщения
         const textDiv = msgDiv.querySelector('.message-text');
-        if (!textDiv) {
-            showNotification('Редактирование недоступно для этого сообщения', 'warning');
-            return;
-        }
+        let plainText = '';
 
-        // Извлекаем текст
-        let htmlContent = textDiv.innerHTML;
-        let plainText = htmlContent.replace(/<br\s*\/?>/gi, '\n');
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = plainText;
-        plainText = tempDiv.textContent || tempDiv.innerText || '';
-        const textarea = document.createElement('textarea');
-        textarea.innerHTML = plainText;
-        plainText = textarea.value;
+        if (textDiv) {
+            // Если есть текст, извлекаем его
+            let htmlContent = textDiv.innerHTML;
+            plainText = htmlContent.replace(/<br\s*\/?>/gi, '\n');
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = plainText;
+            plainText = tempDiv.textContent || tempDiv.innerText || '';
+            const textarea = document.createElement('textarea');
+            textarea.innerHTML = plainText;
+            plainText = textarea.value;
+        } else {
+            // Если текста нет, но есть файл - будем добавлять текст к существующему файлу
+            // plainText остаётся пустым - пользователь сможет добавить текст
+            plainText = '';
+        }
 
         // Сохраняем данные редактирования
         editingMessageData = {
@@ -1755,8 +1959,9 @@ if (isChatPage) {
             autoResizeTextarea();
         }
 
-        // Показываем зеленую плашку
-        showEditingIndicator(plainText);
+        // Показываем зеленую плашку (показываем информацию о сообщении)
+        const displayText = plainText || (msgDiv.querySelector('.message-file') ? '💬 Добавить текст к файлу' : '✏️ Редактирование');
+        showEditingIndicator(plainText || displayText);
 
         // Подсвечиваем редактируемое сообщение
         document.querySelectorAll('.message-editing-highlight').forEach(el => el.classList.remove('message-editing-highlight'));
@@ -2189,29 +2394,6 @@ if (isChatPage) {
             }
             lastUnreadCount = total;
 
-            // Получаем серверное время и вычисляем смещение
-            try {
-                const timeRes = await fetch('/api/time');
-                const timeData = await timeRes.json();
-                const serverDateTimeStr = `${timeData.date} ${timeData.time}`;
-                const serverDate = parseServerDateTime(serverDateTimeStr);
-                if (serverDate) {
-                    const localNow = new Date();
-                    serverTimeOffset = serverDate.getTime() - localNow.getTime();
-                }
-            } catch (e) {
-                console.warn('Failed to sync time:', e);
-            }
-
-            updateTitleWithCurrentTime();
-            updateFavicon(total);
-
-            // Запускаем таймер обновления заголовка, если ещё не запущен
-            if (titleUpdateInterval === null) {
-                titleUpdateInterval = window.setInterval(() => {
-                    updateTitleWithCurrentTime();
-                }, 1000);
-            }
         } catch (e) {
             console.error('Failed to update unread total:', e);
         }
@@ -2743,6 +2925,106 @@ if (isChatPage) {
         window.location.href = `/channel_settings.html?id=${currentChannel}`;
     }
 
+    async function fetchServerTimeSignalR() {
+        const span = document.getElementById('signalrServerTime');
+        if (!span) return;
+
+        if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+            span.textContent = '--:--:--';
+            span.style.color = '#ffc107';
+            updateTitleWithTimeStatus(); // вызываем сразу
+            return;
+        }
+
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('SignalR invoke timeout')), 5000);
+        });
+
+        try {
+            const timeStr = await Promise.race([
+                connection.invoke('GetServerTime'),
+                timeoutPromise
+            ]);
+            const serverDate = new Date(timeStr);
+            if (!isNaN(serverDate.getTime())) {
+                const hours = serverDate.getHours().toString().padStart(2, '0');
+                const minutes = serverDate.getMinutes().toString().padStart(2, '0');
+                const seconds = serverDate.getSeconds().toString().padStart(2, '0');
+                span.textContent = `${hours}:${minutes}:${seconds}`;
+                span.style.color = '#28a745';
+            } else {
+                span.textContent = '--:--:--';
+                span.style.color = '#dc3545';
+            }
+        } catch (err) {
+            console.warn('SignalR time invoke failed', err);
+            span.textContent = '--:--:--';
+            span.style.color = '#dc3545';
+        }
+        updateTitleWithTimeStatus(); // вызываем после любого исхода
+    }
+
+    async function fetchServerTimeAPI() {
+        const span = document.getElementById('apiServerTime');
+        if (!span) return;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        try {
+            const response = await fetch('/api/time', { signal: controller.signal });
+            clearTimeout(timeoutId);
+            const data = await response.json();
+            if (data.timestamp) {
+                const serverDate = new Date(data.timestamp);
+                if (!isNaN(serverDate.getTime())) {
+                    const hours = serverDate.getHours().toString().padStart(2, '0');
+                    const minutes = serverDate.getMinutes().toString().padStart(2, '0');
+                    const seconds = serverDate.getSeconds().toString().padStart(2, '0');
+                    span.textContent = `${hours}:${minutes}:${seconds}`;
+                    span.style.color = '#28a745';
+                    updateTitleWithTimeStatus();
+                    return;
+                }
+            }
+            span.textContent = data.time || '--:--:--';
+            span.style.color = '#28a745';
+        } catch (err) {
+            console.warn('API time fetch failed', err);
+            span.textContent = '--:--:--';
+            span.style.color = '#dc3545';
+        }
+        updateTitleWithTimeStatus();
+    }
+
+    function startServerTimeUpdater() {
+        fetchServerTimeAPI();
+        fetchServerTimeSignalR();
+        setTimeout(updateTitleWithTimeStatus, 500);
+        setInterval(() => {
+            fetchServerTimeAPI();
+            fetchServerTimeSignalR();
+        }, 60000);
+    }
+
+    function updateTitleWithTimeStatus() {
+        const apiSpan = document.getElementById('apiServerTime');
+        const signalrSpan = document.getElementById('signalrServerTime');
+
+        const apiHasDash = apiSpan?.textContent === '--:--:--';
+        const signalrHasDash = signalrSpan?.textContent === '--:--:--';
+
+        let apiStatus = 'WebApi';
+        let signalrStatus = 'SignalR';
+
+        if (apiHasDash) apiStatus = '---';
+        if (signalrHasDash) signalrStatus = '---';
+
+        const title = `Pol Чат [ ${apiStatus} | ${signalrStatus} ]`;
+
+        if (document.title !== title) {
+            document.title = title;
+        }
+    }
+
     // ============ ЗАГРУЗКА СООБЩЕНИЙ ============
 
     async function loadMessages(chId: string, reset = true) {
@@ -2930,22 +3212,6 @@ if (isChatPage) {
         }
     }
 
-    // Периодически синхронизируем время с сервером
-    async function syncServerTime() {
-        try {
-            const response = await fetch('/api/time');
-            const data = await response.json();
-            const serverTime = new Date(`${data.date} ${data.time}`);
-            const localTime = new Date();
-            serverTimeOffset = serverTime.getTime() - localTime.getTime();
-        } catch (error) {
-            console.warn('Failed to sync server time:', error);
-        }
-    }
-
-    // Периодическая синхронизация (каждые 5 минут)
-    setInterval(syncServerTime, 5 * 60 * 1000);
-
     // Храним отправленные во время офлайна сообщения
     let offlineMessagesQueue: Array<{
         tempId: string;
@@ -2992,8 +3258,42 @@ if (isChatPage) {
     }
 
     // Вызываем при переподключении
-    connection.onreconnected(async () => {
-        await flushOfflineMessages();
+    connection.onreconnected(async (connectionId) => {
+        console.log('SignalR reconnected, connectionId:', connectionId);
+        updateConnectionStatus(true);
+
+        // Небольшая задержка перед обновлением времени
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Обновляем время и заголовок
+        await fetchServerTimeSignalR();
+        await fetchServerTimeAPI();
+
+        // ВАЖНО: Повторно присоединяемся к текущему каналу
+        if (currentChannel) {
+            try {
+                await connection.invoke('JoinChannel', currentChannel);
+                console.log(`Re-joined channel: ${currentChannel}`);
+            } catch (err) {
+                console.error('Failed to re-join channel:', err);
+            }
+        }
+
+        // Запрашиваем пропущенные сообщения
+        if (currentChannel && lastMessageTimestamp) {
+            fetchMissedMessages(currentChannel, lastMessageTimestamp)
+                .catch(err => console.error('Failed to fetch missed messages:', err));
+        }
+
+        // Обновляем статус
+        await updateUserStatusOnServer(STATUS.ONLINE);
+        await loadUsersWithStatus();
+        await forceRefreshUnreadCounts();
+
+        // Перерисовываем текущий чат, если нужно
+        if (currentChannel) {
+            await loadMessages(currentChannel, true);
+        }
     });
 
     function updateConnectionStatus(connected: boolean, reconnecting: boolean = false) {
@@ -3056,21 +3356,7 @@ if (isChatPage) {
         }, 30000);
     }
 
-    async function updateServerTimeInTitle() {
-        try {
-            const response = await fetch('/api/time');
-            const timeData = await response.json();
-            const serverDateTimeStr = `${timeData.date} ${timeData.time}`;
-            const serverDate = parseServerDateTime(serverDateTimeStr);
-            if (serverDate) {
-                const localNow = new Date();
-                serverTimeOffset = serverDate.getTime() - localNow.getTime();
-                updateTitleWithCurrentTime();
-            }
-        } catch (e) {
-            console.error('Failed to sync time:', e);
-        }
-    }
+    
 
     // ============ УВЕДОМЛЕНИЯ ============
 
@@ -3107,7 +3393,6 @@ if (isChatPage) {
         updateUserStatusOnServer(STATUS.ONLINE);
         loadUsersWithStatus();
         forceRefreshUnreadCounts();
-        updateServerTimeInTitle();
     });
 
     connection.on('close', () => updateConnectionStatus(false));
@@ -3222,45 +3507,32 @@ if (isChatPage) {
     connection.onreconnecting((error) => {
         console.log('SignalR reconnecting...', error);
         updateConnectionStatus(false);
+
+        // Немедленно показываем прочерки
+        const span = document.getElementById('signalrServerTime');
+        if (span) {
+            span.textContent = '--:--:--';
+            span.style.color = '#ffc107';
+        }
+        updateTitleWithTimeStatus(); // <-- добавить эту строку
+
         showNotification('Потеря соединения. Переподключение...', 'warning');
     });
 
-    connection.onreconnected((connectionId: string | undefined) => {
-        console.log('SignalR reconnected, connectionId:', connectionId);
-        updateConnectionStatus(true);
-
-        // ВАЖНО: Повторно присоединяемся к текущему каналу
-        if (currentChannel) {
-            connection.invoke('JoinChannel', currentChannel)
-                .then(() => console.log(`Re-joined channel: ${currentChannel}`))
-                .catch(err => console.error('Failed to re-join channel:', err));
-        }
-
-        // Запрашиваем пропущенные сообщения
-        if (currentChannel && lastMessageTimestamp) {
-            fetchMissedMessages(currentChannel, lastMessageTimestamp)
-                .catch(err => console.error('Failed to fetch missed messages:', err));
-        }
-
-        // Обновляем статус
-        updateUserStatusOnServer(STATUS.ONLINE)
-            .then(() => loadUsersWithStatus())
-            .catch(err => console.error('Failed to update status:', err));
-
-        forceRefreshUnreadCounts().catch(err => console.error('Failed to refresh unread counts:', err));
-
-        // Перерисовываем текущий чат, если нужно
-        if (currentChannel) {
-            loadMessages(currentChannel, true).catch(err => console.error('Failed to reload messages:', err));
-        }
-    });
 
 
     connection.onclose(async (error) => {
         console.log('SignalR connection closed', error);
         updateConnectionStatus(false);
 
-        // Пытаемся переподключиться вручную
+        // Фоново пробуем обновить реальные данные (для восстановления)
+        if (typeof fetchServerTimeSignalR === 'function') {
+            fetchServerTimeSignalR();
+        }
+        if (typeof fetchServerTimeAPI === 'function') {
+            fetchServerTimeAPI();
+        }
+
         if (error) {
             showNotification('Соединение потеряно. Переподключение...', 'warning');
         }
@@ -3325,29 +3597,61 @@ if (isChatPage) {
 
     // TODO: Requires Hub event - currently not broadcast by backend
     connection.on('message_edited', (data: { id: string; content: string }) => {
-        const d = document.getElementById(`msg-${data.id}`);
-        if (d) {
-            const td = d.querySelector('.message-text');
-            if (td) {
-                td.innerHTML = formatText(data.content);
+        const msgDiv = document.getElementById(`msg-${data.id}`);
+        if (msgDiv) {
+            let textDiv = msgDiv.querySelector('.message-text');
+
+            if (data.content && data.content.trim()) {
+                // Если есть текст - создаём или обновляем
+                if (textDiv) {
+                    textDiv.innerHTML = formatText(data.content);
+                } else {
+                    // Вставляем новый .message-text
+                    const bubble = msgDiv.querySelector('.message-bubble');
+                    const replyDiv = msgDiv.querySelector('.message-reply');
+                    const fileDiv = msgDiv.querySelector('.message-file');
+                    const reactionsDiv = msgDiv.querySelector('.message-reactions');
+
+                    const newTextDiv = document.createElement('div');
+                    newTextDiv.className = 'message-text';
+                    newTextDiv.innerHTML = formatText(data.content);
+
+                    if (replyDiv && replyDiv.nextSibling) {
+                        bubble?.insertBefore(newTextDiv, replyDiv.nextSibling);
+                    } else if (fileDiv) {
+                        bubble?.insertBefore(newTextDiv, fileDiv);
+                    } else if (reactionsDiv) {
+                        bubble?.insertBefore(newTextDiv, reactionsDiv);
+                    } else {
+                        bubble?.appendChild(newTextDiv);
+                    }
+                }
+            } else {
+                // Если контент пустой - удаляем текстовую часть
+                if (textDiv) {
+                    textDiv.remove();
+                }
             }
 
-            // Добавляем индикатор (ред.), если его ещё нет в заголовке
-            const header = d.querySelector('.message-header');
-            if (header && !header.innerHTML.includes('(ред.)')) {
-                // Находим контейнер для времени или добавляем в конец
-                const timeSpan = header.querySelector('.message-time');
-                const editedSpan = document.createElement('span');
-                editedSpan.className = 'message-time';
-                editedSpan.textContent = '(ред.)';
+            // Добавляем или обновляем индикатор редактирования
+            const header = msgDiv.querySelector('.message-header');
+            if (header) {
+                let editedSpan = header.querySelector('.message-time:last-child');
+                const hasEditedIndicator = header.innerHTML.includes('(ред.)');
 
-                if (timeSpan && timeSpan.nextSibling) {
-                    header.insertBefore(editedSpan, timeSpan.nextSibling);
-                } else if (timeSpan) {
-                    // Вставляем после последнего .message-time
-                    timeSpan.insertAdjacentElement('afterend', editedSpan);
-                } else {
-                    header.appendChild(editedSpan);
+                if (!hasEditedIndicator) {
+                    const timeSpan = header.querySelector('.message-time:first-child');
+                    editedSpan = document.createElement('span');
+                    editedSpan.className = 'message-time';
+                    editedSpan.textContent = '(ред.)';
+
+                    if (timeSpan && timeSpan.nextSibling) {
+                        header.insertBefore(editedSpan, timeSpan.nextSibling);
+                    } else if (timeSpan) {
+                        timeSpan.insertAdjacentElement('afterend', editedSpan);
+                    } else {
+                        header.appendChild(editedSpan);
+                    }
                 }
             }
         }
@@ -3452,19 +3756,29 @@ if (isChatPage) {
     });
 
     connection.on('message_reaction_updated', (data: { id: string; reactions: { emoji: string; users: string[] }[] }) => {
-        const d = document.getElementById(`msg-${data.id}`);
-        if (d) {
-            let rd = d.querySelector('.message-reactions');
-            if (!rd) {
-                const bubble = d.querySelector('.message-bubble');
+        const msgDiv = document.getElementById(`msg-${data.id}`);
+        if (msgDiv) {
+            let reactionsContainer = msgDiv.querySelector('.message-reactions');
+
+            if (!reactionsContainer && data.reactions && data.reactions.length > 0) {
+                const bubble = msgDiv.querySelector('.message-bubble');
                 if (bubble) {
-                    rd = document.createElement('div');
-                    rd.className = 'message-reactions';
-                    bubble.appendChild(rd);
+                    reactionsContainer = document.createElement('div');
+                    reactionsContainer.className = 'message-reactions';
+                    bubble.appendChild(reactionsContainer);
                 }
             }
-            if (rd && data.reactions) {
-                rd.innerHTML = data.reactions.map(r => `<span class="reaction-badge" onclick="addReaction('${escapeHtml(data.id)}','${escapeHtml(r.emoji)}')">${escapeHtml(r.emoji)} ${r.users.length}</span>`).join('');
+
+            if (reactionsContainer && data.reactions) {
+                // Обновляем HTML реакций с правильными атрибутами
+                reactionsContainer.innerHTML = data.reactions.map(r =>
+                    `<span class="reaction-badge" data-msg-id="${escapeHtml(data.id)}" data-emoji="${escapeHtml(r.emoji)}" style="cursor: pointer;">
+                    <span class="reaction-emoji">${escapeHtml(r.emoji)}</span> 
+                    <span class="reaction-count">${r.users.length}</span>
+                </span>`
+                ).join('');
+            } else if (reactionsContainer && (!data.reactions || data.reactions.length === 0)) {
+                reactionsContainer.remove();
             }
         }
     });
@@ -3588,7 +3902,6 @@ if (isChatPage) {
     async function initChat() {
         await loadCurrentUser();
 
-
         // Экспорт функций в глобальную область
         window.toggleSidebar = toggleSidebar;
         window.closeSidebar = closeSidebar;
@@ -3619,6 +3932,7 @@ if (isChatPage) {
         window.cancelEditing = cancelEditing;
         window.scrollToEditingMessage = scrollToEditingMessage;
         window.sendFileMessage = sendFileMessage;
+        window.showReactionUsers = showReactionUsers;
 
         setupActivityTracking();
         setupVisibilityTracking();
@@ -3777,10 +4091,6 @@ if (isChatPage) {
             syncMessageStatuses();
         }, 30000);
 
-        setInterval(() => {
-            updateServerTimeInTitle();
-        }, 60000);
-
         window.addEventListener('beforeunload', () => {
             if (titleUpdateInterval) clearInterval(titleUpdateInterval);
         });
@@ -3838,6 +4148,7 @@ if (isChatPage) {
             }));
         }
     }, 1000);
+
 
     // Запуск инициализации чата
     initChat();

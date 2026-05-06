@@ -449,6 +449,44 @@ body.page-chat {
             font-size: 16px;
         }
     }
+    /* Стили для списка пользователей реакций */
+    .reaction-badge {
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+        .reaction-badge:hover {
+            background: rgba(0,0,0,0.1);
+            transform: scale(1.02);
+        }
+
+    .reaction-count {
+        font-weight: 500;
+        min-width: 20px;
+        display: inline-block;
+        text-align: center;
+    }
+    /* Для своих сообщений */
+    .message-own .reaction-badge:hover {
+        background: rgba(0,0,0,0.15);
+    }
+    /* Анимация для модального окна */
+    #reactionUsersModal .modal-content {
+        border-radius: 20px;
+        overflow: hidden;
+    }
+
+    .reaction-user-item {
+        transition: background 0.2s ease;
+    }
+
+    .reaction-user-avatar {
+        transition: transform 0.2s ease;
+    }
+
+    .reaction-user-item:hover .reaction-user-avatar {
+        transform: scale(1.05);
+    }
 
     .section-header {
         display: flex;
@@ -2416,3 +2454,37 @@ body.page-user-management {
         font-size: 20px;
     }
 }
+
+/* В конце chat.css добавьте: */
+.reaction-badge {
+    cursor: pointer;
+    user-select: none;
+}
+
+.reaction-emoji {
+    cursor: pointer;
+}
+
+.reaction-count {
+    cursor: pointer;
+    margin-left: 2px;
+    font-weight: 500;
+}
+
+.reaction-badge:hover {
+    background: rgba(0,0,0,0.1);
+    transform: scale(1.02);
+}
+
+.message-own .reaction-badge:hover {
+    background: rgba(0,0,0,0.15);
+}
+
+.reaction-user-item {
+    transition: background 0.2s ease;
+}
+
+    .reaction-user-item:hover {
+        background: #f8f9fa !important;
+        cursor: pointer;
+    }
