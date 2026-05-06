@@ -406,6 +406,13 @@ public class ChatHub : Hub
                 });
     }
 
+    public async Task<string> GetServerTime()
+    {
+        var now = DateTime.UtcNow;
+        // возвращаем локальное время сервера в формате "HH:mm:ss"
+        return now.ToString("O");
+    }
+
     // === Helper methods ===
 
     private async Task<SessionData?> GetSessionFromContext()

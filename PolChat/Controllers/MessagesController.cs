@@ -412,4 +412,49 @@ public class MessagesController : ControllerBase
         }
         return result;
     }
+
+    // GET /api/messages/item/{messageId}
+    [HttpGet("/api/messages/item/{messageId}")]
+    public async Task<IActionResult> GetMessageById(string messageId)
+    {
+        var session = await GetSession();
+        if (session == null) return Unauthorized(new { error = "Not authenticated" });
+
+        var existingUsers = (await _db.users.Select(u => u.Username).ToListAsync()).ToHashSet();
+
+        var message = await _db.messages
+            .Where(m => m.Id == messageId)
+            .FirstOrDefaultAsync();
+
+        if (message == null)
+            return NotFound(new { error = "Message not found" });
+
+        var senderExists = existingUsers.Contains(message.Username);
+
+        // Загружаем реакции (если они хранятся как JSON)
+        // У вас в модели Message есть поле Reactions типа List<Reaction>
+        var reactions = message.Reactions ?? new List<Reaction>();
+
+        var msgDto = new
+        {
+            id = message.Id,
+            channelId = message.ChannelId,
+            username = senderExists ? message.Username : Constants.DeletedUserDisplayName,
+            content = message.Content,
+            fileUrl = message.FileUrl,
+            timestamp = message.Timestamp.ToString("O"),
+            edited = message.Edited,
+            editedAt = message.EditedAt,
+            reactions = reactions.Select(r => new
+            {
+                emoji = r.Emoji,
+                users = r.Users ?? new List<string>()
+            }).ToList(),
+            readBy = message.ReadBy ?? Array.Empty<string>(),
+            deliveredTo = message.DeliveredTo ?? new List<string>(),
+            isDeletedSender = !senderExists
+        };
+
+        return Ok(msgDto);
+    }
 }

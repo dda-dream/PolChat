@@ -25,6 +25,8 @@ public class AuthController : ControllerBase
         _httpContextAccessor = httpContextAccessor;
     }
 
+
+
     // GET /login - return simple HTML page (in production, serve from wwwroot)
     [HttpGet("/login")]
     public IActionResult LoginPage()
