@@ -3534,19 +3534,16 @@ function handleDMDelete(e: Event) {
         }
     }
 
-    // Вызываем при переподключении
-    connection.onreconnected(async (connectionId: string) => {
+
+    async function onReconnectedAsync(connectionId: string) {
         console.log('SignalR reconnected, connectionId:', connectionId);
         updateConnectionStatus(true);
 
-        // Небольшая задержка перед обновлением времени
         await new Promise(resolve => setTimeout(resolve, 100));
 
-        // Обновляем время и заголовок
         await fetchServerTimeSignalR();
         await fetchServerTimeAPI();
 
-        // ВАЖНО: Повторно присоединяемся к текущему каналу
         if (currentChannel) {
             try {
                 await connection.invoke('JoinChannel', currentChannel);
@@ -3556,23 +3553,26 @@ function handleDMDelete(e: Event) {
             }
         }
 
-        // Запрашиваем пропущенные сообщения
         if (currentChannel && lastMessageTimestamp) {
-            fetchMissedMessages(currentChannel, lastMessageTimestamp)
-                .catch(err => console.error('Failed to fetch missed messages:', err));
+            await fetchMissedMessages(currentChannel, lastMessageTimestamp);
         }
 
-        // Обновляем статус
         await updateUserStatusOnServer(STATUS.ONLINE);
         await loadUsersWithStatus();
         await forceRefreshUnreadCounts();
 
-        // Перерисовываем текущий чат, если нужно
         if (currentChannel) {
             await loadMessages(currentChannel, true);
         }
 
         await flushOfflineMessages();
+    }
+
+    connection.onreconnected((connectionId?: string): void => {
+        if (!connectionId) return;
+        void onReconnectedAsync(connectionId).catch(err =>
+            console.error('onReconnectedAsync failed:', err)
+        );
     });
 
     function updateConnectionStatus(connected: boolean, reconnecting: boolean = false) {
