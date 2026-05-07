@@ -748,7 +748,7 @@ if (isChatPage) {
         });
 
         // Закрытие при клике вне
-        const closePopup = (e: MouseEvent) => {
+        const closePopup = (e: Event) => {
             if (popup && !popup.contains(e.target as Node)) {
                 popup.remove();
                 document.removeEventListener('click', closePopup);
@@ -766,102 +766,6 @@ if (isChatPage) {
         if (count % 10 === 1 && count % 100 !== 11) return 'пользователь';
         if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) return 'пользователя';
         return 'пользователей';
-    }
-
-    // Вынесем показ модального окна в отдельную функцию
-    async function showReactionUsersModal(emoji: string, users: string[]) {
-        if (!users || users.length === 0) {
-            showNotification('Нет пользователей с этой реакцией', 'info');
-            return;
-        }
-
-        // Получаем информацию о пользователях
-        const usersResponse = await fetch('/api/users');
-        const allUsers = await usersResponse.json() as User[];
-        const userMap = new Map<string, User>();
-        allUsers.forEach(u => userMap.set(u.username, u));
-
-        // Сортируем: текущий пользователь сверху
-        const sortedUsers = [...users].sort((a, b) => {
-            if (a === currentUsername) return -1;
-            if (b === currentUsername) return 1;
-            return 0;
-        });
-
-        const modalHtml = `
-        <div class="modal fade" id="reactionUsersModal" tabindex="-1">
-            <div class="modal-dialog modal-dialog-centered modal-sm">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">
-                            <span style="font-size: 1.5rem;">${escapeHtml(emoji)}</span>
-                            Реакция (${users.length})
-                        </h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body" style="max-height: 60vh; overflow-y: auto; padding: 0;">
-                        <div id="reactionUsersList">
-                            <div class="text-center text-muted py-3">Загрузка...</div>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-
-        const oldModal = document.getElementById('reactionUsersModal');
-        if (oldModal) oldModal.remove();
-
-        document.body.insertAdjacentHTML('beforeend', modalHtml);
-
-        const container = document.getElementById('reactionUsersList');
-        if (container) {
-            let html = '';
-
-            for (const username of sortedUsers) {
-                const user = userMap.get(username) || { status: 'offline', role: 'user' } as User;
-                const isOnline = user.status === 'online';
-                const isAdmin = user.role === 'admin';
-                const isCurrentUser = username === currentUsername;
-
-                html += `
-                <div class="reaction-user-item" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #e9ecef; ${isCurrentUser ? 'background: #f0f7ff;' : ''}">
-                    <div style="display: flex; align-items: center; gap: 12px;">
-                        <div class="reaction-user-avatar" style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">
-                            ${escapeHtml(username.charAt(0).toUpperCase())}
-                        </div>
-                        <div>
-                            <div class="reaction-user-name" style="font-weight: 500;">
-                                ${escapeHtml(username)}
-                                ${isCurrentUser ? '<span class="badge bg-primary ms-2" style="font-size: 10px;">Вы</span>' : ''}
-                                ${isAdmin ? '<i class="fas fa-crown text-warning ms-1" style="font-size: 12px;"></i>' : ''}
-                            </div>
-                            <div class="reaction-user-status" style="font-size: 11px; color: #6c757d;">
-                                <span class="status-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; background: ${isOnline ? '#4caf50' : '#9e9e9e'};"></span>
-                                ${isOnline ? 'онлайн' : (user.lastSeen ? formatLastSeen(user.lastSeen) : 'офлайн')}
-                            </div>
-                        </div>
-                    </div>
-                    <i class="fas fa-smile" style="color: ${isCurrentUser ? '#007bff' : '#6c757d'}; opacity: 0.7;"></i>
-                </div>
-            `;
-            }
-
-            container.innerHTML = html;
-        }
-
-        const modalEl = document.getElementById('reactionUsersModal');
-        if (modalEl) {
-            const modal = new window.bootstrap.Modal(modalEl);
-            modal.show();
-
-            modalEl.addEventListener('hidden.bs.modal', () => {
-                modalEl.remove();
-            });
-        }
     }
 
     function updateMessageStatus(messageId: string, status: MessageStatusType) {
@@ -1259,7 +1163,7 @@ if (isChatPage) {
 
                 // Фильтруем автора сообщения
                 if (msgUsername) {
-                    serverReadBy = serverReadBy.filter(u => u !== msgUsername);
+                    serverReadBy = serverReadBy.filter((u: string) => u !== msgUsername);
                 }
 
                 console.log('Filtered readBy (without author):', serverReadBy);
@@ -1417,7 +1321,7 @@ if (isChatPage) {
         });
 
         // Закрытие при клике вне
-        const closePopup = (e: MouseEvent) => {
+        const closePopup = (e: Event) => {
             if (popup && !popup.contains(e.target as Node)) {
                 popup.remove();
                 document.removeEventListener('click', closePopup);
@@ -2667,7 +2571,7 @@ if (isChatPage) {
 
     async function updateTotalUnreadFromServer() {
         try {
-            let total = 0;
+            let total = 0; 
             const res = await fetch('/api/unread');
             const allUnreadData = await res.json();
 
@@ -2685,80 +2589,10 @@ if (isChatPage) {
                     total += count;
                 }
             }
-            lastUnreadCount = total;
 
         } catch (e) {
             console.error('Failed to update unread total:', e);
         }
-    }
-
-    function updateFavicon(count: number) {
-        // Создаем canvas 64x64 для лучшей четкости
-        const canvas = document.createElement('canvas');
-        canvas.width = 64;
-        canvas.height = 64;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        ctx.clearRect(0, 0, 64, 64);
-
-        if (count > 0) {
-            // Рисуем КРУГЛЫЙ красный фон ПО ЦЕНТРУ
-            ctx.fillStyle = 'MidnightBlue';
-            ctx.beginPath();
-            ctx.arc(32, 32, 30, 0, 2 * Math.PI);
-            ctx.fill();
-
-            // Белая обводка для контраста
-            ctx.strokeStyle = 'white';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(32, 32, 30, 0, 2 * Math.PI);
-            ctx.stroke();
-
-            // Большая белая цифра ПО ЦЕНТРУ
-            ctx.fillStyle = 'white';
-            ctx.font = `bold 42px "Segoe UI", Arial, sans-serif`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-
-            let text = count > 99 ? '99+' : count.toString();
-            ctx.fillText(text, 32, 34);
-
-            // Немного уменьшаем шрифт для 3-х значных чисел
-            if (count >= 100) {
-                ctx.font = `bold 32px "Segoe UI", Arial, sans-serif`;
-                ctx.fillText(text, 32, 34);
-            } else if (count >= 10) {
-                ctx.font = `bold 38px "Segoe UI", Arial, sans-serif`;
-                ctx.fillText(text, 32, 34);
-            }
-        } else {
-            // Если нет непрочитанных - показываем обычную иконку чата
-            const gradient = ctx.createLinearGradient(0, 0, 64, 64);
-            gradient.addColorStop(0, '#5865F2');
-            gradient.addColorStop(1, '#4752C4');
-            ctx.fillStyle = gradient;
-            ctx.beginPath();
-            ctx.arc(32, 32, 32, 0, 2 * Math.PI);
-            ctx.fill();
-
-            ctx.fillStyle = 'white';
-            ctx.font = 'bold 36px "Segoe UI", Arial, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('💬', 32, 34);
-        }
-
-        // Полностью заменяем иконку
-        const links = document.querySelectorAll("link[rel*='icon'], link[rel*='apple-touch-icon']");
-        links.forEach(link => link.remove());
-
-        const link = document.createElement('link');
-        link.type = 'image/x-icon';
-        link.rel = 'icon';
-        link.href = canvas.toDataURL('image/png');
-        document.getElementsByTagName('head')[0].appendChild(link);
     }
 
     function updateLoadMoreIndicator() {
@@ -2951,7 +2785,7 @@ if (isChatPage) {
         });
     }
 
-    function handleReadCounterClick(e: MouseEvent) {
+    function handleReadCounterClick(e: Event) {
         e.preventDefault();
         e.stopPropagation();
         const msgId = (e.currentTarget as HTMLElement).getAttribute('data-msg-id');
@@ -3413,9 +3247,8 @@ function handleDMDelete(e: Event) {
     }
 
     let joinQueue = Promise.resolve();
-    let queuedJoin = false;
 
-    async function joinChannel(type, id, name, desc) {
+    async function joinChannel(type: 'channel' | 'dm', id: string, name: string, desc: string) {
         // Мгновенно обновляем UI (опционально, но улучшает отзывчивость)
         updateUIForChannelSwitch(type, id, name, desc);
 
@@ -3432,7 +3265,7 @@ function handleDMDelete(e: Event) {
 
             // Выход из предыдущего канала (fire-and-forget)
             if (connection.state === signalR.HubConnectionState.Connected && currentChannel) {
-                connection.invoke('LeaveChannel', currentChannel).catch(e => console.warn(e));
+                connection.invoke('LeaveChannel', currentChannel).catch((e: Error) => console.warn(e));
             }
 
             // Обновляем глобальные переменные
@@ -3449,7 +3282,7 @@ function handleDMDelete(e: Event) {
 
             // Подключаемся к новому каналу (не ждём)
             if (connection.state === signalR.HubConnectionState.Connected) {
-                connection.invoke('JoinChannel', id).catch(e => console.warn(e));
+                connection.invoke('JoinChannel', id).catch((e: Error) => console.warn(e));
             }
 
             // Загружаем сообщения (без отмены, но с быстрой сменой состояния)
@@ -3464,7 +3297,7 @@ function handleDMDelete(e: Event) {
     }
 
     // Новая оптимизированная функция загрузки сообщений
-    async function loadMessagesOptimized(chId, reset = true) {
+    async function loadMessagesOptimized(chId: string, reset: boolean = true) {
         if (!chId) return;
         if (reset) {
             currentPage = 1;
@@ -3550,24 +3383,24 @@ function handleDMDelete(e: Event) {
         if (activeItem) activeItem.classList.add('active');
     }
 
-    // Добавьте обработчик событий с использованием делегирования и throttle
-    let pendingClick = false;
+    document.addEventListener('click', (e: MouseEvent) => {
+        const target = e.target as HTMLElement;
+        if (!target) return;
 
-    document.addEventListener('click', (e) => {
-        const channelInfo = e.target.closest('.channel-info, .dm-info');
+        const channelInfo = target.closest('.channel-info, .dm-info');
         if (!channelInfo) return;
 
-        // Дополнительная проверка – элемент всё ещё в DOM
         if (!document.body.contains(channelInfo)) return;
 
         e.preventDefault();
-        e.stopPropagation();   // предотвращаем случайные двойные вызовы
+        e.stopPropagation();
 
-        const channelItem = channelInfo.closest('.channel-item, .dm-item');
+        const channelItem = channelInfo.closest('.channel-item, .dm-item') as HTMLElement;
         if (!channelItem) return;
 
         const id = channelItem.dataset.channelId || channelItem.dataset.dmId;
-        const name = channelItem.dataset.channelName || channelItem.querySelector('.channel-name, .dm-name')?.innerText.trim() || '';
+        const nameElement = channelItem.querySelector('.channel-name, .dm-name') as HTMLElement;
+        const name = channelItem.dataset.channelName || nameElement?.innerText?.trim() || '';
         const desc = channelItem.dataset.channelDesc || '';
         const type = channelItem.classList.contains('channel-item') ? 'channel' : 'dm';
 
@@ -3702,7 +3535,7 @@ function handleDMDelete(e: Event) {
     }
 
     // Вызываем при переподключении
-    connection.onreconnected(async (connectionId) => {
+    connection.onreconnected(async (connectionId: string) => {
         console.log('SignalR reconnected, connectionId:', connectionId);
         updateConnectionStatus(true);
 
@@ -3738,6 +3571,8 @@ function handleDMDelete(e: Event) {
         if (currentChannel) {
             await loadMessages(currentChannel, true);
         }
+
+        await flushOfflineMessages();
     });
 
     function updateConnectionStatus(connected: boolean, reconnecting: boolean = false) {
@@ -4046,13 +3881,18 @@ function handleDMDelete(e: Event) {
             });
 
             if (messageReadBy.has(tempId)) {
-                messageReadBy.set(id, messageReadBy.get(tempId));
+                const readByData = messageReadBy.get(tempId);
+                if (readByData) {
+                    messageReadBy.set(id, readByData);
+                }
                 messageReadBy.delete(tempId);
             }
 
-            // Переносим статусы сообщений
             if (messageStatuses.has(tempId)) {
-                messageStatuses.set(id, messageStatuses.get(tempId));
+                const statusData = messageStatuses.get(tempId);
+                if (statusData) {
+                    messageStatuses.set(id, statusData);
+                }
                 messageStatuses.delete(tempId);
             }
 
@@ -4559,10 +4399,6 @@ function handleDMDelete(e: Event) {
             if (!currentChannel || currentChannelType !== 'dm') return;
             syncMessageStatuses();
         }, 30000);
-
-        window.addEventListener('beforeunload', () => {
-            if (titleUpdateInterval) clearInterval(titleUpdateInterval);
-        });
 
         // Очистка интервала при закрытии вкладки
         window.addEventListener('beforeunload', () => clearInterval(statusSyncInterval));
