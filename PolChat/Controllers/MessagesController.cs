@@ -382,6 +382,22 @@ public class MessagesController : ControllerBase
         return Ok(new { read_by = readBy, read_count = readBy.Length });
     }
 
+    // GET /api/message/{messageId}/emoji
+    [HttpGet("/api/message/{messageId}/emoji")]
+    public async Task<IActionResult> GetMessageEmoji(string messageId)
+    {
+        var session = await GetSession();
+        if (session == null) return Unauthorized(new { error = "Not authenticated" });
+
+        var reactions = _db.Reactions
+                            .AsNoTracking()
+                            .Where(r => r.MessageId == messageId)
+                            .AsAsyncEnumerable();
+                
+        return Ok(reactions);
+    }
+
+
     private async Task<Dictionary<string, int>> GetRealUnreadCounts(string username)
     {
         var conn = _db.Database.GetDbConnection();
@@ -457,4 +473,40 @@ public class MessagesController : ControllerBase
 
         return Ok(msgDto);
     }
+
+    [HttpGet("/api/messages/migrate_reactions")]
+    public async Task<IActionResult> MigrateReactions()
+    {
+        var session = await GetSession();
+        if (session == null) return Unauthorized(new { error = "Not authenticated" });
+
+        var messages = _db.Messages
+            .AsNoTracking()
+            .AsAsyncEnumerable();
+
+       
+
+        await foreach (var msg in messages)
+        {
+            foreach (var reaction in msg.Reactions)
+            {
+                foreach (var user in reaction.Users)
+                {
+                    Reaction r = new Reaction();
+                    r.UserId = user;
+                    r.MessageId = msg.Id;
+                    r.Emoji = reaction.Emoji;
+                    r.CreatedAt = DateTime.SpecifyKind(msg.Timestamp.ToUniversalTime(), DateTimeKind.Utc);  
+
+                    await _db.Reactions.AddAsync(r);
+                }
+            }
+        }
+
+        await _db.SaveChangesAsync();
+
+        return Ok(new { success = true });
+    }
+
+
 }

@@ -6,7 +6,7 @@ namespace ChatApp.Data;
 
 public class ChatDbContext : DbContext
 {
-    public ChatDbContext(DbContextOptions<ChatDbContext> options) : base(options) 
+    public ChatDbContext(DbContextOptions<ChatDbContext> options) : base(options)
     {
     }
 
@@ -14,7 +14,7 @@ public class ChatDbContext : DbContext
     public DbSet<Channel> Channels => Set<Channel>();
     public DbSet<Message> Messages => Set<Message>();
     public DbSet<DMChannel> DmChannels => Set<DMChannel>();
-    public DbSet<Reaction> Reactions=> Set<Reaction>();
+    public DbSet<Reaction> Reactions => Set<Reaction>();
 
 
 
@@ -86,15 +86,22 @@ public class ChatDbContext : DbContext
              .HasForeignKey(m => m.ReplyToId)
              .OnDelete(DeleteBehavior.SetNull);
 
-            
+
             e.Property(x => x.Reactions)
             .HasConversion(
                 v => JsonSerializer.Serialize(v, JsonSerializerOptions.Default),
                 v => JsonSerializer.Deserialize<List<ReactionInMessage>>(v, JsonSerializerOptions.Default)!
             );
 
-
         });
+
+        modelBuilder.Entity<Reaction>(o =>
+            {
+                o.HasKey(r => new { r.UserId, r.MessageId, r.Emoji });
+            }
+        );
+
+
 
         // DM Channels
         modelBuilder.Entity<DMChannel>(e =>
@@ -108,7 +115,7 @@ public class ChatDbContext : DbContext
                 .HasColumnType("text[]");
         });
 
-        
+
 
 
     }

@@ -1,0 +1,1891 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebAPI Tester</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=Outfit:wght@400;600;700;900&display=swap');
+
+        :root {
+            --bg: #07090d;
+            --s1: #0e1117;
+            --s2: #131720;
+            --s3: #1a2030;
+            --border: #1e2a3a;
+            --border2: #243040;
+            --acc: #f97316; /* orange */
+            --acc2: #38bdf8; /* sky   */
+            --acc3: #a78bfa; /* violet*/
+            --success: #34d399;
+            --warn: #fbbf24;
+            --danger: #f87171;
+            --text: #dde4ef;
+            --muted: #4a5568;
+            --muted2: #64748b;
+            --get: #34d399;
+            --post: #60a5fa;
+            --put: #fbbf24;
+            --patch: #a78bfa;
+            --delete: #f87171;
+            --head: #38bdf8;
+            --options: #fb923c;
+        }
+
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        ::selection {
+            background: rgba(249,115,22,.25);
+            color: var(--text);
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'IBM Plex Mono',monospace;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+            /* diagonal stripe texture */
+            body::before {
+                content: '';
+                position: fixed;
+                inset: 0;
+                background: repeating-linear-gradient( -45deg, transparent,transparent 40px, rgba(249,115,22,.012) 40px,rgba(249,115,22,.012) 41px );
+                pointer-events: none;
+                z-index: 0;
+            }
+
+        /* ═══ HEADER ═══════════════════════════════════════════════ */
+        header {
+            position: relative;
+            z-index: 20;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 12px 24px;
+            background: rgba(14,17,23,.97);
+            border-bottom: 1px solid var(--border);
+            backdrop-filter: blur(10px);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .brand-icon {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg,var(--acc),#ea580c);
+            border-radius: 7px;
+            display: grid;
+            place-items: center;
+            font-size: .8rem;
+            font-weight: 900;
+            color: #000;
+            font-family: 'Outfit',sans-serif;
+            flex-shrink: 0;
+            box-shadow: 0 0 20px rgba(249,115,22,.3);
+        }
+
+        .brand-title {
+            font-family: 'Outfit',sans-serif;
+            font-size: 1.1rem;
+            font-weight: 900;
+            letter-spacing: -.01em;
+        }
+
+            .brand-title em {
+                color: var(--acc);
+                font-style: normal;
+            }
+
+        .auth-pill {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            background: rgba(52,211,153,.08);
+            border: 1px solid rgba(52,211,153,.25);
+            border-radius: 20px;
+            padding: 4px 12px;
+            font-size: .7rem;
+            color: var(--success);
+            font-weight: 500;
+        }
+
+            .auth-pill::before {
+                content: '';
+                width: 7px;
+                height: 7px;
+                border-radius: 50%;
+                background: var(--success);
+                animation: blink 2.5s ease-in-out infinite;
+            }
+
+        @keyframes blink {
+            0%,100% {
+                opacity: 1
+            }
+
+            50% {
+                opacity: .4
+            }
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-left: auto;
+        }
+
+        /* ═══ URL BAR ══════════════════════════════════════════════ */
+        .url-bar {
+            position: relative;
+            z-index: 19;
+            display: flex;
+            align-items: center;
+            gap: 0;
+            padding: 10px 24px;
+            background: var(--s1);
+            border-bottom: 1px solid var(--border);
+            gap: 8px;
+        }
+
+        .method-select-wrap {
+            position: relative;
+            flex-shrink: 0;
+        }
+
+            .method-select-wrap::after {
+                content: '▾';
+                position: absolute;
+                right: 10px;
+                top: 50%;
+                transform: translateY(-50%);
+                font-size: .65rem;
+                color: var(--muted2);
+                pointer-events: none;
+            }
+
+        #method {
+            appearance: none;
+            background: var(--s3);
+            border: 1px solid var(--border2);
+            border-radius: 7px;
+            color: var(--get);
+            font-family: 'IBM Plex Mono',monospace;
+            font-size: .8rem;
+            font-weight: 600;
+            padding: 8px 28px 8px 12px;
+            cursor: pointer;
+            outline: none;
+            min-width: 110px;
+            transition: border-color .2s;
+        }
+
+            #method:focus {
+                border-color: var(--acc);
+            }
+
+            #method.m-GET {
+                color: var(--get);
+            }
+
+            #method.m-POST {
+                color: var(--post);
+            }
+
+            #method.m-PUT {
+                color: var(--put);
+            }
+
+            #method.m-PATCH {
+                color: var(--patch);
+            }
+
+            #method.m-DELETE {
+                color: var(--danger);
+            }
+
+            #method.m-HEAD {
+                color: var(--head);
+            }
+
+            #method.m-OPTIONS {
+                color: var(--options);
+            }
+
+        .base-url-wrap {
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            background: var(--s3);
+            border: 1px solid var(--border2);
+            border-radius: 7px;
+            overflow: hidden;
+        }
+
+        .base-label {
+            padding: 0 10px;
+            font-size: .68rem;
+            color: var(--muted2);
+            border-right: 1px solid var(--border2);
+            white-space: nowrap;
+            line-height: 34px;
+        }
+
+        #base-url {
+            background: transparent;
+            border: none;
+            color: var(--muted2);
+            font-family: 'IBM Plex Mono',monospace;
+            font-size: .78rem;
+            padding: 8px 10px;
+            width: 200px;
+            outline: none;
+        }
+
+        .path-wrap {
+            flex: 1;
+            background: var(--s3);
+            border: 1px solid var(--border2);
+            border-radius: 7px;
+            display: flex;
+            align-items: center;
+            transition: border-color .2s,box-shadow .2s;
+            overflow: hidden;
+        }
+
+            .path-wrap:focus-within {
+                border-color: var(--acc);
+                box-shadow: 0 0 0 2px rgba(249,115,22,.12);
+            }
+
+        #path-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--text);
+            font-family: 'IBM Plex Mono',monospace;
+            font-size: .82rem;
+            padding: 8px 12px;
+            outline: none;
+        }
+
+            #path-input::placeholder {
+                color: var(--muted);
+            }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 7px 16px;
+            border: none;
+            border-radius: 7px;
+            font-family: 'IBM Plex Mono',monospace;
+            font-size: .78rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity .15s,transform .1s,box-shadow .2s;
+            letter-spacing: .02em;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+            .btn:active {
+                transform: scale(.97);
+            }
+
+            .btn:disabled {
+                opacity: .35;
+                cursor: not-allowed;
+            }
+
+        .btn-send {
+            background: var(--acc);
+            color: #000;
+            min-width: 110px;
+            box-shadow: 0 0 0 rgba(249,115,22,0);
+            transition: box-shadow .25s,opacity .15s,transform .1s;
+        }
+
+            .btn-send:not(:disabled):hover {
+                box-shadow: 0 0 18px rgba(249,115,22,.45);
+            }
+
+        .btn-sm {
+            background: transparent;
+            color: var(--muted2);
+            border: 1px solid var(--border2);
+            padding: 5px 11px;
+            font-size: .7rem;
+        }
+
+            .btn-sm:not(:disabled):hover {
+                color: var(--text);
+                border-color: var(--muted2);
+            }
+
+        .btn-icon {
+            background: transparent;
+            border: none;
+            color: var(--muted);
+            cursor: pointer;
+            font-size: .85rem;
+            padding: 2px 4px;
+            transition: color .15s;
+        }
+
+            .btn-icon:hover {
+                color: var(--danger);
+            }
+
+        /* ═══ WORKSPACE ════════════════════════════════════════════ */
+        .workspace {
+            position: relative;
+            z-index: 1;
+            display: grid;
+            grid-template-columns: 420px 1fr;
+            gap: 0;
+            flex: 1;
+            min-height: 0;
+            height: calc(100vh - 104px);
+        }
+
+        /* ═══ LEFT — REQUEST PANEL ═════════════════════════════════ */
+        .req-panel {
+            border-right: 1px solid var(--border);
+            background: var(--s1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* ── Tabs ── */
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+            background: var(--s2);
+        }
+
+        .tab {
+            padding: 10px 16px;
+            font-size: .72rem;
+            font-weight: 600;
+            color: var(--muted2);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: color .15s,border-color .15s;
+            white-space: nowrap;
+            letter-spacing: .03em;
+            text-transform: uppercase;
+        }
+
+            .tab:hover {
+                color: var(--text);
+            }
+
+            .tab.active {
+                color: var(--acc);
+                border-bottom-color: var(--acc);
+            }
+
+        .tab-badge {
+            display: inline-block;
+            background: var(--s3);
+            border-radius: 8px;
+            font-size: .6rem;
+            padding: 1px 5px;
+            margin-left: 4px;
+            color: var(--muted2);
+            vertical-align: middle;
+        }
+
+        .tab.active .tab-badge {
+            background: rgba(249,115,22,.2);
+            color: var(--acc);
+        }
+
+        .tab-content {
+            display: none;
+            flex-direction: column;
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            gap: 0;
+        }
+
+            .tab-content.active {
+                display: flex;
+            }
+
+            .tab-content::-webkit-scrollbar {
+                width: 4px;
+            }
+
+            .tab-content::-webkit-scrollbar-thumb {
+                background: var(--border2);
+                border-radius: 4px;
+            }
+
+        /* ── Form atoms ── */
+        label.lbl {
+            display: block;
+            font-size: .67rem;
+            font-weight: 600;
+            color: var(--muted2);
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: .07em;
+        }
+
+        input.inp, textarea.inp, select.inp {
+            width: 100%;
+            background: var(--bg);
+            border: 1px solid var(--border2);
+            border-radius: 6px;
+            color: var(--text);
+            font-family: 'IBM Plex Mono',monospace;
+            font-size: .78rem;
+            padding: 7px 10px;
+            outline: none;
+            transition: border-color .2s,box-shadow .2s;
+            margin-bottom: 10px;
+            resize: vertical;
+        }
+
+        .inp:focus {
+            border-color: var(--acc);
+            box-shadow: 0 0 0 2px rgba(249,115,22,.1);
+        }
+
+        select.inp option {
+            background: var(--bg);
+        }
+
+        textarea.inp {
+            min-height: 80px;
+            line-height: 1.5;
+        }
+
+        .field-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr auto;
+            gap: 6px;
+            align-items: start;
+            margin-bottom: 6px;
+        }
+
+            .field-row .inp {
+                margin-bottom: 0;
+            }
+
+        .add-row-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: transparent;
+            border: 1px dashed var(--border2);
+            border-radius: 6px;
+            color: var(--muted);
+            font-family: 'IBM Plex Mono',monospace;
+            font-size: .72rem;
+            padding: 6px 12px;
+            cursor: pointer;
+            transition: all .15s;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+            .add-row-btn:hover {
+                border-color: var(--acc2);
+                color: var(--acc2);
+            }
+
+        .section-divider {
+            font-size: .65rem;
+            font-weight: 700;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+            color: var(--muted);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 10px 0 12px;
+        }
+
+            .section-divider::after {
+                content: '';
+                flex: 1;
+                height: 1px;
+                background: var(--border);
+            }
+
+        /* ── Auth section ── */
+        .auth-type-row {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+
+        .auth-chip {
+            padding: 4px 12px;
+            border: 1px solid var(--border2);
+            border-radius: 20px;
+            font-size: .7rem;
+            cursor: pointer;
+            background: transparent;
+            color: var(--muted2);
+            font-family: 'IBM Plex Mono',monospace;
+            transition: all .15s;
+        }
+
+            .auth-chip.active,
+            .auth-chip:hover {
+                border-color: var(--acc2);
+                color: var(--acc2);
+                background: rgba(56,189,248,.08);
+            }
+
+        .auth-fields {
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── Params shortcut ── */
+        .url-params-hint {
+            background: var(--s3);
+            border: 1px solid var(--border2);
+            border-radius: 6px;
+            padding: 8px 10px;
+            font-size: .7rem;
+            color: var(--muted2);
+            margin-bottom: 10px;
+            line-height: 1.6;
+        }
+
+            .url-params-hint span {
+                color: var(--acc2);
+            }
+
+        /* ── Body format tabs ── */
+        .body-fmt-row {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 10px;
+        }
+
+        .body-fmt {
+            padding: 3px 10px;
+            border: 1px solid var(--border2);
+            border-radius: 4px;
+            font-size: .68rem;
+            cursor: pointer;
+            background: transparent;
+            color: var(--muted2);
+            font-family: 'IBM Plex Mono',monospace;
+            transition: all .15s;
+        }
+
+            .body-fmt.active {
+                border-color: var(--acc3);
+                color: var(--acc3);
+                background: rgba(167,139,250,.08);
+            }
+
+        /* ═══ RIGHT — RESPONSE PANEL ════════════════════════════════ */
+        .res-panel {
+            display: flex;
+            flex-direction: column;
+            background: var(--bg);
+            overflow: hidden;
+        }
+
+        /* ── Response meta bar ── */
+        .res-meta {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 9px 20px;
+            border-bottom: 1px solid var(--border);
+            background: var(--s2);
+            flex-shrink: 0;
+            min-height: 42px;
+        }
+
+        .res-meta-title {
+            font-family: 'Outfit',sans-serif;
+            font-size: .8rem;
+            font-weight: 700;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: .1em;
+        }
+
+        .status-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 10px;
+            border-radius: 5px;
+            font-size: .75rem;
+            font-weight: 600;
+            border: 1px solid;
+            transition: all .3s;
+        }
+
+            .status-chip.s2 {
+                background: rgba(52,211,153,.1);
+                border-color: rgba(52,211,153,.3);
+                color: var(--success);
+            }
+
+            .status-chip.s3 {
+                background: rgba(251,191,36,.1);
+                border-color: rgba(251,191,36,.3);
+                color: var(--warn);
+            }
+
+            .status-chip.s4 {
+                background: rgba(248,113,113,.1);
+                border-color: rgba(248,113,113,.3);
+                color: var(--danger);
+            }
+
+            .status-chip.s5 {
+                background: rgba(167,139,250,.1);
+                border-color: rgba(167,139,250,.3);
+                color: var(--acc3);
+            }
+
+        .meta-kv {
+            font-size: .72rem;
+            color: var(--muted2);
+        }
+
+            .meta-kv span {
+                color: var(--text);
+            }
+
+        .meta-sep {
+            color: var(--border2);
+        }
+
+        .res-tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border);
+            background: var(--s1);
+            flex-shrink: 0;
+        }
+
+        /* ── Response body ── */
+        .res-content {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .res-pane {
+            display: none;
+            flex: 1;
+            overflow: auto;
+            padding: 0;
+        }
+
+            .res-pane.active {
+                display: flex;
+                flex-direction: column;
+            }
+
+            .res-pane::-webkit-scrollbar {
+                width: 5px;
+            }
+
+            .res-pane::-webkit-scrollbar-thumb {
+                background: var(--border2);
+                border-radius: 4px;
+            }
+
+        /* JSON viewer */
+        .json-viewer {
+            padding: 16px 20px;
+            font-size: .77rem;
+            line-height: 1.8;
+            white-space: pre-wrap;
+            word-break: break-all;
+            flex: 1;
+        }
+
+        .j-key {
+            color: var(--acc2);
+        }
+
+        .j-str {
+            color: var(--success);
+        }
+
+        .j-num {
+            color: var(--warn);
+        }
+
+        .j-bool {
+            color: var(--acc3);
+        }
+
+        .j-null {
+            color: var(--muted2);
+            font-style: italic;
+        }
+
+        .j-punct {
+            color: var(--muted2);
+        }
+
+        /* Raw text */
+        .raw-body {
+            flex: 1;
+            padding: 16px 20px;
+            font-size: .77rem;
+            line-height: 1.7;
+            white-space: pre-wrap;
+            word-break: break-all;
+            color: var(--text);
+            overflow: auto;
+        }
+
+        /* Headers table */
+        .headers-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: .73rem;
+        }
+
+            .headers-table th {
+                background: var(--s2);
+                color: var(--muted2);
+                font-size: .65rem;
+                font-weight: 700;
+                letter-spacing: .08em;
+                text-transform: uppercase;
+                padding: 8px 16px;
+                text-align: left;
+                border-bottom: 1px solid var(--border);
+                position: sticky;
+                top: 0;
+            }
+
+            .headers-table td {
+                padding: 6px 16px;
+                border-bottom: 1px solid var(--border);
+                vertical-align: top;
+            }
+
+                .headers-table td:first-child {
+                    color: var(--acc2);
+                    width: 40%;
+                }
+
+                .headers-table td:last-child {
+                    color: var(--text);
+                    word-break: break-all;
+                }
+
+            .headers-table tr:last-child td {
+                border-bottom: none;
+            }
+
+        /* History */
+        .history-list {
+            padding: 10px;
+        }
+
+        .hist-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: 7px;
+            margin-bottom: 6px;
+            cursor: pointer;
+            transition: background .15s,border-color .15s;
+            background: var(--s1);
+        }
+
+            .hist-item:hover {
+                background: var(--s3);
+                border-color: var(--border2);
+            }
+
+        .hist-method {
+            font-size: .68rem;
+            font-weight: 700;
+            padding: 2px 7px;
+            border-radius: 4px;
+            flex-shrink: 0;
+            background: var(--s3);
+        }
+
+        .hist-url {
+            font-size: .73rem;
+            color: var(--muted2);
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .hist-status {
+            font-size: .68rem;
+            margin-left: auto;
+            flex-shrink: 0;
+        }
+
+        .hist-time {
+            font-size: .62rem;
+            color: var(--muted);
+            flex-shrink: 0;
+        }
+
+        /* Empty state */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+            gap: 10px;
+            color: var(--muted);
+            font-size: .8rem;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .empty-icon {
+            font-size: 2.5rem;
+            opacity: .3;
+        }
+
+        /* Loading spinner */
+        .spinner {
+            width: 22px;
+            height: 22px;
+            border: 2px solid var(--border2);
+            border-top-color: var(--acc);
+            border-radius: 50%;
+            animation: spin .7s linear infinite;
+            flex-shrink: 0;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg)
+            }
+        }
+
+        /* ── Toast ── */
+        #toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 999;
+            background: var(--s2);
+            border: 1px solid var(--border2);
+            border-left: 3px solid var(--acc);
+            border-radius: 8px;
+            padding: 9px 16px;
+            font-size: .77rem;
+            opacity: 0;
+            transform: translateY(8px);
+            transition: opacity .25s,transform .25s;
+            pointer-events: none;
+            max-width: 300px;
+        }
+
+            #toast.show {
+                opacity: 1;
+                transform: translateY(0);
+            }
+
+            #toast.err {
+                border-left-color: var(--danger);
+            }
+
+            #toast.ok {
+                border-left-color: var(--success);
+            }
+
+        /* ── Saved requests ── */
+        .saved-section {
+            padding: 10px 16px 0;
+        }
+
+        .saved-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 10px;
+            border: 1px solid var(--border);
+            border-radius: 7px;
+            margin-bottom: 5px;
+            cursor: pointer;
+            transition: background .15s;
+            background: var(--s2);
+        }
+
+            .saved-item:hover {
+                background: var(--s3);
+            }
+
+        .saved-name {
+            font-size: .73rem;
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .saved-load {
+            font-size: .68rem;
+            color: var(--muted2);
+        }
+
+        /* ── Scrollbars ── */
+        .req-panel .tab-content::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .req-panel .tab-content::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        /* ── Resizable ── */
+        @media(max-width:960px) {
+            .workspace {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto 1fr;
+                height: auto;
+            }
+
+            .req-panel {
+                max-height: 520px;
+            }
+        }
+
+        /* ─── Collapsible JSON node ─── */
+        .j-collapsible {
+            cursor: pointer;
+            user-select: none;
+        }
+
+            .j-collapsible:hover .j-bracket {
+                color: var(--acc);
+            }
+    </style>
+</head>
+<body>
+    <div id="toast"></div>
+
+    <!-- ═══ HEADER ═══ -->
+    <header>
+        <div class="brand">
+            <div class="brand-icon">API</div>
+            <div class="brand-title">Web<em>API</em> Tester</div>
+        </div>
+        <div class="auth-pill">Авторизован (Cookie / Session)</div>
+        <div class="header-right">
+            <button class="btn btn-sm" onclick="openSaveDialog()">💾 Сохранить</button>
+            <button class="btn btn-sm" onclick="clearHistory()">🗑 История</button>
+        </div>
+    </header>
+
+    <!-- ═══ URL BAR ═══ -->
+    <div class="url-bar">
+        <div class="method-select-wrap">
+            <select id="method" class="m-GET" onchange="onMethodChange()">
+                <option>GET</option>
+                <option>POST</option>
+                <option>PUT</option>
+                <option>PATCH</option>
+                <option>DELETE</option>
+                <option>HEAD</option>
+                <option>OPTIONS</option>
+            </select>
+        </div>
+
+        <div class="base-url-wrap">
+            <span class="base-label">BASE</span>
+            <input id="base-url" type="text" placeholder="https://localhost:5000" value="">
+        </div>
+
+        <div class="path-wrap">
+            <input id="path-input" type="text" placeholder="/api/users/{id}?page=1&size=20">
+        </div>
+
+        <button class="btn btn-send" id="btn-send" onclick="sendRequest()">
+            <span id="send-label">▶ Send</span>
+            <div class="spinner" id="spinner" style="display:none"></div>
+        </button>
+    </div>
+
+    <!-- ═══ WORKSPACE ═══ -->
+    <div class="workspace">
+
+        <!-- ══ REQUEST PANEL ══ -->
+        <div class="req-panel">
+            <div class="tabs" id="req-tabs">
+                <div class="tab active" data-tab="params" onclick="switchTab('req','params',this)">Params <span class="tab-badge" id="badge-params">0</span></div>
+                <div class="tab" data-tab="headers" onclick="switchTab('req','headers',this)">Headers <span class="tab-badge" id="badge-headers">0</span></div>
+                <div class="tab" data-tab="body" onclick="switchTab('req','body',this)">Body</div>
+                <div class="tab" data-tab="auth" onclick="switchTab('req','auth',this)">Auth</div>
+                <div class="tab" data-tab="saved" onclick="switchTab('req','saved',this)">Saved <span class="tab-badge" id="badge-saved">0</span></div>
+            </div>
+
+            <!-- PARAMS -->
+            <div class="tab-content active" id="tc-params">
+                <div class="url-params-hint">
+                    Параметры синхронизируются с <span>?query</span> в URL.<br>
+                    Строковые параметры пути <span>{id}</span> задаются отдельно.
+                </div>
+
+                <div class="section-divider">Query параметры</div>
+                <div id="query-rows"></div>
+                <button class="add-row-btn" onclick="addRow('query')">+ Query param</button>
+
+                <div class="section-divider">Path переменные</div>
+                <div id="path-rows"></div>
+                <button class="add-row-btn" onclick="addRow('path')">+ Path variable</button>
+            </div>
+
+            <!-- HEADERS -->
+            <div class="tab-content" id="tc-headers">
+                <div class="section-divider">Пользовательские заголовки</div>
+                <div id="header-rows"></div>
+                <button class="add-row-btn" onclick="addRow('header')">+ Заголовок</button>
+
+                <div class="section-divider">Авто-заголовки</div>
+                <div style="font-size:.72rem;color:var(--muted2);line-height:1.8;padding:2px 0 10px;">
+                    Content-Type задаётся автоматически по формату тела.<br>
+                    Cookie/Session передаются браузером автоматически.<br>
+                    Authorization — настраивается на вкладке Auth.
+                </div>
+            </div>
+
+            <!-- BODY -->
+            <div class="tab-content" id="tc-body">
+                <div class="body-fmt-row" id="body-fmt-row">
+                    <button class="body-fmt active" data-fmt="json" onclick="setBodyFmt('json',this)">JSON</button>
+                    <button class="body-fmt" data-fmt="form" onclick="setBodyFmt('form',this)">Form URL-encoded</button>
+                    <button class="body-fmt" data-fmt="multipart" onclick="setBodyFmt('multipart',this)">Multipart</button>
+                    <button class="body-fmt" data-fmt="text" onclick="setBodyFmt('text',this)">Text</button>
+                    <button class="body-fmt" data-fmt="none" onclick="setBodyFmt('none',this)">None</button>
+                </div>
+
+                <div id="body-json">
+                    <div style="display:flex;gap:6px;margin-bottom:8px;">
+                        <button class="btn btn-sm" onclick="formatJson()">{ } Format</button>
+                        <button class="btn btn-sm" onclick="setJsonPreset('obj')">Объект</button>
+                        <button class="btn btn-sm" onclick="setJsonPreset('arr')">Массив</button>
+                        <button class="btn btn-sm" onclick="clearBody()">Очистить</button>
+                    </div>
+                    <textarea class="inp" id="body-text" rows="14" placeholder='{"key": "value"}'></textarea>
+                </div>
+
+                <div id="body-form" style="display:none">
+                    <div id="form-rows"></div>
+                    <button class="add-row-btn" onclick="addRow('form')">+ Поле</button>
+                </div>
+
+                <div id="body-multipart" style="display:none">
+                    <div id="mp-rows"></div>
+                    <button class="add-row-btn" onclick="addRow('mp')">+ Поле / Файл</button>
+                </div>
+
+                <div id="body-text-plain" style="display:none">
+                    <textarea class="inp" id="body-text-raw" rows="14" placeholder="plain text body"></textarea>
+                </div>
+
+                <div id="body-none" style="display:none">
+                    <div style="font-size:.74rem;color:var(--muted2);padding:10px 0;">Тело запроса не отправляется.</div>
+                </div>
+            </div>
+
+            <!-- AUTH -->
+            <div class="tab-content" id="tc-auth">
+                <div class="section-divider">Тип авторизации</div>
+                <div class="auth-type-row" id="auth-chips">
+                    <button class="auth-chip active" data-auth="cookie" onclick="setAuth('cookie',this)">Cookie (авто)</button>
+                    <button class="auth-chip" data-auth="bearer" onclick="setAuth('bearer',this)">Bearer Token</button>
+                    <button class="auth-chip" data-auth="apikey" onclick="setAuth('apikey',this)">API Key</button>
+                    <button class="auth-chip" data-auth="basic" onclick="setAuth('basic',this)">Basic</button>
+                    <button class="auth-chip" data-auth="none" onclick="setAuth('none',this)">None</button>
+                </div>
+
+                <div class="auth-fields" id="auth-fields">
+                    <!-- cookie -->
+                    <div id="af-cookie">
+                        <div class="url-params-hint" style="color:var(--success)">
+                            ✓ Cookie / Session передаются автоматически браузером.<br>
+                            Страница уже авторизована — дополнительная настройка не нужна.
+                        </div>
+                        <label class="lbl">Доп. Cookie (опционально)</label>
+                        <input class="inp" id="extra-cookie" type="text" placeholder="key=value; key2=value2">
+                    </div>
+                    <div id="af-bearer" style="display:none">
+                        <label class="lbl">Bearer Token</label>
+                        <input class="inp" id="bearer-token" type="text" placeholder="eyJhbGciOiJIUzI1NiIs...">
+                    </div>
+                    <div id="af-apikey" style="display:none">
+                        <label class="lbl">Ключ</label>
+                        <input class="inp" id="apikey-header" type="text" placeholder="X-API-Key" value="X-API-Key">
+                        <label class="lbl">Значение</label>
+                        <input class="inp" id="apikey-value" type="text" placeholder="your-api-key">
+                    </div>
+                    <div id="af-basic" style="display:none">
+                        <label class="lbl">Логин</label>
+                        <input class="inp" id="basic-user" type="text" placeholder="username">
+                        <label class="lbl">Пароль</label>
+                        <input class="inp" id="basic-pass" type="password" placeholder="••••••••">
+                    </div>
+                    <div id="af-none" style="display:none">
+                        <div style="font-size:.74rem;color:var(--muted2);padding:6px 0;">Авторизация не используется.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SAVED -->
+            <div class="tab-content" id="tc-saved">
+                <div class="saved-section" id="saved-section">
+                    <div style="font-size:.72rem;color:var(--muted2);margin-bottom:10px;">Сохранённые запросы</div>
+                    <div id="saved-list"></div>
+                    <div id="saved-empty" style="font-size:.72rem;color:var(--muted);padding:20px 0;text-align:center;">Нет сохранённых запросов</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ RESPONSE PANEL ══ -->
+        <div class="res-panel">
+            <div class="res-meta">
+                <span class="res-meta-title">Response</span>
+                <div id="res-status-chip" style="display:none" class="status-chip"></div>
+                <span class="meta-sep" id="meta-sep" style="display:none">│</span>
+                <span class="meta-kv" id="meta-time" style="display:none"></span>
+                <span class="meta-sep" id="meta-sep2" style="display:none">│</span>
+                <span class="meta-kv" id="meta-size" style="display:none"></span>
+                <div style="margin-left:auto;display:flex;gap:6px;">
+                    <button class="btn btn-sm" id="btn-copy-res" onclick="copyResponse()" style="display:none">⎘ Копировать</button>
+                    <button class="btn btn-sm" id="btn-dl-res" onclick="downloadResponse()" style="display:none">↓ Скачать</button>
+                </div>
+            </div>
+
+            <div class="res-tabs" id="res-tabs">
+                <div class="tab active" data-tab="body" onclick="switchTab('res','body',this)">Body</div>
+                <div class="tab" data-tab="reshdrs" onclick="switchTab('res','reshdrs',this)">Headers <span class="tab-badge" id="badge-reshdrs">0</span></div>
+                <div class="tab" data-tab="history" onclick="switchTab('res','history',this)">History <span class="tab-badge" id="badge-history">0</span></div>
+            </div>
+
+            <div class="res-content">
+                <!-- Body -->
+                <div class="res-pane active" id="rp-body">
+                    <div class="empty-state" id="empty-state">
+                        <div class="empty-icon">◎</div>
+                        <div>Введите URL и нажмите <strong>Send</strong></div>
+                        <div style="font-size:.7rem;color:var(--muted);">Запрос выполняется с credentials: include<br>(куки сессии передаются автоматически)</div>
+                    </div>
+                    <div id="body-view" style="display:none;flex:1;overflow:auto;flex-direction:column;" class="res-pane active">
+                        <div style="display:flex;gap:6px;padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--s1);">
+                            <button class="btn btn-sm" id="bv-json" onclick="setViewMode('json')" style="opacity:1">JSON</button>
+                            <button class="btn btn-sm" id="bv-raw" onclick="setViewMode('raw')">Raw</button>
+                        </div>
+                        <div id="res-json" class="json-viewer"></div>
+                        <div id="res-raw" class="raw-body" style="display:none"></div>
+                    </div>
+                </div>
+
+                <!-- Response headers -->
+                <div class="res-pane" id="rp-reshdrs">
+                    <table class="headers-table" id="res-headers-table">
+                        <thead><tr><th>Header</th><th>Value</th></tr></thead>
+                        <tbody id="res-headers-body"></tbody>
+                    </table>
+                </div>
+
+                <!-- History -->
+                <div class="res-pane" id="rp-history">
+                    <div class="history-list" id="history-list"></div>
+                    <div id="history-empty" style="padding:20px;font-size:.73rem;color:var(--muted);text-align:center;">История пуста</div>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /workspace -->
+    <!-- Save dialog -->
+    <div id="save-dialog" style="display:none;position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;">
+        <div style="background:var(--s2);border:1px solid var(--border2);border-radius:12px;padding:24px;min-width:320px;max-width:400px;">
+            <div style="font-family:'Outfit',sans-serif;font-size:1rem;font-weight:700;margin-bottom:14px;">Сохранить запрос</div>
+            <label class="lbl">Название</label>
+            <input class="inp" id="save-name" type="text" placeholder="Имя запроса">
+            <div style="display:flex;gap:8px;margin-top:6px;">
+                <button class="btn btn-send" style="flex:1" onclick="saveRequest()">💾 Сохранить</button>
+                <button class="btn btn-sm" style="flex:1" onclick="closeSaveDialog()">Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ═══════════════════════════════════════════════════════════
+        //  STATE
+        // ═══════════════════════════════════════════════════════════
+        let bodyFmt = 'json';
+        let authType = 'cookie';
+        let viewMode = 'json';
+        let lastResponse = null;
+        let lastRaw = '';
+        let history = [];
+        let saved = JSON.parse(localStorage.getItem('wapi_saved') || '[]');
+        let rowCounters = { query: 0, path: 0, header: 0, form: 0, mp: 0 };
+
+        // ═══════════════════════════════════════════════════════════
+        //  TABS
+        // ═══════════════════════════════════════════════════════════
+        function switchTab(group, id, el)
+        {
+            const prefix = group === 'req' ? 'tc-' : 'rp-';
+            document.querySelectorAll(`#${group === 'req' ? 'req-tabs' : 'res-tabs'} .tab`)
+                .forEach(t => t.classList.remove('active'));
+            el.classList.add('active');
+
+            if (group === 'req')
+            {
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                document.getElementById('tc-' + id).classList.add('active');
+            } else
+            {
+                document.querySelectorAll('.res-pane').forEach(c => c.classList.remove('active'));
+                document.getElementById('rp-' + id).classList.add('active');
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        //  METHOD COLOR
+        // ═══════════════════════════════════════════════════════════
+        function onMethodChange()
+        {
+            const m = document.getElementById('method');
+            m.className = 'm-' + m.value;
+            // hide body for GET/HEAD
+            const noBody = ['GET', 'HEAD', 'OPTIONS'].includes(m.value);
+            document.getElementById('body-fmt-row').style.opacity = noBody ? '.4' : '1';
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        //  DYNAMIC ROWS
+        // ═══════════════════════════════════════════════════════════
+        function addRow(type, key = '', val = '', enabled = true)
+        {
+            const id = ++rowCounters[type];
+            const containerId = {
+                query: 'query-rows', path: 'path-rows',
+                header: 'header-rows', form: 'form-rows', mp: 'mp-rows'
+            }[type];
+            const container = document.getElementById(containerId);
+
+            const div = document.createElement('div');
+            div.className = 'field-row';
+            div.id = `row-${type}-${id}`;
+
+            const isFile = type === 'mp';
+
+            div.innerHTML = `
+        <input class="inp" type="text"  placeholder="${type === 'path' ? '{var}' : 'Key'}"   value="${escAttr(key)}"
+               oninput="onRowChange('${type}')">
+        ${isFile
+                    ? `<input class="inp" type="file" style="font-size:.68rem;padding:4px;">`
+                    : `<input class="inp" type="text" placeholder="Value" value="${escAttr(val)}"
+                 oninput="onRowChange('${type}')">`
+                }
+        <button class="btn-icon" onclick="removeRow('${type}',${id})">✕</button>
+      `;
+            container.appendChild(div);
+            updateBadges();
+        }
+
+        function removeRow(type, id)
+        {
+            const el = document.getElementById(`row-${type}-${id}`);
+            if (el) el.remove();
+            updateBadges();
+            if (type === 'query') syncUrlFromParams();
+        }
+
+        function onRowChange(type)
+        {
+            if (type === 'query') syncUrlFromParams();
+            updateBadges();
+        }
+
+        function getRows(type)
+        {
+            const containerId = {
+                query: 'query-rows', path: 'path-rows',
+                header: 'header-rows', form: 'form-rows', mp: 'mp-rows'
+            }[type];
+            const rows = document.querySelectorAll(`#${containerId} .field-row`);
+            const result = [];
+            rows.forEach(row =>
+            {
+                const inputs = row.querySelectorAll('input[type=text],input[type=password]');
+                if (inputs.length >= 2)
+                {
+                    const k = inputs[0].value.trim();
+                    const v = inputs[1].value.trim();
+                    if (k) result.push({ k, v });
+                }
+            });
+            return result;
+        }
+
+        function updateBadges()
+        {
+            const qLen = getRows('query').length;
+            const hLen = getRows('header').length;
+            document.getElementById('badge-params').textContent = getRows('query').length + getRows('path').length || '0';
+            document.getElementById('badge-headers').textContent = hLen || '0';
+        }
+
+        // ── Sync query params ↔ URL path ────────────────────────────
+        function syncUrlFromParams()
+        {
+            const pathEl = document.getElementById('path-input');
+            let base = pathEl.value.split('?')[0];
+            const params = getRows('query');
+            if (params.length === 0) { pathEl.value = base; return; }
+            const qs = params.map(p => `${encodeURIComponent(p.k)}=${encodeURIComponent(p.v)}`).join('&');
+            pathEl.value = base + '?' + qs;
+        }
+
+        // Parse ?query back into rows when URL is manually edited
+        document.addEventListener('DOMContentLoaded', () =>
+        {
+            document.getElementById('path-input').addEventListener('blur', () =>
+            {
+                const url = document.getElementById('path-input').value;
+                const qi = url.indexOf('?');
+                if (qi === -1) return;
+                const qs = url.slice(qi + 1);
+                document.getElementById('query-rows').innerHTML = '';
+                rowCounters.query = 0;
+                qs.split('&').forEach(pair =>
+                {
+                    const [k, v = ''] = pair.split('=').map(decodeURIComponent);
+                    if (k) addRow('query', k, v);
+                });
+                updateBadges();
+            });
+
+            renderSaved();
+        });
+
+        // ═══════════════════════════════════════════════════════════
+        //  BODY FORMAT
+        // ═══════════════════════════════════════════════════════════
+        function setBodyFmt(fmt, el)
+        {
+            bodyFmt = fmt;
+            document.querySelectorAll('.body-fmt').forEach(b => b.classList.remove('active'));
+            el.classList.add('active');
+            ['json', 'form', 'multipart', 'text-plain', 'none'].forEach(f =>
+                document.getElementById('body-' + f).style.display = 'none'
+            );
+            const map = { json: 'json', form: 'form', multipart: 'multipart', text: 'text-plain', none: 'none' };
+            document.getElementById('body-' + map[fmt]).style.display = '';
+        }
+
+        function formatJson()
+        {
+            const ta = document.getElementById('body-text');
+            try
+            {
+                ta.value = JSON.stringify(JSON.parse(ta.value), null, 2);
+            } catch { toast('✗ Невалидный JSON', 'err'); }
+        }
+
+        function setJsonPreset(t)
+        {
+            document.getElementById('body-text').value =
+                t === 'obj' ? '{\n  "key": "value"\n}' : '[\n  {"id": 1}\n]';
+        }
+        function clearBody() { document.getElementById('body-text').value = ''; }
+
+        // ═══════════════════════════════════════════════════════════
+        //  AUTH
+        // ═══════════════════════════════════════════════════════════
+        function setAuth(type, el)
+        {
+            authType = type;
+            document.querySelectorAll('.auth-chip').forEach(c => c.classList.remove('active'));
+            el.classList.add('active');
+            ['cookie', 'bearer', 'apikey', 'basic', 'none'].forEach(t =>
+                document.getElementById('af-' + t).style.display = (t === type ? '' : 'none')
+            );
+        }
+
+        function buildAuthHeaders()
+        {
+            const hdrs = {};
+            if (authType === 'bearer')
+            {
+                const t = document.getElementById('bearer-token').value.trim();
+                if (t) hdrs['Authorization'] = 'Bearer ' + t;
+            }
+            if (authType === 'apikey')
+            {
+                const k = document.getElementById('apikey-header').value.trim();
+                const v = document.getElementById('apikey-value').value.trim();
+                if (k && v) hdrs[k] = v;
+            }
+            if (authType === 'basic')
+            {
+                const u = document.getElementById('basic-user').value.trim();
+                const p = document.getElementById('basic-pass').value.trim();
+                if (u) hdrs['Authorization'] = 'Basic ' + btoa(u + ':' + p);
+            }
+            return hdrs;
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        //  SEND REQUEST
+        // ═══════════════════════════════════════════════════════════
+        async function sendRequest()
+        {
+            const baseUrl = document.getElementById('base-url').value.trim().replace(/\/$/, '');
+            let path = document.getElementById('path-input').value.trim();
+
+            // Substitute path variables
+            getRows('path').forEach(({ k, v }) =>
+            {
+                path = path.replace(new RegExp(`\\{${k}\\}`, 'g'), encodeURIComponent(v));
+            });
+
+            const fullUrl = baseUrl ? baseUrl + (path.startsWith('/') ? path : '/' + path) : path;
+            if (!fullUrl) { toast('Введите URL', 'err'); return; }
+
+            const method = document.getElementById('method').value;
+            const headers = {};
+
+            // Custom headers
+            getRows('header').forEach(({ k, v }) => { headers[k] = v; });
+
+            // Auth headers
+            Object.assign(headers, buildAuthHeaders());
+
+            // Extra cookies via header
+            const ec = document.getElementById('extra-cookie')?.value.trim();
+            if (ec) headers['Cookie'] = ec;
+
+            // Body
+            let body = undefined;
+            const noBody = ['GET', 'HEAD', 'OPTIONS'].includes(method);
+            if (!noBody)
+            {
+                if (bodyFmt === 'json')
+                {
+                    const raw = document.getElementById('body-text').value.trim();
+                    if (raw)
+                    {
+                        headers['Content-Type'] = 'application/json';
+                        body = raw;
+                    }
+                } else if (bodyFmt === 'form')
+                {
+                    const params = new URLSearchParams();
+                    getRows('form').forEach(({ k, v }) => params.append(k, v));
+                    headers['Content-Type'] = 'application/x-www-form-urlencoded';
+                    body = params.toString();
+                } else if (bodyFmt === 'multipart')
+                {
+                    const fd = new FormData();
+                    document.querySelectorAll('#mp-rows .field-row').forEach(row =>
+                    {
+                        const k = row.querySelector('input[type=text]')?.value.trim();
+                        const fileInput = row.querySelector('input[type=file]');
+                        const valInput = row.querySelectorAll('input[type=text]')[1];
+                        if (!k) return;
+                        if (fileInput && fileInput.files.length) fd.append(k, fileInput.files[0]);
+                        else if (valInput) fd.append(k, valInput.value);
+                    });
+                    body = fd; // browser sets Content-Type with boundary
+                } else if (bodyFmt === 'text')
+                {
+                    body = document.getElementById('body-text-raw').value;
+                    headers['Content-Type'] = 'text/plain';
+                }
+            }
+
+            // Show loading
+            setBusy(true);
+
+            const t0 = performance.now();
+            try
+            {
+                const res = await fetch(fullUrl, {
+                    method,
+                    headers,
+                    body,
+                    credentials: 'include',   // Always send cookies
+                });
+                const elapsed = Math.round(performance.now() - t0);
+
+                // Read body
+                const contentType = res.headers.get('content-type') || '';
+                let text = '';
+                try { text = await res.text(); } catch { }
+
+                lastRaw = text;
+                try { lastResponse = JSON.parse(text); }
+                catch { lastResponse = null; }
+
+                // Show status
+                showStatus(res.status, elapsed, text.length);
+
+                // Render body
+                document.getElementById('empty-state').style.display = 'none';
+                document.getElementById('body-view').style.display = 'flex';
+                setViewMode(lastResponse !== null ? 'json' : 'raw');
+
+                // Render response headers
+                const hdrRows = [];
+                res.headers.forEach((v, k) => hdrRows.push({ k, v }));
+                renderResHeaders(hdrRows);
+
+                // History
+                addHistory(method, fullUrl, res.status, elapsed);
+
+                toast(`${res.status} ${res.statusText} — ${elapsed}ms`, res.ok ? 'ok' : 'err');
+            } catch (e)
+            {
+                const elapsed = Math.round(performance.now() - t0);
+                showError(e.message);
+                addHistory(method, fullUrl, 'ERR', elapsed);
+                toast('✗ ' + e.message, 'err');
+            } finally
+            {
+                setBusy(false);
+            }
+        }
+
+        // ─── UI updates ─────────────────────────────────────────────
+        function setBusy(busy)
+        {
+            document.getElementById('btn-send').disabled = busy;
+            document.getElementById('spinner').style.display = busy ? '' : 'none';
+            document.getElementById('send-label').style.display = busy ? 'none' : '';
+        }
+
+        function showStatus(code, ms, bytes)
+        {
+            const chip = document.getElementById('res-status-chip');
+            chip.style.display = '';
+            chip.className = 'status-chip s' + String(code)[0];
+            chip.textContent = code + ' ' + httpStatus(code);
+
+            const show = id => document.getElementById(id).style.display = '';
+            show('meta-sep'); show('meta-sep2');
+
+            const t = document.getElementById('meta-time');
+            t.style.display = '';
+            t.innerHTML = `Время: <span>${ms} ms</span>`;
+
+            const s = document.getElementById('meta-size');
+            s.style.display = '';
+            s.innerHTML = `Размер: <span>${formatBytes(bytes)}</span>`;
+
+            document.getElementById('btn-copy-res').style.display = '';
+            document.getElementById('btn-dl-res').style.display = '';
+        }
+
+        function showError(msg)
+        {
+            const chip = document.getElementById('res-status-chip');
+            chip.style.display = '';
+            chip.className = 'status-chip s5';
+            chip.textContent = 'Network Error';
+            document.getElementById('empty-state').style.display = 'none';
+            document.getElementById('body-view').style.display = 'flex';
+            document.getElementById('res-raw').textContent = msg;
+            document.getElementById('res-json').innerHTML = '';
+            document.getElementById('res-raw').style.display = '';
+            document.getElementById('res-json').style.display = 'none';
+        }
+
+        // ─── View mode ────────────────────────────────────────────
+        function setViewMode(mode)
+        {
+            viewMode = mode;
+            const jsonEl = document.getElementById('res-json');
+            const rawEl = document.getElementById('res-raw');
+            document.getElementById('bv-json').style.opacity = mode === 'json' ? '1' : '.45';
+            document.getElementById('bv-raw').style.opacity = mode === 'raw' ? '1' : '.45';
+
+            if (mode === 'json' && lastResponse !== null)
+            {
+                jsonEl.innerHTML = syntaxHighlight(lastResponse);
+                jsonEl.style.display = '';
+                rawEl.style.display = 'none';
+            } else
+            {
+                rawEl.textContent = lastRaw;
+                rawEl.style.display = '';
+                jsonEl.style.display = 'none';
+            }
+        }
+
+        // ─── Syntax highlight ─────────────────────────────────────
+        function syntaxHighlight(json, indent)
+        {
+            const str = typeof json === 'string' ? json : JSON.stringify(json, null, 2);
+            return str
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(
+                    /("(\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+                    match =>
+                    {
+                        if (/^"/.test(match))
+                        {
+                            if (/:$/.test(match)) return `<span class="j-key">${match}</span>`;
+                            return `<span class="j-str">${match}</span>`;
+                        }
+                        if (/true|false/.test(match)) return `<span class="j-bool">${match}</span>`;
+                        if (/null/.test(match)) return `<span class="j-null">${match}</span>`;
+                        return `<span class="j-num">${match}</span>`;
+                    }
+                );
+        }
+
+        // ─── Response headers ─────────────────────────────────────
+        function renderResHeaders(rows)
+        {
+            const body = document.getElementById('res-headers-body');
+            body.innerHTML = '';
+            rows.forEach(({ k, v }) =>
+            {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${escHtml(k)}</td><td>${escHtml(v)}</td>`;
+                body.appendChild(tr);
+            });
+            document.getElementById('badge-reshdrs').textContent = rows.length;
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        //  HISTORY
+        // ═══════════════════════════════════════════════════════════
+        function addHistory(method, url, status, ms)
+        {
+            history.unshift({ method, url, status, ms, time: new Date().toLocaleTimeString() });
+            if (history.length > 50) history.pop();
+            renderHistory();
+        }
+
+        function renderHistory()
+        {
+            const list = document.getElementById('history-list');
+            const empty = document.getElementById('history-empty');
+            list.innerHTML = '';
+            document.getElementById('badge-history').textContent = history.length;
+
+            if (history.length === 0) { empty.style.display = ''; return; }
+            empty.style.display = 'none';
+
+            history.forEach((h, i) =>
+            {
+                const div = document.createElement('div');
+                div.className = 'hist-item';
+                const cls = String(h.status).startsWith('2') ? 'ok' : 'err';
+                div.innerHTML = `
+          <span class="hist-method" style="color:var(--m-${h.method.toLowerCase()},var(--acc2))">${h.method}</span>
+          <span class="hist-url">${escHtml(h.url)}</span>
+          <span class="hist-status" style="color:${statusColor(h.status)}">${h.status}</span>
+          <span class="hist-time">${h.ms}ms · ${h.time}</span>
+        `;
+                div.onclick = () => loadFromHistory(h);
+                list.appendChild(div);
+            });
+        }
+
+        function clearHistory()
+        {
+            history = [];
+            renderHistory();
+            toast('История очищена');
+        }
+
+        function loadFromHistory(h)
+        {
+            const url = new URL(h.url, location.href);
+            document.getElementById('base-url').value = url.origin;
+            document.getElementById('path-input').value = url.pathname + url.search;
+            const m = document.getElementById('method');
+            m.value = h.method; onMethodChange();
+            // switch to history tab
+            switchTab('res', 'history', document.querySelector('[data-tab="history"]'));
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        //  SAVED REQUESTS
+        // ═══════════════════════════════════════════════════════════
+        function openSaveDialog()
+        {
+            const d = document.getElementById('save-dialog');
+            d.style.display = 'flex';
+            document.getElementById('save-name').value =
+                document.getElementById('method').value + ' ' + (document.getElementById('path-input').value || '/');
+            setTimeout(() => document.getElementById('save-name').focus(), 50);
+        }
+        function closeSaveDialog()
+        {
+            document.getElementById('save-dialog').style.display = 'none';
+        }
+        function saveRequest()
+        {
+            const name = document.getElementById('save-name').value.trim();
+            if (!name) { toast('Введите название', 'err'); return; }
+            saved.push({
+                name,
+                method: document.getElementById('method').value,
+                base: document.getElementById('base-url').value,
+                path: document.getElementById('path-input').value,
+                body: document.getElementById('body-text').value,
+                bodyFmt,
+            });
+            localStorage.setItem('wapi_saved', JSON.stringify(saved));
+            document.getElementById('badge-saved').textContent = saved.length;
+            renderSaved();
+            closeSaveDialog();
+            toast('✓ Сохранено: ' + name, 'ok');
+        }
+        function renderSaved()
+        {
+            const list = document.getElementById('saved-list');
+            const empty = document.getElementById('saved-empty');
+            list.innerHTML = '';
+            document.getElementById('badge-saved').textContent = saved.length || '0';
+            if (saved.length === 0) { empty.style.display = ''; return; }
+            empty.style.display = 'none';
+            saved.forEach((s, i) =>
+            {
+                const div = document.createElement('div');
+                div.className = 'saved-item';
+                div.innerHTML = `
+          <span class="hist-method" style="color:var(--acc2);font-size:.68rem;font-weight:700">${escHtml(s.method)}</span>
+          <span class="saved-name">${escHtml(s.name)}</span>
+          <span class="saved-load" onclick="loadSaved(${i})">↑ Загрузить</span>
+          <button class="btn-icon" onclick="deleteSaved(${i})">✕</button>
+        `;
+                list.appendChild(div);
+            });
+        }
+        function loadSaved(i)
+        {
+            const s = saved[i];
+            document.getElementById('method').value = s.method; onMethodChange();
+            document.getElementById('base-url').value = s.base;
+            document.getElementById('path-input').value = s.path;
+            document.getElementById('body-text').value = s.body;
+            toast('✓ Загружено: ' + s.name, 'ok');
+        }
+        function deleteSaved(i)
+        {
+            saved.splice(i, 1);
+            localStorage.setItem('wapi_saved', JSON.stringify(saved));
+            renderSaved();
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        //  COPY / DOWNLOAD
+        // ═══════════════════════════════════════════════════════════
+        function copyResponse()
+        {
+            navigator.clipboard.writeText(lastRaw).then(() => toast('Скопировано', 'ok'));
+        }
+        function downloadResponse()
+        {
+            const blob = new Blob([lastRaw], { type: 'application/octet-stream' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'response.json';
+            a.click();
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        //  UTILITIES
+        // ═══════════════════════════════════════════════════════════
+        function escHtml(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+        function escAttr(s) { return String(s || '').replace(/"/g, '&quot;').replace(/'/g, '&#039;'); }
+
+        function formatBytes(b)
+        {
+            if (b < 1024) return b + ' B';
+            if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+            return (b / 1048576).toFixed(2) + ' MB';
+        }
+
+        function statusColor(s)
+        {
+            const c = String(s)[0];
+            return c === '2' ? 'var(--success)' : c === '3' ? 'var(--acc2)' : c === '4' ? 'var(--warn)' : 'var(--danger)';
+        }
+
+        function httpStatus(code)
+        {
+            const m = {
+                200: 'OK', 201: 'Created', 204: 'No Content',
+                301: 'Moved', 302: 'Found', 304: 'Not Modified',
+                400: 'Bad Request', 401: 'Unauthorized', 403: 'Forbidden',
+                404: 'Not Found', 405: 'Method Not Allowed', 409: 'Conflict',
+                422: 'Unprocessable', 429: 'Too Many Requests',
+                500: 'Internal Server Error', 502: 'Bad Gateway', 503: 'Service Unavailable'
+            };
+            return m[code] || '';
+        }
+
+        function toast(msg, type = '')
+        {
+            const el = document.getElementById('toast');
+            el.textContent = msg;
+            el.className = 'show' + (type ? ' ' + type : '');
+            clearTimeout(el._t);
+            el._t = setTimeout(() => el.className = '', 2800);
+        }
+
+        // Close save dialog on backdrop click
+        document.getElementById('save-dialog').addEventListener('click', function (e)
+        {
+            if (e.target === this) closeSaveDialog();
+        });
+
+        // Enter in URL bar → send
+        document.addEventListener('keydown', e =>
+        {
+            if (e.key === 'Enter' && e.ctrlKey) sendRequest();
+        });
+
+        // Init hint
+        console.log('%cWebAPI Tester ready. Ctrl+Enter = Send.', 'color:#f97316;font-weight:bold;');
+    </script>
+</body>
+</html>

@@ -1,0 +1,1260 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SignalR Tester</title>
+    <script src="/static/ext/signalr.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;700;800&display=swap');
+
+        :root {
+            --bg: #0a0c0f;
+            --surface: #111418;
+            --panel: #161b22;
+            --border: #1f2937;
+            --accent: #00e5a0;
+            --accent2: #0ea5e9;
+            --warn: #f59e0b;
+            --danger: #ef4444;
+            --success: #22c55e;
+            --text: #e2e8f0;
+            --muted: #64748b;
+            --log-in: #67e8f9;
+            --log-out: #86efac;
+            --log-sys: #fbbf24;
+            --log-err: #f87171;
+        }
+
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'JetBrains Mono', monospace;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+            /* ── Grid noise background ── */
+            body::before {
+                content: '';
+                position: fixed;
+                inset: 0;
+                background-image: linear-gradient(rgba(0,229,160,.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0,229,160,.03) 1px, transparent 1px);
+                background-size: 32px 32px;
+                pointer-events: none;
+                z-index: 0;
+            }
+
+        /* ══ HEADER ══════════════════════════════════════════════ */
+        header {
+            position: relative;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px 28px;
+            border-bottom: 1px solid var(--border);
+            background: rgba(17,20,24,.95);
+            backdrop-filter: blur(8px);
+        }
+
+        .logo-mark {
+            width: 36px;
+            height: 36px;
+            border: 2px solid var(--accent);
+            border-radius: 8px;
+            display: grid;
+            place-items: center;
+            position: relative;
+            flex-shrink: 0;
+        }
+
+            .logo-mark::before {
+                content: '';
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
+                background: var(--accent);
+                animation: pulse-dot 2s ease-in-out infinite;
+            }
+
+        @keyframes pulse-dot {
+            0%,100% {
+                opacity: 1;
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(0,229,160,.5);
+            }
+
+            50% {
+                opacity: .7;
+                transform: scale(.85);
+                box-shadow: 0 0 0 6px rgba(0,229,160,0);
+            }
+        }
+
+        header h1 {
+            font-family: 'Syne', sans-serif;
+            font-size: 1.25rem;
+            font-weight: 800;
+            letter-spacing: .04em;
+            color: var(--text);
+        }
+
+            header h1 span {
+                color: var(--accent);
+            }
+
+        .version-badge {
+            margin-left: auto;
+            font-size: .65rem;
+            font-weight: 500;
+            color: var(--muted);
+            border: 1px solid var(--border);
+            padding: 2px 8px;
+            border-radius: 4px;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+
+        /* ══ STATUS BAR ══════════════════════════════════════════ */
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 7px 28px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            font-size: .72rem;
+            position: relative;
+            z-index: 9;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--muted);
+            flex-shrink: 0;
+            transition: background .3s, box-shadow .3s;
+        }
+
+            .dot.connected {
+                background: var(--success);
+                box-shadow: 0 0 8px var(--success);
+                animation: pulse-dot 1.8s ease-in-out infinite;
+            }
+
+            .dot.connecting {
+                background: var(--warn);
+                box-shadow: 0 0 8px var(--warn);
+                animation: pulse-dot 0.7s ease-in-out infinite;
+            }
+
+            .dot.disconnected {
+                background: var(--danger);
+                box-shadow: 0 0 8px var(--danger);
+            }
+
+        #status-text {
+            font-weight: 500;
+            transition: color .3s;
+        }
+
+            #status-text.connected {
+                color: var(--success);
+            }
+
+            #status-text.connecting {
+                color: var(--warn);
+            }
+
+            #status-text.disconnected {
+                color: var(--danger);
+            }
+
+        .conn-id {
+            margin-left: auto;
+            color: var(--muted);
+            font-size: .68rem;
+        }
+
+        /* ══ MAIN LAYOUT ═════════════════════════════════════════ */
+        .workspace {
+            position: relative;
+            z-index: 1;
+            display: grid;
+            grid-template-columns: 380px 1fr;
+            gap: 0;
+            flex: 1;
+            min-height: 0;
+        }
+
+        /* ══ LEFT PANEL ══════════════════════════════════════════ */
+        .left-panel {
+            border-right: 1px solid var(--border);
+            background: var(--panel);
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+        }
+
+        .section {
+            border-bottom: 1px solid var(--border);
+            padding: 20px;
+        }
+
+            .section:last-child {
+                border-bottom: none;
+            }
+
+        .section-title {
+            font-size: .68rem;
+            font-weight: 700;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+            .section-title::after {
+                content: '';
+                flex: 1;
+                height: 1px;
+                background: var(--border);
+            }
+
+        /* ── Form controls ── */
+        label {
+            display: block;
+            font-size: .72rem;
+            color: var(--muted);
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: .8rem;
+            padding: 8px 10px;
+            outline: none;
+            transition: border-color .2s, box-shadow .2s;
+            margin-bottom: 12px;
+            resize: vertical;
+        }
+
+            input:focus, select:focus, textarea:focus {
+                border-color: var(--accent);
+                box-shadow: 0 0 0 2px rgba(0,229,160,.12);
+            }
+
+            select option {
+                background: var(--bg);
+            }
+
+        textarea {
+            min-height: 100px;
+        }
+
+        /* ── Buttons ── */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: .78rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity .15s, transform .1s, box-shadow .2s;
+            letter-spacing: .03em;
+        }
+
+            .btn:active {
+                transform: scale(.97);
+            }
+
+            .btn:disabled {
+                opacity: .38;
+                cursor: not-allowed;
+            }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #000;
+        }
+
+            .btn-primary:not(:disabled):hover {
+                box-shadow: 0 0 16px rgba(0,229,160,.4);
+            }
+
+        .btn-danger {
+            background: transparent;
+            color: var(--danger);
+            border: 1px solid var(--danger);
+        }
+
+            .btn-danger:not(:disabled):hover {
+                background: rgba(239,68,68,.1);
+                box-shadow: 0 0 12px rgba(239,68,68,.25);
+            }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--accent2);
+            border: 1px solid var(--accent2);
+        }
+
+            .btn-secondary:not(:disabled):hover {
+                background: rgba(14,165,233,.1);
+            }
+
+        .btn-ghost {
+            background: transparent;
+            color: var(--muted);
+            border: 1px solid var(--border);
+            font-size: .72rem;
+            padding: 5px 12px;
+        }
+
+            .btn-ghost:not(:disabled):hover {
+                color: var(--text);
+                border-color: var(--muted);
+            }
+
+        .btn-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        /* ── Method pills ── */
+        .method-tabs {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+
+        .method-tab {
+            padding: 4px 12px;
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            font-size: .72rem;
+            cursor: pointer;
+            transition: all .15s;
+            background: transparent;
+            color: var(--muted);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+            .method-tab.active, .method-tab:hover {
+                border-color: var(--accent2);
+                color: var(--accent2);
+                background: rgba(14,165,233,.08);
+            }
+
+        /* ── Subscriptions list ── */
+        .sub-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .sub-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 6px 10px;
+            font-size: .75rem;
+        }
+
+            .sub-item .sub-method {
+                color: var(--accent);
+                flex: 1;
+            }
+
+        .sub-remove {
+            background: none;
+            border: none;
+            color: var(--muted);
+            cursor: pointer;
+            font-size: 1rem;
+            line-height: 1;
+            transition: color .15s;
+            padding: 0 2px;
+        }
+
+            .sub-remove:hover {
+                color: var(--danger);
+            }
+
+        /* ══ LOG PANEL ═══════════════════════════════════════════ */
+        .log-panel {
+            display: flex;
+            flex-direction: column;
+            background: var(--bg);
+            overflow: hidden;
+        }
+
+        .log-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 20px;
+            border-bottom: 1px solid var(--border);
+            background: var(--panel);
+            flex-shrink: 0;
+        }
+
+        .log-toolbar-title {
+            font-family: 'Syne', sans-serif;
+            font-size: .85rem;
+            font-weight: 700;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: .1em;
+            flex: 1;
+        }
+
+        .filter-btns {
+            display: flex;
+            gap: 4px;
+        }
+
+        .filter-btn {
+            padding: 3px 9px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: .67rem;
+            cursor: pointer;
+            background: transparent;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--muted);
+            transition: all .15s;
+            font-weight: 600;
+            letter-spacing: .04em;
+        }
+
+            .filter-btn.active {
+                background: rgba(255,255,255,.06);
+                color: var(--text);
+                border-color: var(--muted);
+            }
+
+            .filter-btn[data-type="IN"].active {
+                color: var(--log-in);
+                border-color: var(--log-in);
+            }
+
+            .filter-btn[data-type="OUT"].active {
+                color: var(--log-out);
+                border-color: var(--log-out);
+            }
+
+            .filter-btn[data-type="SYS"].active {
+                color: var(--log-sys);
+                border-color: var(--log-sys);
+            }
+
+            .filter-btn[data-type="ERR"].active {
+                color: var(--log-err);
+                border-color: var(--log-err);
+            }
+
+        #log-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px 0;
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+            scroll-behavior: smooth;
+        }
+
+        .log-entry {
+            display: grid;
+            grid-template-columns: 90px 40px 1fr;
+            gap: 0 8px;
+            padding: 4px 20px;
+            font-size: .75rem;
+            line-height: 1.6;
+            transition: background .12s;
+            align-items: start;
+        }
+
+            .log-entry:hover {
+                background: rgba(255,255,255,.025);
+            }
+
+        .log-time {
+            color: var(--muted);
+            font-size: .68rem;
+            padding-top: 2px;
+            white-space: nowrap;
+        }
+
+        .log-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: .6rem;
+            font-weight: 700;
+            padding: 1px 5px;
+            border-radius: 3px;
+            letter-spacing: .05em;
+            margin-top: 2px;
+            white-space: nowrap;
+        }
+
+            .log-badge.IN {
+                background: rgba(103,232,249,.15);
+                color: var(--log-in);
+            }
+
+            .log-badge.OUT {
+                background: rgba(134,239,172,.15);
+                color: var(--log-out);
+            }
+
+            .log-badge.SYS {
+                background: rgba(251,191,36,.15);
+                color: var(--log-sys);
+            }
+
+            .log-badge.ERR {
+                background: rgba(248,113,113,.15);
+                color: var(--log-err);
+            }
+
+        .log-body {
+            color: var(--text);
+            word-break: break-all;
+        }
+
+        .log-method {
+            color: var(--accent2);
+            font-weight: 600;
+        }
+
+        .log-json {
+            color: var(--accent);
+            opacity: .85;
+        }
+
+        /* ── Scrollbar ── */
+        #log-container::-webkit-scrollbar,
+        .left-panel::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        #log-container::-webkit-scrollbar-track,
+        .left-panel::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        #log-container::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 4px;
+        }
+
+            #log-container::-webkit-scrollbar-thumb:hover {
+                background: var(--muted);
+            }
+
+        /* ── Counter badge ── */
+        .count-badge {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            font-size: .65rem;
+            padding: 1px 7px;
+            color: var(--muted);
+            min-width: 24px;
+            text-align: center;
+        }
+
+        /* ── Auto-scroll toggle ── */
+        .autoscroll-label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: .72rem;
+            color: var(--muted);
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .toggle-switch {
+            width: 28px;
+            height: 15px;
+            background: var(--border);
+            border-radius: 10px;
+            position: relative;
+            transition: background .2s;
+            flex-shrink: 0;
+        }
+
+            .toggle-switch::after {
+                content: '';
+                position: absolute;
+                top: 2px;
+                left: 2px;
+                width: 11px;
+                height: 11px;
+                border-radius: 50%;
+                background: var(--muted);
+                transition: transform .2s, background .2s;
+            }
+
+        input[type=checkbox]:checked + label .toggle-switch {
+            background: rgba(0,229,160,.3);
+        }
+
+            input[type=checkbox]:checked + label .toggle-switch::after {
+                transform: translateX(13px);
+                background: var(--accent);
+            }
+
+        input[type=checkbox] {
+            display: none;
+        }
+
+        /* ── Resizable columns ── */
+        @media (max-width: 900px) {
+            .workspace {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto 1fr;
+            }
+
+            .left-panel {
+                border-right: none;
+                border-bottom: 1px solid var(--border);
+                max-height: 460px;
+            }
+        }
+
+        /* ── Payload presets ── */
+        .preset-row {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-bottom: 8px;
+        }
+
+        .preset-chip {
+            padding: 3px 10px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: .68rem;
+            color: var(--muted);
+            cursor: pointer;
+            font-family: 'JetBrains Mono', monospace;
+            transition: all .15s;
+        }
+
+            .preset-chip:hover {
+                color: var(--text);
+                border-color: var(--accent2);
+            }
+
+        /* ── Toast ── */
+        #toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 999;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-left: 3px solid var(--accent);
+            border-radius: 8px;
+            padding: 10px 16px;
+            font-size: .78rem;
+            pointer-events: none;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: opacity .25s, transform .25s;
+            max-width: 320px;
+        }
+
+            #toast.show {
+                opacity: 1;
+                transform: translateY(0);
+            }
+
+        /* ── Invoke result box ── */
+        .result-box {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 10px;
+            font-size: .76rem;
+            min-height: 60px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            color: var(--accent);
+            margin-top: 4px;
+            line-height: 1.5;
+        }
+
+            .result-box.empty {
+                color: var(--muted);
+                font-style: italic;
+            }
+    </style>
+</head>
+<body>
+
+    <!-- TOAST -->
+    <div id="toast"></div>
+
+    <!-- HEADER -->
+    <header>
+        <div class="logo-mark"></div>
+        <h1>Signal<span>R</span> Tester</h1>
+        <span class="version-badge">v7.x / ASP.NET Core</span>
+    </header>
+
+    <!-- STATUS BAR -->
+    <div class="status-bar">
+        <div class="dot disconnected" id="dot"></div>
+        <span id="status-text" class="disconnected">Отключено</span>
+        <span class="conn-id" id="conn-id-label"></span>
+    </div>
+
+    <!-- WORKSPACE -->
+    <div class="workspace">
+
+        <!-- ══ LEFT PANEL ══ -->
+        <div class="left-panel">
+
+            <!-- CONNECTION -->
+            <div class="section">
+                <div class="section-title">Подключение</div>
+                <label>URL хаба</label>
+                <input id="hub-url" type="text" value="/chatHub" placeholder="https://localhost:5000/myhub">
+
+                <label>Транспорт</label>
+                <select id="transport">
+                    <option value="0">Автовыбор (WebSockets → SSE → LongPoll)</option>
+                    <option value="1">WebSockets</option>
+                    <option value="2">Server-Sent Events</option>
+                    <option value="4">Long Polling</option>
+                </select>
+
+                <label>Заголовки авторизации (опционально)</label>
+                <input id="auth-token" type="text" placeholder="Bearer eyJhbGc...">
+
+                <div class="btn-row">
+                    <button class="btn btn-primary" id="btn-connect" onclick="doConnect()">⚡ Подключить</button>
+                    <button class="btn btn-danger" id="btn-disconnect" onclick="doDisconnect()" disabled>✕ Отключить</button>
+                </div>
+            </div>
+
+            <!-- SEND MESSAGE -->
+            <div class="section">
+                <div class="section-title">Отправка (Invoke / Send)</div>
+
+                <label>Режим</label>
+                <div class="method-tabs" id="mode-tabs">
+                    <button class="method-tab active" data-mode="invoke" onclick="selectMode('invoke',this)">invoke</button>
+                    <button class="method-tab" data-mode="send" onclick="selectMode('send',this)">send</button>
+                </div>
+
+                <label>Имя метода на хабе</label>
+                <input id="invoke-method" type="text" placeholder="SendMessage" value="">
+
+                <label>Аргументы (JSON-массив)</label>
+                <div class="preset-row">
+                    <span class="preset-chip" onclick="setPreset('[]')">пусто</span>
+                    <span class="preset-chip" onclick="setPreset('[&quot;Hello&quot;]')">строка</span>
+                    <span class="preset-chip" onclick="setPreset('[&quot;user1&quot;, &quot;Hello world&quot;]')">user+msg</span>
+                    <span class="preset-chip" onclick="setPreset('[{&quot;id&quot;:1,&quot;text&quot;:&quot;Test&quot;}]')">объект</span>
+                    <span class="preset-chip" onclick="setPreset('[1, 2, 3]')">числа</span>
+                </div>
+                <textarea id="invoke-args" rows="4" placeholder='["arg1", "arg2"]'>[]</textarea>
+
+                <div id="invoke-result-section">
+                    <label>Результат (invoke)</label>
+                    <div class="result-box empty" id="invoke-result">ожидание вызова...</div>
+                </div>
+
+                <div class="btn-row" style="margin-top:10px">
+                    <button class="btn btn-primary" id="btn-invoke" onclick="doInvoke()" disabled>▶ Выполнить</button>
+                    <button class="btn btn-ghost" onclick="document.getElementById('invoke-result').textContent='ожидание вызова...'; document.getElementById('invoke-result').classList.add('empty')">✕ Сброс</button>
+                </div>
+            </div>
+
+            <!-- SUBSCRIPTIONS -->
+            <div class="section">
+                <div class="section-title">Подписки (on)</div>
+
+                <label>Имя метода (клиентский)</label>
+                <input id="sub-method" type="text" placeholder="ReceiveMessage">
+                <div class="btn-row">
+                    <button class="btn btn-secondary" onclick="addSubscription()">+ Подписаться</button>
+                </div>
+                <div class="sub-list" id="sub-list" style="margin-top:12px"></div>
+            </div>
+
+            <!-- STREAM (optional) -->
+            <div class="section">
+                <div class="section-title">Stream (StreamAsChannelAsync)</div>
+                <label>Стриминговый метод</label>
+                <input id="stream-method" type="text" placeholder="Counter" value="Counter">
+                <label>Аргументы</label>
+                <textarea id="stream-args" rows="2" placeholder='[10, 500]'>[10, 500]</textarea>
+                <div class="btn-row">
+                    <button class="btn btn-secondary" id="btn-stream" onclick="doStream()" disabled>▶ Стрим</button>
+                    <button class="btn btn-ghost" id="btn-stop-stream" onclick="stopStream()" disabled>■ Стоп</button>
+                </div>
+            </div>
+
+        </div><!-- /left-panel -->
+        <!-- ══ LOG PANEL ══ -->
+        <div class="log-panel">
+            <div class="log-toolbar">
+                <span class="log-toolbar-title">Журнал событий</span>
+                <div class="filter-btns" id="filter-btns">
+                    <button class="filter-btn active" data-type="ALL" onclick="setFilter('ALL',this)">ВСЕ</button>
+                    <button class="filter-btn" data-type="IN" onclick="setFilter('IN',this)">IN</button>
+                    <button class="filter-btn" data-type="OUT" onclick="setFilter('OUT',this)">OUT</button>
+                    <button class="filter-btn" data-type="SYS" onclick="setFilter('SYS',this)">SYS</button>
+                    <button class="filter-btn" data-type="ERR" onclick="setFilter('ERR',this)">ERR</button>
+                </div>
+                <span class="count-badge" id="log-count">0</span>
+
+                <input type="checkbox" id="chk-autoscroll" checked>
+                <label for="chk-autoscroll" class="autoscroll-label">
+                    <span class="toggle-switch"></span>
+                    Auto-scroll
+                </label>
+
+                <button class="btn btn-ghost" onclick="clearLog()">🗑 Очистить</button>
+            </div>
+            <div id="log-container"></div>
+        </div>
+
+    </div><!-- /workspace -->
+
+    <script>
+        // ═══════════════════════════════════════════════════════════
+        // STATE
+        // ═══════════════════════════════════════════════════════════
+        let connection = null;
+        let subscriptions = {};   // { methodName: handler }
+        let streamSubscription = null;
+        let currentMode = 'invoke';
+        let activeFilter = 'ALL';
+        let logEntries = [];
+        let logCount = 0;
+
+        // ═══════════════════════════════════════════════════════════
+        // HELPERS
+        // ═══════════════════════════════════════════════════════════
+        function ts()
+        {
+            const d = new Date();
+            return d.toTimeString().slice(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+        }
+
+        function addLog(type, body, methodHint)
+        {
+            logCount++;
+            const entry = { id: logCount, type, body, methodHint, time: ts() };
+            logEntries.push(entry);
+            document.getElementById('log-count').textContent = logCount;
+
+            if (activeFilter !== 'ALL' && activeFilter !== type) return;
+            renderEntry(entry);
+        }
+
+        function renderEntry(entry)
+        {
+            const container = document.getElementById('log-container');
+            const div = document.createElement('div');
+            div.className = 'log-entry';
+            div.dataset.entryId = entry.id;
+            div.dataset.type = entry.type;
+
+            const methodSpan = entry.methodHint
+                ? `<span class="log-method">[${escHtml(entry.methodHint)}]</span> ` : '';
+
+            let bodyHtml = methodSpan + tryFormatJson(escHtml(entry.body));
+
+            div.innerHTML = `
+        <span class="log-time">${entry.time}</span>
+        <span class="log-badge ${entry.type}">${entry.type}</span>
+        <span class="log-body">${bodyHtml}</span>
+      `;
+            container.appendChild(div);
+
+            if (document.getElementById('chk-autoscroll').checked)
+            {
+                container.scrollTop = container.scrollHeight;
+            }
+        }
+
+        function tryFormatJson(str)
+        {
+            try
+            {
+                // see if inner content parses — original str may be HTML-escaped
+                const raw = str.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#039;/g, "'");
+                JSON.parse(raw);
+                return `<span class="log-json">${str}</span>`;
+            } catch { return str; }
+        }
+
+        function escHtml(s)
+        {
+            return String(s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+        }
+
+        function parseArgs(raw)
+        {
+            try { return JSON.parse(raw || '[]'); }
+            catch (e) { throw new Error('Ошибка парсинга JSON аргументов: ' + e.message); }
+        }
+
+        function setStatus(state, text, connId)
+        {
+            const dot = document.getElementById('dot');
+            const st = document.getElementById('status-text');
+            const ci = document.getElementById('conn-id-label');
+            dot.className = 'dot ' + state;
+            st.className = state;
+            st.textContent = text;
+            ci.textContent = connId ? `conn-id: ${connId}` : '';
+        }
+
+        function toast(msg)
+        {
+            const el = document.getElementById('toast');
+            el.textContent = msg;
+            el.classList.add('show');
+            setTimeout(() => el.classList.remove('show'), 2800);
+        }
+
+        function setButtonsConnected(connected)
+        {
+            document.getElementById('btn-connect').disabled = connected;
+            document.getElementById('btn-disconnect').disabled = !connected;
+            document.getElementById('btn-invoke').disabled = !connected;
+            document.getElementById('btn-stream').disabled = !connected;
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // CONNECTION
+        // ═══════════════════════════════════════════════════════════
+        function buildConnection()
+        {
+            const url = document.getElementById('hub-url').value.trim();
+            const transport = parseInt(document.getElementById('transport').value);
+            const token = document.getElementById('auth-token').value.trim();
+
+            const builder = new signalR.HubConnectionBuilder()
+                .withUrl(url, {
+                    transport,
+                    accessTokenFactory: token ? () => token.replace(/^Bearer\s+/i, '') : undefined
+                })
+                .withAutomaticReconnect()
+                .configureLogging(signalR.LogLevel.Information);
+
+            return builder.build();
+        }
+
+        async function doConnect()
+        {
+            if (connection) { await doDisconnect(); }
+
+            setStatus('connecting', 'Подключение…', '');
+            addLog('SYS', `Установка соединения → ${document.getElementById('hub-url').value}`);
+
+            try
+            {
+                connection = buildConnection();
+
+                connection.onclose(err =>
+                {
+                    setStatus('disconnected', 'Отключено' + (err ? ': ' + err.message : ''), '');
+                    setButtonsConnected(false);
+                    addLog('SYS', err ? `Соединение закрыто с ошибкой: ${err.message}` : 'Соединение закрыто.');
+                });
+
+                connection.onreconnecting(err =>
+                {
+                    setStatus('connecting', 'Переподключение…', '');
+                    addLog('SYS', `Переподключение… ${err?.message || ''}`);
+                });
+
+                connection.onreconnected(connId =>
+                {
+                    setStatus('connected', 'Подключено', connId);
+                    addLog('SYS', `Переподключение успешно. ID: ${connId}`);
+                });
+
+                // Re-register existing subscriptions
+                Object.keys(subscriptions).forEach(m => registerHandler(m));
+
+                await connection.start();
+
+                const connId = connection.connectionId;
+                setStatus('connected', 'Подключено', connId);
+                setButtonsConnected(true);
+                addLog('SYS', `✓ Подключено. Connection ID: ${connId}`);
+                toast('✓ Подключено к хабу');
+            } catch (e)
+            {
+                setStatus('disconnected', 'Ошибка подключения', '');
+                addLog('ERR', `Ошибка подключения: ${e.message}`);
+                connection = null;
+                toast('✗ Ошибка подключения');
+            }
+        }
+
+        async function doDisconnect()
+        {
+            if (!connection) return;
+            try
+            {
+                await connection.stop();
+            } catch (e) { /* ignore */ }
+            connection = null;
+            setStatus('disconnected', 'Отключено', '');
+            setButtonsConnected(false);
+            addLog('SYS', 'Соединение закрыто вручную.');
+            toast('Отключено');
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // INVOKE / SEND
+        // ═══════════════════════════════════════════════════════════
+        function selectMode(mode, el)
+        {
+            currentMode = mode;
+            document.querySelectorAll('.method-tab').forEach(t => t.classList.remove('active'));
+            el.classList.add('active');
+            document.getElementById('invoke-result-section').style.display = (mode === 'invoke') ? '' : 'none';
+        }
+
+        async function doInvoke()
+        {
+            if (!connection) return;
+            const method = document.getElementById('invoke-method').value.trim();
+            if (!method) { toast('Введите имя метода'); return; }
+
+            let args;
+            try { args = parseArgs(document.getElementById('invoke-args').value); }
+            catch (e) { addLog('ERR', e.message); toast(e.message); return; }
+
+            const argsStr = JSON.stringify(args);
+            addLog('OUT', argsStr, method);
+
+            const resBox = document.getElementById('invoke-result');
+            resBox.classList.remove('empty');
+            resBox.textContent = '⏳ ожидание...';
+
+            try
+            {
+                if (currentMode === 'invoke')
+                {
+                    const result = await connection.invoke(method, ...args);
+                    const res = result !== undefined ? JSON.stringify(result, null, 2) : '(void)';
+                    resBox.textContent = res;
+                    addLog('IN', res, method + ' → result');
+                } else
+                {
+                    await connection.send(method, ...args);
+                    resBox.textContent = '(send — ответ не ожидается)';
+                    resBox.classList.add('empty');
+                    addLog('SYS', `send «${method}» отправлен.`);
+                }
+            } catch (e)
+            {
+                resBox.textContent = '✗ ' + e.message;
+                addLog('ERR', `${method}: ${e.message}`);
+                toast('✗ ' + e.message);
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // SUBSCRIPTIONS
+        // ═══════════════════════════════════════════════════════════
+        function registerHandler(method)
+        {
+            if (!connection) return;
+            // remove old handler first
+            connection.off(method);
+            subscriptions[method] = (...args) =>
+            {
+                const val = args.length === 1 ? JSON.stringify(args[0], null, 2) : JSON.stringify(args, null, 2);
+                addLog('IN', val, method);
+            };
+            connection.on(method, subscriptions[method]);
+        }
+
+        function addSubscription()
+        {
+            const input = document.getElementById('sub-method');
+            const method = input.value.trim();
+            if (!method) { toast('Введите имя метода'); return; }
+            if (subscriptions[method]) { toast(`Уже подписан на «${method}»`); return; }
+
+            subscriptions[method] = null; // placeholder
+            if (connection) registerHandler(method);
+
+            renderSubItem(method);
+            addLog('SYS', `Подписка на «${method}» добавлена.`);
+            input.value = '';
+            toast(`✓ Подписан на «${method}»`);
+        }
+
+        function renderSubItem(method)
+        {
+            const list = document.getElementById('sub-list');
+            const div = document.createElement('div');
+            div.className = 'sub-item';
+            div.dataset.method = method;
+            div.innerHTML = `
+        <span class="sub-method">${escHtml(method)}</span>
+        <button class="sub-remove" title="Удалить" onclick="removeSubscription('${escHtml(method)}')">✕</button>
+      `;
+            list.appendChild(div);
+        }
+
+        function removeSubscription(method)
+        {
+            if (connection) connection.off(method);
+            delete subscriptions[method];
+            const el = document.querySelector(`.sub-item[data-method="${method}"]`);
+            if (el) el.remove();
+            addLog('SYS', `Подписка на «${method}» удалена.`);
+            toast(`Подписка «${method}» удалена`);
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // STREAMING
+        // ═══════════════════════════════════════════════════════════
+        async function doStream()
+        {
+            if (!connection) return;
+            const method = document.getElementById('stream-method').value.trim();
+            let args;
+            try { args = parseArgs(document.getElementById('stream-args').value); }
+            catch (e) { addLog('ERR', e.message); return; }
+
+            addLog('SYS', `Запуск стрима «${method}»…`);
+            document.getElementById('btn-stream').disabled = true;
+            document.getElementById('btn-stop-stream').disabled = false;
+
+            try
+            {
+                streamSubscription = connection.stream(method, ...args);
+                streamSubscription.subscribe({
+                    next: val => addLog('IN', JSON.stringify(val), `stream:${method}`),
+                    error: err =>
+                    {
+                        addLog('ERR', `Стрим «${method}» ошибка: ${err.message}`);
+                        resetStreamButtons();
+                    },
+                    complete: () =>
+                    {
+                        addLog('SYS', `Стрим «${method}» завершён.`);
+                        resetStreamButtons();
+                    }
+                });
+            } catch (e)
+            {
+                addLog('ERR', `stream: ${e.message}`);
+                resetStreamButtons();
+            }
+        }
+
+        function stopStream()
+        {
+            if (streamSubscription)
+            {
+                streamSubscription.dispose();
+                streamSubscription = null;
+                addLog('SYS', 'Стрим остановлен вручную.');
+            }
+            resetStreamButtons();
+        }
+
+        function resetStreamButtons()
+        {
+            document.getElementById('btn-stream').disabled = !connection;
+            document.getElementById('btn-stop-stream').disabled = true;
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // LOG FILTER
+        // ═══════════════════════════════════════════════════════════
+        function setFilter(type, el)
+        {
+            activeFilter = type;
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            el.classList.add('active');
+            redrawLog();
+        }
+
+        function redrawLog()
+        {
+            const container = document.getElementById('log-container');
+            container.innerHTML = '';
+            logEntries.forEach(e =>
+            {
+                if (activeFilter === 'ALL' || activeFilter === e.type) renderEntry(e);
+            });
+            if (document.getElementById('chk-autoscroll').checked)
+                container.scrollTop = container.scrollHeight;
+        }
+
+        function clearLog()
+        {
+            logEntries = [];
+            logCount = 0;
+            document.getElementById('log-container').innerHTML = '';
+            document.getElementById('log-count').textContent = '0';
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // PRESETS
+        // ═══════════════════════════════════════════════════════════
+        function setPreset(val)
+        {
+            document.getElementById('invoke-args').value = val;
+        }
+
+        // ── Init ──────────────────────────────────────────────────
+        selectMode('invoke', document.querySelector('[data-mode="invoke"]'));
+        addLog('SYS', 'SignalR Tester готов. Введите URL хаба и нажмите «Подключить».');
+    </script>
+</body>
+</html>

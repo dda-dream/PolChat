@@ -322,6 +322,7 @@ public class ChatHub : Hub
         }
     }
 
+    
     public async Task AddReaction(string messageId, string emoji)
     {
         var userInfo = _connections.GetValueOrDefault(Context.ConnectionId);
@@ -361,6 +362,25 @@ public class ChatHub : Hub
         await _db.Database.ExecuteSqlRawAsync(@"
             UPDATE messages SET reactions = {0}::jsonb WHERE id = {1}",
             JsonSerializer.Serialize(reactions), messageId);
+
+        //add reaction to Reactions table
+        var reaction = _db.Reactions
+                        .Where(r => r.UserId == username && r.MessageId == messageId && r.Emoji == emoji )
+                        .FirstOrDefault();
+        if (reaction == null)
+        {
+            Reaction r = new Reaction();
+            r.UserId = username;
+            r.MessageId = messageId;
+            r.Emoji = emoji;
+            r.CreatedAt = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Utc);
+            await _db.Reactions.AddAsync(r);
+        } else
+        {
+            _db.Reactions.Remove(reaction);
+        }
+        await _db.SaveChangesAsync();
+        //add reaction to Reactions table
 
         await Clients.All.SendAsync("message_reaction_updated", 
             new
