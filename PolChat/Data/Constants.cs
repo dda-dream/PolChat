@@ -6,7 +6,7 @@ public static class Constants
     public const string DeletedUserAvatarLetter = "?";
     public const string GeneralChannelName = "Общий";
     public const int SessionTtlDays = 30;
-    public const int MaxUploadSizeBytes = 200 * 1024 * 1024; // 200 MB
+    public const int MaxUploadSizeBytes = 1000 * 1024 * 1024; // 1000 MB
     public const int MessagesPerPage = 50;
 
     public static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
