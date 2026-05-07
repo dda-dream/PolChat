@@ -54,8 +54,8 @@ public class ChannelsController : ControllerBase
         var session = await GetSession();
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
-        var channels = await _db.channels.OrderBy(c => c.CreatedAt).ToListAsync();
-        var existingUsers = (await _db.users.Select(u => u.Username).ToListAsync()).ToHashSet();
+        var channels = await _db.Channels.OrderBy(c => c.CreatedAt).ToListAsync();
+        var existingUsers = (await _db.Users.Select(u => u.Username).ToListAsync()).ToHashSet();
         var dtos = channels.Select(c => ToChannelDto(c, existingUsers)).ToList();
         return Ok(dtos);
     }
@@ -70,7 +70,7 @@ public class ChannelsController : ControllerBase
         var name = HtmlSanitizer.Sanitize(request.Name);
         var description = HtmlSanitizer.Sanitize(request.Description);
 
-        var existing = await _db.channels.FirstOrDefaultAsync(c => c.Name == name);
+        var existing = await _db.Channels.FirstOrDefaultAsync(c => c.Name == name);
         if (existing != null) return BadRequest(new { error = "Already exists" });
 
         var channel = new Channel
@@ -82,10 +82,10 @@ public class ChannelsController : ControllerBase
             CreatedAt = DateTime.UtcNow,
             IsPrivate = request.IsPrivate
         };
-        _db.channels.Add(channel);
+        _db.Channels.Add(channel);
         await _db.SaveChangesAsync();
 
-        var existingUsers = (await _db.users.Select(u => u.Username).ToListAsync()).ToHashSet();
+        var existingUsers = (await _db.Users.Select(u => u.Username).ToListAsync()).ToHashSet();
 
         // Broadcast channel_created to all users
         await _hub.Clients.All.SendAsync("channel_created");
@@ -100,7 +100,7 @@ public class ChannelsController : ControllerBase
         var session = await GetSession();
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
-        var channel = await _db.channels.FindAsync(channelId);
+        var channel = await _db.Channels.FindAsync(channelId);
         if (channel == null) return NotFound(new { error = "Not found" });
 
         if (channel.Name == Constants.GeneralChannelName)
@@ -109,9 +109,9 @@ public class ChannelsController : ControllerBase
         if (session.Role != "admin" && channel.CreatedBy != session.Username)
             return StatusCode(403, new { error = "No permission" });
 
-        _db.channels.Remove(channel);
-        var messages = _db.messages.Where(m => m.ChannelId == channelId);
-        _db.messages.RemoveRange(messages);
+        _db.Channels.Remove(channel);
+        var messages = _db.Messages.Where(m => m.ChannelId == channelId);
+        _db.Messages.RemoveRange(messages);
         await _db.SaveChangesAsync();
 
         // Broadcast channel_deleted to all users
@@ -131,7 +131,7 @@ public class ChannelsController : ControllerBase
         if (string.IsNullOrEmpty(newName) || newName.Length > 50)
             return BadRequest(new { error = "Название должно быть от 1 до 50 символов" });
 
-        var channel = await _db.channels.FindAsync(channelId);
+        var channel = await _db.Channels.FindAsync(channelId);
         if (channel == null) return NotFound(new { error = "Канал не найден" });
 
         if (channel.Name == Constants.GeneralChannelName)
@@ -140,7 +140,7 @@ public class ChannelsController : ControllerBase
         if (session.Role != "admin" && channel.CreatedBy != session.Username)
             return StatusCode(403, new { error = "Нет прав" });
 
-        var existing = await _db.channels.FirstOrDefaultAsync(c => c.Name == newName && c.Id != channelId);
+        var existing = await _db.Channels.FirstOrDefaultAsync(c => c.Name == newName && c.Id != channelId);
         if (existing != null) return BadRequest(new { error = "Канал с таким названием уже существует" });
 
         var oldName = channel.Name;
@@ -164,7 +164,7 @@ public class ChannelsController : ControllerBase
         if (newDescription != null && newDescription.Length > 500)
             return BadRequest(new { error = "Описание не должно превышать 500 символов" });
 
-        var channel = await _db.channels.FindAsync(channelId);
+        var channel = await _db.Channels.FindAsync(channelId);
         if (channel == null) return NotFound(new { error = "Канал не найден" });
 
         if (channel.Name == Constants.GeneralChannelName)

@@ -18,7 +18,7 @@ public static class DbInitializer
             Console.WriteLine($"[WARN] EnsureCreated failed (tables may already exist): {ex.Message}");
         }
 
-        var userCount = await db.users.CountAsync();
+        var userCount = await db.Users.CountAsync();
         if (userCount == 0)
         {
             var now = DateTime.UtcNow;
@@ -31,7 +31,7 @@ public static class DbInitializer
                 Avatar = "default.png",
                 Status = "offline"
             };
-            db.users.Add(admin);
+            db.Users.Add(admin);
 
             var general = new Channel
             {
@@ -42,7 +42,7 @@ public static class DbInitializer
                 CreatedAt = now,
                 IsPrivate = false
             };
-            db.channels.Add(general);
+            db.Channels.Add(general);
 
             await db.SaveChangesAsync();
             Console.WriteLine("[OK] БД инициализирована: admin + general");

@@ -34,7 +34,7 @@ public class UsersController : ControllerBase
         var session = await GetSession();
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
-        var users = await _db.users
+        var users = await _db.Users
             .Where(u => u.Username != null)
             .Select(u => new UserDto
             {
@@ -64,7 +64,7 @@ public class UsersController : ControllerBase
         var username = session.Username;
         var now = DateTime.UtcNow;
 
-        var user = await _db.users.FindAsync(username);
+        var user = await _db.Users.FindAsync(username);
         if (user == null) return NotFound(new { error = "User not found" });
 
         user.Status = request.Status;
@@ -85,7 +85,7 @@ public class UsersController : ControllerBase
         if (string.IsNullOrEmpty(request.Role) || (request.Role != "user" && request.Role != "admin"))
             return BadRequest(new { error = "Invalid role" });
 
-        var user = await _db.users.FindAsync(username);
+        var user = await _db.Users.FindAsync(username);
         if (user == null) return NotFound(new { error = "User not found" });
 
         user.Role = request.Role;
@@ -103,10 +103,10 @@ public class UsersController : ControllerBase
         if (session.Role != "admin") return StatusCode(403, new { error = "Admin only" });
         if (username == session.Username) return BadRequest(new { error = "Cannot delete yourself" });
 
-        var user = await _db.users.FindAsync(username);
+        var user = await _db.Users.FindAsync(username);
         if (user == null) return NotFound(new { error = "User not found" });
 
-        _db.users.Remove(user);
+        _db.Users.Remove(user);
         await _db.SaveChangesAsync();
 
         return Ok(new { success = true });
@@ -129,7 +129,7 @@ public class UsersController : ControllerBase
         var username = session.Username;
         var now = DateTime.UtcNow;
 
-        var user = await _db.users.FindAsync(username);
+        var user = await _db.Users.FindAsync(username);
         if (user == null) return NotFound(new { error = "User not found" });
 
         user.LastSeen = now;
@@ -149,7 +149,7 @@ public class UsersController : ControllerBase
         var session = await GetSession();
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
-        var user = await _db.users.FindAsync(session.Username);
+        var user = await _db.Users.FindAsync(session.Username);
         if (user == null) return NotFound(new { error = "User not found" });
 
         return Ok(new

@@ -40,9 +40,9 @@ public class DMChannelsController : ControllerBase
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
         var username = session.Username;
 
-        var existingUsers = (await _db.users.Select(u => u.Username).ToListAsync()).ToHashSet();
+        var existingUsers = (await _db.Users.Select(u => u.Username).ToListAsync()).ToHashSet();
 
-        var dms = await _db.dm_channels.ToListAsync();
+        var dms = await _db.DmChannels.ToListAsync();
         var dtos = new List<DMChannelDto>();
 
         foreach (var dm in dms)
@@ -77,11 +77,11 @@ public class DMChannelsController : ControllerBase
         if (string.IsNullOrEmpty(request.OtherUser) || request.OtherUser == username)
             return BadRequest(new { error = "Invalid user" });
 
-        var otherExists = await _db.users.AnyAsync(u => u.Username == request.OtherUser);
+        var otherExists = await _db.Users.AnyAsync(u => u.Username == request.OtherUser);
         if (!otherExists) return NotFound(new { error = "User not found" });
 
         // Check if DM already exists
-        var allDms = await _db.dm_channels.ToListAsync();
+        var allDms = await _db.DmChannels.ToListAsync();
         var existing = allDms.FirstOrDefault(d =>
             d.Participants.Contains(username) && d.Participants.Contains(request.OtherUser));
         if (existing != null)
@@ -94,7 +94,7 @@ public class DMChannelsController : ControllerBase
             CreatedBy = username,
             CreatedAt = DateTime.UtcNow
         };
-        _db.dm_channels.Add(dm);
+        _db.DmChannels.Add(dm);
         await _db.SaveChangesAsync();
 
         // Broadcast dm_channel_created to participants
@@ -117,15 +117,15 @@ public class DMChannelsController : ControllerBase
         var session = await GetSession();
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
-        var dm = await _db.dm_channels.FindAsync(dmId);
+        var dm = await _db.DmChannels.FindAsync(dmId);
         if (dm == null) return NotFound(new { error = "Not found" });
 
         if (!dm.Participants.Contains(session.Username))
             return StatusCode(403, new { error = "No permission" });
 
-        _db.dm_channels.Remove(dm);
-        var messages = _db.messages.Where(m => m.ChannelId == dmId);
-        _db.messages.RemoveRange(messages);
+        _db.DmChannels.Remove(dm);
+        var messages = _db.Messages.Where(m => m.ChannelId == dmId);
+        _db.Messages.RemoveRange(messages);
         await _db.SaveChangesAsync();
 
         // Broadcast dm_channel_deleted to participants
