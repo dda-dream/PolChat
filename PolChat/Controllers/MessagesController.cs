@@ -382,9 +382,9 @@ public class MessagesController : ControllerBase
         return Ok(new { read_by = readBy, read_count = readBy.Length });
     }
 
-    // GET /api/message/{messageId}/emoji
-    [HttpGet("/api/message/{messageId}/emoji")]
-    public async Task<IActionResult> GetMessageEmoji(string messageId)
+    // GET /api/message/{messageId}/reactions
+    [HttpGet("/api/message/{messageId}/reactions")]
+    public async Task<IActionResult> GetMessageReactions(string messageId)
     {
         var session = await GetSession();
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
