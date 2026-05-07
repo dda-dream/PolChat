@@ -382,20 +382,6 @@ public class MessagesController : ControllerBase
         return Ok(new { read_by = readBy, read_count = readBy.Length });
     }
 
-    // GET /api/message/{messageId}/emoji
-    [HttpGet("/api/message/{messageId}/emoji")]
-    public async Task<IActionResult> GetMessageEmoji(string messageId)
-    {
-        var session = await GetSession();
-        if (session == null) return Unauthorized(new { error = "Not authenticated" });
-
-        var reactions = _db.Reactions
-                            .AsNoTracking()
-                            .Where(r => r.MessageId == messageId)
-                            .AsAsyncEnumerable();
-                
-        return Ok(reactions);
-    }
 
 
     private async Task<Dictionary<string, int>> GetRealUnreadCounts(string username)
@@ -473,7 +459,7 @@ public class MessagesController : ControllerBase
 
         return Ok(msgDto);
     }
-
+    
     [HttpGet("/api/messages/migrate_reactions")]
     public async Task<IActionResult> MigrateReactions()
     {
@@ -507,6 +493,24 @@ public class MessagesController : ControllerBase
 
         return Ok(new { success = true });
     }
+
+    // GET /api/message/{messageId}/emoji
+    [HttpGet("/api/message/{messageId}/emoji")]
+    public async Task<IActionResult> GetMessageEmoji(string messageId)
+    {
+        var session = await GetSession();
+        if (session == null) return Unauthorized(new { error = "Not authenticated" });
+
+        var reactions = _db.Reactions
+                            .AsNoTracking()
+                            .Where(r => r.MessageId == messageId)
+                            .AsAsyncEnumerable();
+
+        return Ok(reactions);
+    }
+
+
+
 
 
 }
