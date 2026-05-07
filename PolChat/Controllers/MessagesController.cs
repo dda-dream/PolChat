@@ -49,14 +49,14 @@ public class MessagesController : ControllerBase
         var sinceTimeUtc = sinceTime.Kind == DateTimeKind.Utc ? sinceTime : sinceTime.ToUniversalTime();
 
         // Получаем сообщения после указанного времени
-        var messages = await _db.messages
+        var messages = await _db.Messages
             .Where(m => m.ChannelId == channelId && m.Timestamp > sinceTimeUtc)
             .OrderBy(m => m.Timestamp)
             .Take(limit)
             .ToListAsync();
 
         // Форматируем и возвращаем
-        var existingUsers = (await _db.users.Select(u => u.Username).ToListAsync()).ToHashSet();
+        var existingUsers = (await _db.Users.Select(u => u.Username).ToListAsync()).ToHashSet();
 
         var messageDtos = messages.Select(row =>
         {
@@ -96,8 +96,8 @@ public class MessagesController : ControllerBase
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
         var username = session.Username;
 
-        var channels = await _db.channels.OrderBy(c => c.CreatedAt).ToListAsync();
-        var existingUsers = (await _db.users.Select(u => u.Username).ToListAsync()).ToHashSet();
+        var channels = await _db.Channels.OrderBy(c => c.CreatedAt).ToListAsync();
+        var existingUsers = (await _db.Users.Select(u => u.Username).ToListAsync()).ToHashSet();
 
         var channelDtos = channels.Select(ch => new ChannelDto
         {
@@ -112,7 +112,7 @@ public class MessagesController : ControllerBase
         }).ToList();
 
         // DM channels
-        var dmRows = await _db.dm_channels.ToListAsync();
+        var dmRows = await _db.DmChannels.ToListAsync();
         var dmDtos = new List<DMChannelDto>();
         foreach (var dm in dmRows)
         {
@@ -132,7 +132,7 @@ public class MessagesController : ControllerBase
             });
         }
 
-        var users = await _db.users
+        var users = await _db.Users
             .Where(u => u.Username != null)
             .Select(u => new UserDto
             {
@@ -166,11 +166,11 @@ public class MessagesController : ControllerBase
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
         var offset = (page - 1) * limit;
-        var existingUsers = (await _db.users.Select(u => u.Username).ToListAsync()).ToHashSet();
+        var existingUsers = (await _db.Users.Select(u => u.Username).ToListAsync()).ToHashSet();
 
-        var totalCount = await _db.messages.CountAsync(m => m.ChannelId == channelId);
+        var totalCount = await _db.Messages.CountAsync(m => m.ChannelId == channelId);
 
-        var rows = await _db.messages
+        var rows = await _db.Messages
             .Where(m => m.ChannelId == channelId)
             .OrderByDescending(m => m.Timestamp)
             .Skip(offset)
@@ -182,7 +182,7 @@ public class MessagesController : ControllerBase
         var replyMessages = new Dictionary<string, Message>();
         if (replyToIds.Count > 0)
         {
-            var replyRows = await _db.messages.Where(m => replyToIds.Contains(m.Id)).ToListAsync();
+            var replyRows = await _db.Messages.Where(m => replyToIds.Contains(m.Id)).ToListAsync();
             foreach (var rr in replyRows) replyMessages[rr.Id] = rr;
         }
 
@@ -244,7 +244,7 @@ public class MessagesController : ControllerBase
 
         var newContent = HtmlSanitizer.Sanitize(request.Content);
 
-        var msg = await _db.messages.FindAsync(messageId);
+        var msg = await _db.Messages.FindAsync(messageId);
         if (msg == null || msg.Username != session.Username)
             return StatusCode(403, new { error = "No permission" });
 
@@ -266,14 +266,14 @@ public class MessagesController : ControllerBase
         var session = await GetSession();
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
-        var msg = await _db.messages.FindAsync(messageId);
+        var msg = await _db.Messages.FindAsync(messageId);
         if (msg == null) return NotFound(new { error = "Not found" });
 
         if (msg.Username != session.Username && session.Role != "admin")
             return StatusCode(403, new { error = "No permission" });
 
         var channelId = msg.ChannelId;
-        _db.messages.Remove(msg);
+        _db.Messages.Remove(msg);
         await _db.SaveChangesAsync();
 
         // Broadcast delete to channel
@@ -315,7 +315,7 @@ public class MessagesController : ControllerBase
 
         var username = session.Username;
 
-        var msg = await _db.messages
+        var msg = await _db.Messages
             .Where(m => m.Id == messageId)
             .Select(m => new { m.ChannelId, m.Username })
             .FirstOrDefaultAsync();
@@ -353,7 +353,7 @@ public class MessagesController : ControllerBase
         var session = await GetSession();
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
-        var rows = await _db.messages
+        var rows = await _db.Messages
             .Where(m => m.ChannelId == channelId && m.Username == session.Username)
             .Select(m => new { m.Id, m.ReadBy, m.DeliveredTo })
             .ToListAsync();
@@ -377,7 +377,7 @@ public class MessagesController : ControllerBase
         var session = await GetSession();
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
-        var msg = await _db.messages.Where(m => m.Id == messageId).Select(m => m.ReadBy).FirstOrDefaultAsync();
+        var msg = await _db.Messages.Where(m => m.Id == messageId).Select(m => m.ReadBy).FirstOrDefaultAsync();
         var readBy = msg ?? Array.Empty<string>();
         return Ok(new { read_by = readBy, read_count = readBy.Length });
     }
@@ -420,9 +420,9 @@ public class MessagesController : ControllerBase
         var session = await GetSession();
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
-        var existingUsers = (await _db.users.Select(u => u.Username).ToListAsync()).ToHashSet();
+        var existingUsers = (await _db.Users.Select(u => u.Username).ToListAsync()).ToHashSet();
 
-        var message = await _db.messages
+        var message = await _db.Messages
             .Where(m => m.Id == messageId)
             .FirstOrDefaultAsync();
 

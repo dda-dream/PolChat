@@ -44,7 +44,7 @@ public class ChatHub : Hub
 
         // Update user status to online
         var now = DateTime.UtcNow;
-        await _db.users
+        await _db.Users
             .Where(u => u.Username == username)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(u => u.Status, "online")
@@ -148,7 +148,7 @@ public class ChatHub : Hub
             if (!stillOnline)
             {
                 var now = DateTime.UtcNow;
-                await _db.users
+                await _db.Users
                     .Where(u => u.Username == username)
                     .ExecuteUpdateAsync(s => s
                         .SetProperty(u => u.Status, "offline")
@@ -210,21 +210,21 @@ public class ChatHub : Hub
             DeliveredTo = new List<string>()
         };
 
-        _db.messages.Add(message);
+        _db.Messages.Add(message);
         await _db.SaveChangesAsync();
 
         // Get reply-to info if needed
         ReplyToInfo? replyToInfo = null;
         if (replyToId != null)
         {
-            var rm = await _db.messages
+            var rm = await _db.Messages
                 .Where(m => m.Id == replyToId)
                 .Select(m => new { m.Id, m.Username, m.Content, m.FileUrl })
                 .FirstOrDefaultAsync();
 
             if (rm != null)
             {
-                var existingUsers = await _db.users.Select(u => u.Username).ToListAsync();
+                var existingUsers = await _db.Users.Select(u => u.Username).ToListAsync();
                 replyToInfo = new ReplyToInfo
                 {
                     Id = rm.Id,
@@ -239,13 +239,13 @@ public class ChatHub : Hub
         // DM: check delivery
         if (channelId.Contains('-'))
         {
-            var dm = await _db.dm_channels.FirstOrDefaultAsync(d => d.Id == channelId);
+            var dm = await _db.DmChannels.FirstOrDefaultAsync(d => d.Id == channelId);
             if (dm != null)
             {
                 var otherUser = dm.Participants.FirstOrDefault(p => p != username);
                 if (otherUser != null)
                 {
-                    var isOnline = await _db.users
+                    var isOnline = await _db.Users
                         .Where(u => u.Username == otherUser)
                         .Select(u => u.Status == "online")
                         .FirstOrDefaultAsync();
@@ -300,13 +300,13 @@ public class ChatHub : Hub
         // DM unread notification
         if (channelId.Contains('-'))
         {
-            var dm = await _db.dm_channels.FirstOrDefaultAsync(d => d.Id == channelId);
+            var dm = await _db.DmChannels.FirstOrDefaultAsync(d => d.Id == channelId);
             if (dm != null)
             {
                 var otherUser = dm.Participants.FirstOrDefault(p => p != username);
                 if (otherUser != null)
                 {
-                    var existingUsers = await _db.users.Select(u => u.Username).ToListAsync();
+                    var existingUsers = await _db.Users.Select(u => u.Username).ToListAsync();
                     if (existingUsers.Contains(otherUser))
                     {
                         var uc = await GetUnreadCountForChannel(channelId, otherUser);
@@ -329,7 +329,7 @@ public class ChatHub : Hub
 
         var username = userInfo.Username;
 
-        var row = await _db.messages
+        var row = await _db.Messages
             .Where(m => m.Id == messageId)
             .Select(m => m.Reactions)
             .FirstOrDefaultAsync();

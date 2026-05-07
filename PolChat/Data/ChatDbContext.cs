@@ -6,15 +6,17 @@ namespace ChatApp.Data;
 
 public class ChatDbContext : DbContext
 {
-    public ChatDbContext(DbContextOptions<ChatDbContext> options) : base(options) { }
+    public ChatDbContext(DbContextOptions<ChatDbContext> options) : base(options) 
+    {
+    }
 
-    public DbSet<User> users => Set<User>();
-    public DbSet<Channel> channels => Set<Channel>();
-    public DbSet<Message> messages => Set<Message>();
-    public DbSet<DMChannel> dm_channels => Set<DMChannel>();
-
-
+    public DbSet<User> Users => Set<User>();
+    public DbSet<Channel> Channels => Set<Channel>();
+    public DbSet<Message> Messages => Set<Message>();
+    public DbSet<DMChannel> DmChannels => Set<DMChannel>();
     public DbSet<Reaction> Reactions=> Set<Reaction>();
+
+
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

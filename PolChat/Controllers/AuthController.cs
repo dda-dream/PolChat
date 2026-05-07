@@ -40,7 +40,7 @@ public class AuthController : ControllerBase
     //[HttpPost("/login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
-        var user = await _db.users.FindAsync(request.Username);
+        var user = await _db.Users.FindAsync(request.Username);
         if (user == null || user.Password != DbInitializer.ComputeSha256Hash(request.Password))
         {
             return Unauthorized(new { success = false, error = "Invalid credentials" });
@@ -109,11 +109,11 @@ public class AuthController : ControllerBase
         if (request.Password.Length < 6)
             return BadRequest(new { success = false, error = "Пароль мин. 6 символов" });
 
-        var existing = await _db.users.FindAsync(request.Username);
+        var existing = await _db.Users.FindAsync(request.Username);
         if (existing != null)
             return BadRequest(new { success = false, error = "Уже существует" });
 
-        _db.users.Add(new User
+        _db.Users.Add(new User
         {
             Username = request.Username,
             Password = DbInitializer.ComputeSha256Hash(request.Password),
