@@ -37,8 +37,8 @@ public class UploadController : ControllerBase
     }
 
     [HttpPost("/upload")]
-    [RequestSizeLimit(1000 * 1024 * 1024)]
-    [RequestFormLimits(MultipartBodyLengthLimit = 1000 * 1024 * 1024)]
+    [RequestSizeLimit(Constants.MaxUploadSizeBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = Constants.MaxUploadSizeBytes)]
     public async Task<IActionResult> Upload(IFormFile? file, [FromForm] string? channelId = null)
     {
         var session = await GetSession();

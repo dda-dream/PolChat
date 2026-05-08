@@ -473,7 +473,7 @@ public class MessagesController : ControllerBase
 
         return Ok(msgDto);
     }
-
+    
     [HttpGet("/api/messages/migrate_reactions")]
     public async Task<IActionResult> MigrateReactions()
     {
@@ -507,6 +507,24 @@ public class MessagesController : ControllerBase
 
         return Ok(new { success = true });
     }
+
+    // GET /api/message/{messageId}/reactions
+    [HttpGet("/api/message/{messageId}/reactions")]
+    public async Task<IActionResult> GetMessageReactions(string messageId)
+    {
+        var session = await GetSession();
+        if (session == null) return Unauthorized(new { error = "Not authenticated" });
+
+        var reactions = _db.Reactions
+                            .AsNoTracking()
+                            .Where(r => r.MessageId == messageId)
+                            .AsAsyncEnumerable();
+
+        return Ok(reactions);
+    }
+
+
+
 
 
 }
