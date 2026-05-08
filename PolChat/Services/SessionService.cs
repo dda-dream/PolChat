@@ -32,10 +32,10 @@ public class SessionService : ISessionService
 
         try
         {
-            var data = await _redis.StringGetAsync($"session_{_httpContextAccessor.HttpContext?.Connection.LocalPort}:{sessionId}");
+            var data = await _redis.StringGetAsync($"session_id:{sessionId}");
             if (data.IsNullOrEmpty) return null;
 
-            //TODO: Disambiguate JsonSerializer.Deserialize overloads by passing a string
+            var session = JsonSerializer.Deserialize<SessionData>(data.ToString()!);
             return JsonSerializer.Deserialize<SessionData>(data.ToString()!);
         }
         catch (Exception ex)
@@ -51,9 +51,16 @@ public class SessionService : ISessionService
         var json = JsonSerializer.Serialize(data);
 
         try
-        {
+        {   
+            /*
+            var currentSession = await _redis.StringGetAsync($"session_id:{sessionId}");
+            if (!currentSession.IsNullOrEmpty)
+            {
+                return currentSession;
+            }
+            */
             await _redis.StringSetAsync(
-                $"session_{_httpContextAccessor.HttpContext?.Connection.LocalPort}:{sessionId}",
+                $"session_id:{sessionId}",
                 json,
                 TimeSpan.FromDays(Constants.SessionTtlDays)
             );
@@ -70,7 +77,7 @@ public class SessionService : ISessionService
     {
         try
         {
-            await _redis.KeyDeleteAsync($"session_{_httpContextAccessor.HttpContext?.Connection.LocalPort}:{sessionId}");
+            await _redis.KeyDeleteAsync($"session_id:{sessionId}");
         }
         catch (Exception ex)
         {

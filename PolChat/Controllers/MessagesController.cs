@@ -26,7 +26,7 @@ public class MessagesController : ControllerBase
 
     private async Task<SessionData?> GetSession()
     {
-        Request.Cookies.TryGetValue($"SESSION_ID_PORT_{_httpContextAccessor.HttpContext?.Connection.LocalPort}", out var sid);
+        Request.Cookies.TryGetValue($"SESSION_ID", out var sid);
         return await _sessionService.GetSessionAsync(sid);
     }
 

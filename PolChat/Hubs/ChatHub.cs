@@ -440,7 +440,7 @@ public class ChatHub : Hub
         var httpContext = Context.GetHttpContext();
         if (httpContext == null) return null;
 
-        httpContext.Request.Cookies.TryGetValue($"SESSION_ID_PORT_{_httpContextAccessor.HttpContext?.Connection.LocalPort}", out var sessionId);
+        httpContext.Request.Cookies.TryGetValue($"SESSION_ID", out var sessionId);
         if (string.IsNullOrEmpty(sessionId)) return null;
 
         return await _sessionService.GetSessionAsync(sessionId);
