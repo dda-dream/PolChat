@@ -581,7 +581,7 @@ if (isChatPage) {
             }
 
             // Показываем всплывающую панель со сгруппированными реакциями
-            await showReactionsGroupedPopup(messageId, reactionsByEmoji, mouseEvent);
+            await showReactionsGroupedPopup(messageId, reactionsByEmoji, allReactions, mouseEvent);
 
         } catch (error) {
             console.error('Error loading reaction users:', error);
@@ -589,15 +589,11 @@ if (isChatPage) {
         }
     }
 
-    async function showReactionsGroupedPopup(messageId: string, reactionsByEmoji: Map<string, string[]>, mouseEvent?: MouseEvent) {
+    async function showReactionsGroupedPopup(messageId: string, reactionsByEmoji: Map<string, string[]>, allReactions: Reaction[], mouseEvent?: MouseEvent) {
         if (!reactionsByEmoji || reactionsByEmoji.size === 0) {
             showNotification('Нет реакций', 'info');
             return;
         }
-
-        // Получаем ВСЕ реакции с датами
-        const allReactionsResponse = await fetch(`/api/message/${messageId}/reactions`);
-        const allReactions = await allReactionsResponse.json() as Reaction[];
 
         // Создаем мапу для быстрого доступа к дате реакции пользователя
         const userReactionDateMap = new Map<string, Map<string, string>>();
@@ -791,6 +787,7 @@ if (isChatPage) {
             return date.toLocaleDateString('ru-RU', options);
         }
     }
+
 
 
     function updateMessageStatus(messageId: string, status: MessageStatusType) {
