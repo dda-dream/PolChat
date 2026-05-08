@@ -13,7 +13,7 @@ declare global {
         timestamp: string;
         edited?: boolean;
         editedAt?: string;
-        reactions?: { emoji: string; users: string[] }[];
+        reactions?: ReactionInMessage[]; 
         readBy?: string[];
         deliveredTo?: string[];
         replyTo?: 
@@ -49,6 +49,13 @@ declare global {
         createdAt?: string;
     }
 
+    interface Reaction {
+        messageId: string;
+        userId: string;
+        emoji: string;
+        createdAt: string;
+    }
+
     interface DMChannel {
         id: string;
         name: string;
@@ -58,6 +65,11 @@ declare global {
 
     interface UnreadCounts {
         [key: string]: number;
+    }
+
+    interface ReactionInMessage {
+        emoji: string;
+        users: string[];
     }
 
     // ====================== WINDOW ======================

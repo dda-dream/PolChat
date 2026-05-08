@@ -544,37 +544,44 @@ if (isChatPage) {
         }
     }
 
-    async function showReactionUsers(messageId: string, emoji: string, mouseEvent?: MouseEvent) {
+    async function showReactionUsers(messageId: string, clickedEmoji: string, mouseEvent?: MouseEvent) {
         console.log('=== showReactionUsers START ===');
         console.log('messageId:', messageId);
-        console.log('emoji:', emoji);
+        console.log('clickedEmoji:', clickedEmoji);
 
         try {
-            // Прямой вызов нового API
-            const response = await fetch(`/api/messages/item/${messageId}`);
+            // Получаем ВСЕ реакции на сообщение
+            const response = await fetch(`/api/message/${messageId}/reactions`);
 
             if (!response.ok) {
-                console.error('Failed to fetch message:', response.status);
+                console.error('Failed to fetch reactions:', response.status);
                 showNotification('Не удалось загрузить информацию о реакции', 'danger');
                 return;
             }
 
-            const message = await response.json();
-            console.log('Received message:', message);
+            const allReactions = await response.json() as Reaction[];
+            console.log('All reactions for message:', allReactions);
 
-            // Ищем нужную реакцию
-            const reactions = message.reactions || [];
-            const reaction = reactions.find((r: any) => r.emoji === emoji);
-
-            console.log('Found reaction:', reaction);
-
-            if (!reaction || !reaction.users || reaction.users.length === 0) {
-                showNotification('Нет пользователей с этой реакцией', 'info');
+            if (!allReactions || allReactions.length === 0) {
+                showNotification('Нет реакций на этом сообщении', 'info');
                 return;
             }
 
-            // Показываем всплывающую панель рядом с курсором
-            await showReactionUsersPopup(emoji, reaction.users, mouseEvent);
+            // Группируем реакции по эмодзи
+            const reactionsByEmoji = new Map<string, string[]>();
+
+            for (const reaction of allReactions) {
+                if (!reactionsByEmoji.has(reaction.emoji)) {
+                    reactionsByEmoji.set(reaction.emoji, []);
+                }
+                const users = reactionsByEmoji.get(reaction.emoji)!;
+                if (!users.includes(reaction.userId)) {
+                    users.push(reaction.userId);
+                }
+            }
+
+            // Показываем всплывающую панель со сгруппированными реакциями
+            await showReactionsGroupedPopup(reactionsByEmoji, allReactions, mouseEvent);
 
         } catch (error) {
             console.error('Error loading reaction users:', error);
@@ -582,25 +589,21 @@ if (isChatPage) {
         }
     }
 
-    // Новая функция для показа всплывающей панели рядом с курсором
-    async function showReactionUsersPopup(emoji: string, users: string[], mouseEvent?: MouseEvent) {
-        if (!users || users.length === 0) {
-            showNotification('Нет пользователей с этой реакцией', 'info');
+    async function showReactionsGroupedPopup(reactionsByEmoji: Map<string, string[]>, allReactions: Reaction[], mouseEvent?: MouseEvent) {
+        if (!reactionsByEmoji || reactionsByEmoji.size === 0) {
+            showNotification('Нет реакций', 'info');
             return;
         }
 
-        // Получаем информацию о пользователях
-        const usersResponse = await fetch('/api/users');
-        const allUsers = await usersResponse.json() as User[];
-        const userMap = new Map<string, User>();
-        allUsers.forEach(u => userMap.set(u.username, u));
-
-        // Сортируем: текущий пользователь сверху
-        const sortedUsers = [...users].sort((a, b) => {
-            if (a === currentUsername) return -1;
-            if (b === currentUsername) return 1;
-            return 0;
-        });
+        // Создаем мапу для быстрого доступа к дате реакции пользователя
+        const userReactionDateMap = new Map<string, Map<string, string>>();
+        for (const reaction of allReactions) {
+            if (!userReactionDateMap.has(reaction.emoji)) {
+                userReactionDateMap.set(reaction.emoji, new Map());
+            }
+            const emojiMap = userReactionDateMap.get(reaction.emoji)!;
+            emojiMap.set(reaction.userId, reaction.createdAt);
+        }
 
         // Удаляем старую панель, если есть
         const existingPopup = document.getElementById('reactionUsersPopup');
@@ -611,77 +614,73 @@ if (isChatPage) {
         popup.id = 'reactionUsersPopup';
         popup.className = 'reaction-users-popup';
 
-        // Стили для панели
+        // Минимальные стили для компактной панели
         popup.style.cssText = `
         position: fixed;
         background: white;
-        border-radius: 16px;
-        box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
         z-index: 10000;
-        min-width: 220px;
-        max-width: 280px;
+        min-width: 260px;
+        max-width: 320px;
         max-height: 350px;
         overflow-y: auto;
-        font-size: 13px;
+        font-size: 12px;
         border: 1px solid #e0e0e0;
     `;
 
-        // Заголовок
-        let html = `
-        <div style="padding: 12px 16px; border-bottom: 1px solid #e0e0e0; background: #f8f9fa; border-radius: 16px 16px 0 0; position: sticky; top: 0; z-index: 1;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <span style="font-size: 1.5rem;">${escapeHtml(emoji)}</span>
-                <span style="font-weight: 600; color: #333;">${users.length} ${getUserCountText(users.length)}</span>
-            </div>
-        </div>
-        <div style="padding: 8px 0;">
-    `;
+        let html = '<div style="padding: 0px 0;">';
 
-        for (const username of sortedUsers) {
-            const user = userMap.get(username) || { status: 'offline', role: 'user' } as User;
-            const isOnline = user.status === 'online';
-            const isAdmin = user.role === 'admin';
-            const isCurrentUser = username === currentUsername;
+        // Для каждого эмодзи выводим список пользователей
+        for (const [emoji, users] of Array.from(reactionsByEmoji.entries())) {
+            // Сортируем пользователей: текущий пользователь сверху
+            const sortedUsers = [...users].sort((a, b) => {
+                if (a === currentUsername) return -1;
+                if (b === currentUsername) return 1;
+                return 0;
+            });
 
             html += `
-            <div class="reaction-popup-item" style="
-                display: flex; 
-                align-items: center; 
-                justify-content: space-between; 
-                padding: 10px 16px;
-                transition: background 0.2s;
-                cursor: default;
-                ${isCurrentUser ? 'background: #e8f0fe;' : ''}
-            ">
-                <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;">
-                    <div style="
-                        width: 36px; 
-                        height: 36px; 
-                        border-radius: 50%; 
-                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                        display: flex; 
-                        align-items: center; 
-                        justify-content: center; 
-                        color: white; 
-                        font-weight: bold;
-                        font-size: 14px;
-                        flex-shrink: 0;
-                    ">
-                        ${escapeHtml(username.charAt(0).toUpperCase())}
-                    </div>
-                    <div style="min-width: 0; flex: 1;">
-                        <div style="font-weight: 500; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-                            <span style="word-break: break-word;">${escapeHtml(username)}</span>
-                            ${isCurrentUser ? '<span style="background: #007bff; color: white; font-size: 10px; padding: 2px 6px; border-radius: 12px;">Вы</span>' : ''}
-                            ${isAdmin ? '<i class="fas fa-crown" style="color: #ffc107; font-size: 12px;"></i>' : ''}
-                        </div>
-                        <div style="font-size: 11px; color: #6c757d; margin-top: 2px;">
-                            <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: ${isOnline ? '#4caf50' : '#9e9e9e'}; margin-right: 4px;"></span>
-                            ${isOnline ? 'онлайн' : (user.lastSeen ? formatLastSeen(user.lastSeen) : 'офлайн')}
-                        </div>
-                    </div>
+            <div style="padding: 3px 5px; border-bottom: 1px solid #f0f0f0;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                    <span style="font-size: 1.2rem;">${escapeHtml(emoji)}</span>
+                    <span style="font-size: 11px; color: #666; font-weight: 500;">${users.length}</span>
                 </div>
-                ${isCurrentUser ? '<i class="fas fa-check-circle" style="color: #007bff; font-size: 14px;"></i>' : ''}
+                <div style="display: flex; flex-direction: column; gap: 6px; padding-left: 4px;">
+        `;
+
+            for (const username of sortedUsers) {
+                const isCurrentUser = username === currentUsername;
+                const displayName = isCurrentUser ? `${username} (Вы)` : username;
+
+                // Получаем дату реакции для этого пользователя и эмодзи
+                const emojiDateMap = userReactionDateMap.get(emoji);
+                const reactionDate = emojiDateMap ? emojiDateMap.get(username) : null;
+                const formattedDate = reactionDate ? formatReactionDate(reactionDate) : '';
+
+                html += `
+                <div class="reaction-user-item" data-username="${escapeHtml(username)}" style="
+                    display: flex; 
+                    align-items: center;
+                    justify-content: space-between;
+                    padding: 4px 6px;
+                    border-radius: 6px;
+                    transition: background 0.2s;
+                    cursor: pointer;
+                    font-size: 11px;
+                    ${isCurrentUser ? 'background: #e8f0fe;' : ''}
+                ">
+                    <div style="display: flex; align-items: center; gap: 6px; flex: 1;">
+                        <span style="color: #333;">${escapeHtml(displayName)}</span>
+                        ${formattedDate ? `<span style="color: #999; font-size: 10px;">- ${formattedDate}</span>` : ''}
+                    </div>
+                    ${isCurrentUser ? '<i class="fas fa-check-circle" style="color: #007bff; font-size: 10px;"></i>' : ''}
+                </div>
+            `;
+            }
+
+            html += `
+                </div>
             </div>
         `;
         }
@@ -703,22 +702,18 @@ if (isChatPage) {
         let left = positionX + 15;
         let top = positionY - 20;
 
-        // Корректировка по горизонтали (не выходим за правый край)
+        // Корректировка по горизонтали
         if (left + rect.width > viewportWidth - 10) {
             left = positionX - rect.width - 15;
         }
-
-        // Корректировка по горизонтали (не выходим за левый край)
         if (left < 10) {
             left = 10;
         }
 
-        // Корректировка по вертикали (не выходим за нижний край)
+        // Корректировка по вертикали
         if (top + rect.height > viewportHeight - 10) {
             top = positionY - rect.height - 10;
         }
-
-        // Корректировка по вертикали (не выходим за верхний край)
         if (top < 10) {
             top = 10;
         }
@@ -727,21 +722,24 @@ if (isChatPage) {
         popup.style.top = top + 'px';
 
         // Добавляем hover-эффект для элементов
-        popup.querySelectorAll('.reaction-popup-item').forEach(item => {
+        popup.querySelectorAll('.reaction-user-item').forEach(item => {
+            const username = item.getAttribute('data-username');
+            const isCurrent = username === currentUsername;
+
             (item as HTMLElement).addEventListener('mouseenter', () => {
                 (item as HTMLElement).style.background = '#f5f5f5';
             });
+
             (item as HTMLElement).addEventListener('mouseleave', () => {
-                const isCurrent = (item as HTMLElement).querySelector('span')?.textContent === currentUsername;
                 (item as HTMLElement).style.background = isCurrent ? '#e8f0fe' : '';
             });
 
-            // Клик по пользователю - можно добавить действие, например открыть DM
+            // Клик по пользователю - открываем DM
             item.addEventListener('click', (e) => {
                 e.stopPropagation();
-                const nameElement = item.querySelector('.reaction-popup-item > div > div > div:first-child > span:first-child');
-                if (nameElement && nameElement.textContent !== currentUsername) {
-                    startDMWithUser(nameElement.textContent || '');
+                const userName = item.getAttribute('data-username');
+                if (userName && userName !== currentUsername) {
+                    startDMWithUser(userName);
                     popup.remove();
                 }
             });
@@ -762,11 +760,35 @@ if (isChatPage) {
         }, 100);
     }
 
-    function getUserCountText(count: number): string {
-        if (count % 10 === 1 && count % 100 !== 11) return 'пользователь';
-        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) return 'пользователя';
-        return 'пользователей';
+    function formatReactionDate(dateString: string): string {
+        const date = new Date(dateString);
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+
+        const options: Intl.DateTimeFormatOptions = {
+            day: 'numeric',
+            month: 'long',
+            hour: '2-digit',
+            minute: '2-digit'
+        };
+
+        // Если сегодня
+        if (date >= today) {
+            return `сегодня ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+        }
+        // Если вчера
+        else if (date >= yesterday) {
+            return `вчера ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+        }
+        // Иначе полная дата
+        else {
+            return date.toLocaleDateString('ru-RU', options);
+        }
     }
+
+
 
     function updateMessageStatus(messageId: string, status: MessageStatusType) {
         // Обновляем кэш
@@ -917,26 +939,33 @@ if (isChatPage) {
 
         // Обработка клика по реакции
         const reactionBadge = target.closest('.reaction-badge');
+
+
         if (reactionBadge) {
-            e.preventDefault();
-            e.stopPropagation();
             const msgId = reactionBadge.getAttribute('data-msg-id');
             const emoji = reactionBadge.getAttribute('data-emoji');
+            e.preventDefault();
+            e.stopPropagation();
             if (msgId && emoji) {
                 // Проверяем, был ли клик по счётчику (числу)
                 const countElement = target.closest('.reaction-count');
+                const emojiElement = target.closest('.reaction-emoji');
+                const isEmojiClick = emojiElement !== null;
                 const isCountClick = countElement !== null;
-
-                console.log('Reaction click:', { isCountClick, target: target.className, emoji });
 
                 if (isCountClick) {
                     // Передаём mouseEvent для позиционирования рядом с курсором
                     showReactionUsers(msgId, emoji, e);
-                } else {
+                }
+                if (isEmojiClick){
                     // Добавляем/убираем реакцию (стандартное поведение)
                     addReaction(msgId, emoji);
                 }
             }
+
+        
+
+
             return;
         }
 
@@ -1713,7 +1742,7 @@ if (isChatPage) {
                     fileUrl: data.fileUrl,
                     replyTo: replyData
                 });
-
+                scrollToBottomSafely(true);
                 showNotification(textContent ? 'Сообщение с файлом отправлено!' : 'Файл отправлен!', 'success');
             } else {
                 showNotification(data.error || 'Ошибка загрузки файла', 'danger');
@@ -2016,45 +2045,6 @@ if (isChatPage) {
         let messageElement = document.getElementById(`msg-${tempId}`);
 
         try {
-            if (hasFile && selectedFile) {
-                const formData = new FormData();
-                formData.append('file', selectedFile);
-                formData.append('channelId', currentChannel);
-
-                const uploadResponse = await fetch('/upload', { method: 'POST', body: formData });
-                const uploadData = await uploadResponse.json();
-
-                if (!uploadData.success) {
-                    throw new Error(uploadData.error || 'Ошибка загрузки файла');
-                }
-
-                if (messageElement) {
-                    const img = messageElement.querySelector('.message-image');
-                    if (img) {
-                        img.setAttribute('src', uploadData.fileUrl);
-                        img.setAttribute('onclick', `event.stopPropagation(); openMediaModal('${uploadData.fileUrl.replace(/'/g, "\\'")}', 'image')`);
-                    } else {
-                        const videoSource = messageElement.querySelector('video source');
-                        if (videoSource) {
-                            videoSource.setAttribute('src', uploadData.fileUrl);
-                            (videoSource.parentElement as HTMLVideoElement)?.load();
-                        } else {
-                            const fileLink = messageElement.querySelector('a');
-                            if (fileLink) fileLink.setAttribute('href', uploadData.fileUrl);
-                        }
-                    }
-                }
-
-                await connection.invoke('SendMessage', {
-                    tempId: tempId,
-                    channelId: currentChannel,
-                    content: content,
-                    fileUrl: uploadData.fileUrl,
-                    replyTo: replyData
-                });
-
-                if (fileInput) fileInput.value = '';
-            } else {
                 await connection.invoke('SendMessage', {
                     tempId: tempId,
                     channelId: currentChannel,
@@ -2062,7 +2052,6 @@ if (isChatPage) {
                     fileUrl: null,
                     replyTo: replyData
                 });
-            }
 
             input.value = '';
             autoResizeTextarea();
@@ -4064,7 +4053,7 @@ function handleDMDelete(e: Event) {
         }
     });
 
-    connection.on('message_reaction_updated', (data: { id: string; reactions: { emoji: string; users: string[] }[] }) => {
+    connection.on('message_reaction_updated', (data: { id: string; reactions: Reaction[] }) => {
         const msgDiv = document.getElementById(`msg-${data.id}`);
         if (msgDiv) {
             let reactionsContainer = msgDiv.querySelector('.message-reactions');
@@ -4079,11 +4068,20 @@ function handleDMDelete(e: Event) {
             }
 
             if (reactionsContainer && data.reactions) {
-                // Обновляем HTML реакций с правильными атрибутами
-                reactionsContainer.innerHTML = data.reactions.map(r =>
-                    `<span class="reaction-badge" data-msg-id="${escapeHtml(data.id)}" data-emoji="${escapeHtml(r.emoji)}" style="cursor: pointer;">
-                    <span class="reaction-emoji">${escapeHtml(r.emoji)}</span> 
-                    <span class="reaction-count">${r.users.length}</span>
+                // Группируем реакции по emoji
+                const groupedReactions = new Map<string, Reaction[]>();
+                data.reactions.forEach(reaction => {
+                    if (!groupedReactions.has(reaction.emoji)) {
+                        groupedReactions.set(reaction.emoji, []);
+                    }
+                    groupedReactions.get(reaction.emoji)!.push(reaction);
+                });
+
+                // Обновляем HTML сгруппированных реакций
+                reactionsContainer.innerHTML = Array.from(groupedReactions.entries()).map(([emoji, reactionList]) =>
+                    `<span class="reaction-badge" data-msg-id="${escapeHtml(data.id)}" data-emoji="${escapeHtml(emoji)}" style="cursor: pointer;">
+                    <span class="reaction-emoji">${escapeHtml(emoji)}</span> 
+                    <span class="reaction-count">${reactionList.length}</span>
                 </span>`
                 ).join('');
             } else if (reactionsContainer && (!data.reactions || data.reactions.length === 0)) {
