@@ -581,7 +581,7 @@ if (isChatPage) {
             }
 
             // Показываем всплывающую панель со сгруппированными реакциями
-            await showReactionsGroupedPopup(messageId, reactionsByEmoji, allReactions, mouseEvent);
+            await showReactionsGroupedPopup(reactionsByEmoji, allReactions, mouseEvent);
 
         } catch (error) {
             console.error('Error loading reaction users:', error);
@@ -589,7 +589,7 @@ if (isChatPage) {
         }
     }
 
-    async function showReactionsGroupedPopup(messageId: string, reactionsByEmoji: Map<string, string[]>, allReactions: Reaction[], mouseEvent?: MouseEvent) {
+    async function showReactionsGroupedPopup(reactionsByEmoji: Map<string, string[]>, allReactions: Reaction[], mouseEvent?: MouseEvent) {
         if (!reactionsByEmoji || reactionsByEmoji.size === 0) {
             showNotification('Нет реакций', 'info');
             return;
@@ -1742,7 +1742,7 @@ if (isChatPage) {
                     fileUrl: data.fileUrl,
                     replyTo: replyData
                 });
-
+                scrollToBottomSafely(true);
                 showNotification(textContent ? 'Сообщение с файлом отправлено!' : 'Файл отправлен!', 'success');
             } else {
                 showNotification(data.error || 'Ошибка загрузки файла', 'danger');
@@ -2045,45 +2045,6 @@ if (isChatPage) {
         let messageElement = document.getElementById(`msg-${tempId}`);
 
         try {
-            if (hasFile && selectedFile) {
-                const formData = new FormData();
-                formData.append('file', selectedFile);
-                formData.append('channelId', currentChannel);
-
-                const uploadResponse = await fetch('/upload', { method: 'POST', body: formData });
-                const uploadData = await uploadResponse.json();
-
-                if (!uploadData.success) {
-                    throw new Error(uploadData.error || 'Ошибка загрузки файла');
-                }
-
-                if (messageElement) {
-                    const img = messageElement.querySelector('.message-image');
-                    if (img) {
-                        img.setAttribute('src', uploadData.fileUrl);
-                        img.setAttribute('onclick', `event.stopPropagation(); openMediaModal('${uploadData.fileUrl.replace(/'/g, "\\'")}', 'image')`);
-                    } else {
-                        const videoSource = messageElement.querySelector('video source');
-                        if (videoSource) {
-                            videoSource.setAttribute('src', uploadData.fileUrl);
-                            (videoSource.parentElement as HTMLVideoElement)?.load();
-                        } else {
-                            const fileLink = messageElement.querySelector('a');
-                            if (fileLink) fileLink.setAttribute('href', uploadData.fileUrl);
-                        }
-                    }
-                }
-
-                await connection.invoke('SendMessage', {
-                    tempId: tempId,
-                    channelId: currentChannel,
-                    content: content,
-                    fileUrl: uploadData.fileUrl,
-                    replyTo: replyData
-                });
-
-                if (fileInput) fileInput.value = '';
-            } else {
                 await connection.invoke('SendMessage', {
                     tempId: tempId,
                     channelId: currentChannel,
@@ -2091,7 +2052,6 @@ if (isChatPage) {
                     fileUrl: null,
                     replyTo: replyData
                 });
-            }
 
             input.value = '';
             autoResizeTextarea();
