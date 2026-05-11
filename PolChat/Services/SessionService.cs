@@ -52,13 +52,6 @@ public class SessionService : ISessionService
 
         try
         {   
-            /*
-            var currentSession = await _redis.StringGetAsync($"session_id:{sessionId}");
-            if (!currentSession.IsNullOrEmpty)
-            {
-                return currentSession;
-            }
-            */
             await _redis.StringSetAsync(
                 $"session_id:{sessionId}",
                 json,

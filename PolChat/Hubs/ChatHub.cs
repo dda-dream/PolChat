@@ -1,8 +1,9 @@
-using Microsoft.AspNetCore.SignalR;
-using Microsoft.EntityFrameworkCore;
 using ChatApp.Data;
 using ChatApp.Models;
 using ChatApp.Services;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using System.Text.Json;
 
 namespace ChatApp.Hubs;
@@ -12,17 +13,17 @@ public class ChatHub : Hub
     private readonly ChatDbContext _db;
     private readonly ISessionService _sessionService;
     private readonly ILogger<ChatHub> _logger;
-    IHttpContextAccessor _httpContextAccessor;
+    private readonly IMemoryCache _cache;
 
     // Track connections: ConnectionId -> SessionData
     private static readonly Dictionary<string, SessionData> _connections = new();
 
-    public ChatHub(ChatDbContext db, ISessionService sessionService, ILogger<ChatHub> logger, IHttpContextAccessor httpContextAccessor)
+    public ChatHub(ChatDbContext db, ISessionService sessionService, ILogger<ChatHub> logger, IMemoryCache cache)
     {
         _db = db;
         _sessionService = sessionService;
         _logger = logger;
-        _httpContextAccessor = httpContextAccessor;
+        _cache = cache;
     }
 
     public override async Task OnConnectedAsync()

@@ -1,10 +1,11 @@
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.SignalR;
-using Microsoft.EntityFrameworkCore;
 using ChatApp.Data;
 using ChatApp.Hubs;
 using ChatApp.Models;
 using ChatApp.Services;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace ChatApp.Controllers;
 
@@ -14,14 +15,14 @@ public class MessagesController : ControllerBase
     private readonly ChatDbContext _db;
     private readonly ISessionService _sessionService;
     private readonly IHubContext<ChatHub> _hub;
-    IHttpContextAccessor _httpContextAccessor;
+    IMemoryCache _cache;
 
-    public MessagesController(ChatDbContext db, ISessionService sessionService, IHubContext<ChatHub> hub, IHttpContextAccessor httpContextAccessor)
+    public MessagesController(ChatDbContext db, ISessionService sessionService, IHubContext<ChatHub> hub, IMemoryCache cache)
     {
         _db = db;
         _sessionService = sessionService;
         _hub = hub;
-        _httpContextAccessor = httpContextAccessor;
+        _cache = cache;
     }
 
     private async Task<SessionData?> GetSession()
@@ -45,17 +46,21 @@ public class MessagesController : ControllerBase
             return BadRequest(new { error = "Invalid timestamp format" });
         }
 
-        // Приводим к UTC для корректного сравнения с БД
         var sinceTimeUtc = sinceTime.Kind == DateTimeKind.Utc ? sinceTime : sinceTime.ToUniversalTime();
 
-        // Получаем сообщения после указанного времени
-        var messages = await _db.Messages
+        List<Message>? messages = new List<Message>();
+        string cacheKey = $"messages_{channelId}-{sinceTimeUtc}";
+        if (_cache.TryGetValue(cacheKey, out messages) == false)
+        {
+            messages = await _db.Messages
             .Where(m => m.ChannelId == channelId && m.Timestamp > sinceTimeUtc)
             .OrderBy(m => m.Timestamp)
             .Take(limit)
             .ToListAsync();
 
-        // Форматируем и возвращаем
+            _cache.Set(cacheKey, messages, TimeSpan.FromSeconds(1));
+        } 
+        
         var existingUsers = (await _db.Users.Select(u => u.Username).ToListAsync()).ToHashSet();
 
         var messageDtos = messages.Select(row =>
