@@ -2679,6 +2679,22 @@ if (isChatPage) {
                 updateMessageStatus(messageId, MESSAGE_STATUS.READ);
                 updateReadByDisplay(messageId);
 
+                const msgDiv = document.getElementById(`msg-${messageId}`);
+                if (msgDiv && currentChannelType === 'channel') {
+                    const readCounter = msgDiv.querySelector('.read-counter');
+                    if (readCounter) {
+                        const readByList = messageReadBy.get(messageId) || [];
+                        const otherReaders = readByList.filter(u => u !== currentUsername);
+                        const readCount = otherReaders.length;
+                        if (readCount > 0) {
+                            readCounter.innerHTML = `<i class="fas fa-eye"></i> ${readCount}`;
+                            readCounter.style.display = 'inline-flex';
+                        } else {
+                            readCounter.style.display = 'none';
+                        }
+                    }
+                }
+
                 if (currentChannel) { // Эта проверка сужает тип до string (если currentChannel был string | null)
                     const cur = unreadCounts[currentChannel] || 0;
                     if (cur > 0) {

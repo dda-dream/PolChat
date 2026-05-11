@@ -1084,9 +1084,9 @@ body.page-chat {
     }
 
     .emoji-category {
-        padding: 8px 12px;
+        padding: 4px 2px;
         cursor: pointer;
-        border-radius: 20px;
+        border-radius: 13px;
         font-size: 18px;
         background: none;
         border: none;
@@ -2538,36 +2538,13 @@ body.page-user-management {
     }
 }
 
-/* В конце chat.css добавьте: */
-/*.reaction-badge {
-    cursor: pointer;
-    user-select: none;
+.reaction-option,
+.full-emoji-item,
+.emoji-item,
+.emoji-category {
+    font-size: 28px !important; /* нужный вам размер */
 }
 
-.reaction-emoji {
-    cursor: pointer;
+.reaction-badge .reaction-emoji {
+    font-size: 24px; /* или любой нужный размер */
 }
-
-.reaction-count {
-    cursor: pointer;
-    margin-left: 2px;
-    font-weight: 500;
-}
-
-.reaction-badge:hover {
-    background: rgba(0,0,0,0.1);
-    transform: scale(1.02);
-}
-
-.message-own .reaction-badge:hover {
-    background: rgba(0,0,0,0.15);
-}
-
-.reaction-user-item {
-    transition: background 0.2s ease;
-}
-
-    .reaction-user-item:hover {
-        background: #f8f9fa !important;
-        cursor: pointer;
-    }*/
