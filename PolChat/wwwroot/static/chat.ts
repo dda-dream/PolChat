@@ -2690,7 +2690,7 @@ if (isChatPage) {
 
                 const msgDiv = document.getElementById(`msg-${messageId}`);
                 if (msgDiv && currentChannelType === 'channel') {
-                    const readCounter = msgDiv.querySelector('.read-counter');
+                    const readCounter = msgDiv.querySelector('.read-counter') as HTMLElement | null;
                     if (readCounter) {
                         const readByList = messageReadBy.get(messageId) || [];
                         const otherReaders = readByList.filter(u => u !== currentUsername);
