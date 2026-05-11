@@ -3009,7 +3009,7 @@ function handleDMDelete(e: Event) {
                 html += `<div class="user-item">
                 <div class="user-info" onclick="startDMWithUser('${escapeHtml(u.username)}')">
                     <div class="user-status ${statusClass}"></div>
-                    <div><strong>${displayName}</strong>${u.role === 'admin' ? '<i class="fas fa-crown text-warning ms-1"></i>' : ''}</div>
+                    <div>${displayName}</strong>${u.role === 'admin' ? '<i class="fas fa-crown text-warning ms-1"></i>' : ''}</div>
                 </div>
                 <button class="chat-user-btn" onclick="event.stopPropagation(); startDMWithUser('${escapeHtml(u.username)}')"><i class="fas fa-comment"></i></button>
             </div>`;
