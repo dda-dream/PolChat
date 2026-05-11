@@ -2472,6 +2472,13 @@ if (isChatPage) {
                 }
             }
         }
+
+        let total = 0;
+        for (const cnt of Object.values(unreadCounts)) {
+            total += cnt;
+        }
+        currentTotalUnread = total;
+        updateDocumentTitle();
     }
 
     async function markChannelMessagesRead(channelId: string) {
@@ -2560,7 +2567,7 @@ if (isChatPage) {
 
     async function updateTotalUnreadFromServer() {
         try {
-            let total = 0; 
+            let total = 0;
             const res = await fetch('/api/unread');
             const allUnreadData = await res.json();
 
@@ -2579,6 +2586,8 @@ if (isChatPage) {
                 }
             }
 
+            currentTotalUnread = total; // сохраняем глобально
+            updateDocumentTitle();      // обновляем заголовок
         } catch (e) {
             console.error('Failed to update unread total:', e);
         }
@@ -2678,6 +2687,22 @@ if (isChatPage) {
 
                 updateMessageStatus(messageId, MESSAGE_STATUS.READ);
                 updateReadByDisplay(messageId);
+
+                const msgDiv = document.getElementById(`msg-${messageId}`);
+                if (msgDiv && currentChannelType === 'channel') {
+                    const readCounter = msgDiv.querySelector('.read-counter') as HTMLElement | null;
+                    if (readCounter) {
+                        const readByList = messageReadBy.get(messageId) || [];
+                        const otherReaders = readByList.filter(u => u !== currentUsername);
+                        const readCount = otherReaders.length;
+                        if (readCount > 0) {
+                            readCounter.innerHTML = `<i class="fas fa-eye"></i> ${readCount}`;
+                            readCounter.style.display = 'inline-flex';
+                        } else {
+                            readCounter.style.display = 'none';
+                        }
+                    }
+                }
 
                 if (currentChannel) { // Эта проверка сужает тип до string (если currentChannel был string | null)
                     const cur = unreadCounts[currentChannel] || 0;
@@ -3184,7 +3209,7 @@ function handleDMDelete(e: Event) {
         const title = `Pol Чат [ ${apiStatus} | ${signalrStatus} ]`;
 
         if (document.title !== title) {
-            document.title = title;
+            updateDocumentTitle();
         }
     }
 
@@ -3376,16 +3401,21 @@ function handleDMDelete(e: Event) {
         const target = e.target as HTMLElement;
         if (!target) return;
 
-        const channelInfo = target.closest('.channel-info, .dm-info');
-        if (!channelInfo) return;
+        // Находим родительский элемент канала/DM
+        const channelItem = target.closest('.channel-item, .dm-item') as HTMLElement;
+        if (!channelItem) return;
 
-        if (!document.body.contains(channelInfo)) return;
+        // Проверяем, не кликнули ли по кнопке действия (например, удаление DM)
+        const actionButton = target.closest('.dm-actions .delete-btn, .channel-actions .delete-btn, button, .action-btn');
+        if (actionButton) {
+            // Если кликнули по кнопке - не переключаем канал
+            return;
+        }
+
+        if (!document.body.contains(channelItem)) return;
 
         e.preventDefault();
         e.stopPropagation();
-
-        const channelItem = channelInfo.closest('.channel-item, .dm-item') as HTMLElement;
-        if (!channelItem) return;
 
         const id = channelItem.dataset.channelId || channelItem.dataset.dmId;
         const nameElement = channelItem.querySelector('.channel-name, .dm-name') as HTMLElement;
@@ -3400,6 +3430,77 @@ function handleDMDelete(e: Event) {
     window.addEventListener('beforeunload', () => {
         currentJoinToken++; // Инвалидируем все ожидающие операции
     });
+
+    let currentTotalUnread = 0;
+
+    function updateDocumentTitle() {
+        const apiSpan = document.getElementById('apiServerTime');
+        const signalrSpan = document.getElementById('signalrServerTime');
+        const apiHasDash = apiSpan?.textContent === '--:--:--';
+        const signalrHasDash = signalrSpan?.textContent === '--:--:--';
+
+        let apiStatus = apiHasDash ? '---' : 'WebApi';
+        let signalrStatus = signalrHasDash ? '---' : 'SignalR';
+
+        let baseTitle = `Pol Чат [ ${apiStatus} | ${signalrStatus} ]`;
+
+        if (currentTotalUnread > 0) {
+            document.title = `(${currentTotalUnread}) ${baseTitle}`;
+        } else {
+            document.title = baseTitle;
+        }
+
+        // Обновляем favicon
+        updateFavicon(currentTotalUnread);
+    }
+
+    function updateFavicon(unreadCount: number) {
+        // Получаем существующий favicon или создаём новый
+        let favicon = document.querySelector("link[rel*='icon']") as HTMLLinkElement;
+
+        if (!favicon) {
+            favicon = document.createElement('link');
+            favicon.rel = 'icon';
+            document.head.appendChild(favicon);
+        }
+
+        if (unreadCount === 0) {
+            // Возвращаем исходный favicon (если есть)
+            favicon.href = '/static/favicon.ico'; // укажите путь к вашему стандартному favicon
+            return;
+        }
+
+        // Создаём canvas для рисования favicon
+        const canvas = document.createElement('canvas');
+        const size = 128; // размер favicon
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+
+        if (!ctx) return;
+
+        // Фон (можно взять из основного логотипа или просто цвет)
+        ctx.fillStyle = '#5865f2'; // цвет Discord-like (можно ваш фирменный)
+        ctx.beginPath();
+        ctx.arc(size / 2, size / 2, size / 2, 0, 2 * Math.PI);
+        ctx.fill();
+
+        // Текст с цифрой
+        let displayText = unreadCount > 99 ? '99+' : unreadCount.toString();
+        ctx.fillStyle = 'white';
+        ctx.font = `bold ${size * 0.8}px "Segoe UI", Arial, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(displayText, size / 2, size / 2 + (displayText.length === 1 ? 2 : 0));
+
+        // Преобразуем canvas в dataURL и устанавливаем как favicon
+        favicon.href = canvas.toDataURL('image/png');
+
+        if (unreadCount === 0) {
+            favicon.href = '/static/favicon.ico';
+            return;
+        }
+    }
 
     function updateActiveChannelInList(id: string, type: 'dm' | 'channel') {
         document.querySelectorAll('.channel-item, .dm-item').forEach(el => el.classList.remove('active'));
@@ -4302,10 +4403,20 @@ function handleDMDelete(e: Event) {
         const messagesArea = document.getElementById('messages-area');
         if (messagesArea) {
             let scrollTimeout: number;
+            let readMarkTimeout: number; // новый таймер для отметки прочитанных
 
             messagesArea.addEventListener('scroll', function () {
                 clearTimeout(scrollTimeout);
+                clearTimeout(readMarkTimeout); // сбрасываем предыдущий таймер
+
                 updateScrollButtonsVisibility();
+
+                // отмечаем видимые сообщения с небольшой задержкой (300 мс)
+                readMarkTimeout = window.setTimeout(() => {
+                    if (currentChannel) {
+                        markVisibleMessagesAsRead();
+                    }
+                }, 300);
 
                 if (this.scrollTop === 0 && hasMoreMessages && !isLoadingMore && !isLoadingMessages && currentChannel) {
                     scrollTimeout = window.setTimeout(() => {
