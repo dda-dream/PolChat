@@ -555,7 +555,6 @@ body.page-chat {
             transform: translateY(0);
         }
     }
-
     /* Добавьте в CSS для более плавного переключения */
     .channel-item, .dm-item {
         transition: background-color 0.15s ease;
@@ -2548,3 +2547,4 @@ body.page-user-management {
 .reaction-badge .reaction-emoji {
     font-size: 24px; /* или любой нужный размер */
 }
+

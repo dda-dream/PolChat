@@ -3009,7 +3009,7 @@ function handleDMDelete(e: Event) {
                 html += `<div class="user-item">
                 <div class="user-info" onclick="startDMWithUser('${escapeHtml(u.username)}')">
                     <div class="user-status ${statusClass}"></div>
-                    <div><strong>${displayName}</strong>${u.role === 'admin' ? '<i class="fas fa-crown text-warning ms-1"></i>' : ''}</div>
+                    <div>${displayName}</strong>${u.role === 'admin' ? '<i class="fas fa-crown text-warning ms-1"></i>' : ''}</div>
                 </div>
                 <button class="chat-user-btn" onclick="event.stopPropagation(); startDMWithUser('${escapeHtml(u.username)}')"><i class="fas fa-comment"></i></button>
             </div>`;
@@ -3027,6 +3027,55 @@ function handleDMDelete(e: Event) {
         if (diff < 1440) { let h = Math.floor(diff / 60); return `${h} ч. назад`; }
         let d = Math.floor(diff / 1440);
         return `${d} д. назад`;
+    }
+
+    // Добавьте кнопку AI в интерфейс
+    async function openAIChat() {
+        const aiUsername = 'AI Assistant';
+        try {
+            // Получаем список DM-каналов
+            const dmsRes = await fetch('/api/dm_channels');
+            const dms = await dmsRes.json();
+            let aiDm = dms.find((dm: DMChannel) => dm.name === aiUsername);
+
+            if (!aiDm) {
+                // Создаём DM с AI Assistant
+                await startDMWithUser(aiUsername);
+                // Обновляем список DM-каналов
+                await loadDMChannels();
+                // Повторно ищем созданный канал
+                const updatedDmsRes = await fetch('/api/dm_channels');
+                const updatedDms = await updatedDmsRes.json();
+                aiDm = updatedDms.find((dm: DMChannel) => dm.name === aiUsername);
+            }
+
+            if (aiDm) {
+                await joinChannel('dm', aiDm.id, aiUsername, 'AI ассистент');
+            } else {
+                showNotification('Не удалось создать чат с AI', 'danger');
+            }
+        } catch (error) {
+            console.error('Error opening AI chat:', error);
+            showNotification('Ошибка при открытии чата с AI', 'danger');
+        }
+    }
+
+    function addAIAssistantButton() {
+        const inputArea = document.querySelector('.input-area');
+        if (!inputArea) return;
+
+        const aiButton = document.createElement('button');
+        aiButton.className = 'btn btn-outline-info ms-2';
+        aiButton.innerHTML = '<i class="fas fa-robot"></i> AI';
+        aiButton.title = 'Чат с AI ассистентом';
+        aiButton.onclick = () => {
+            openAIChat();
+        };
+
+        const sendButton = document.getElementById('sendButton');
+        if (sendButton && sendButton.parentElement) {
+            sendButton.parentElement.insertBefore(aiButton, sendButton.nextSibling);
+        }
     }
 
     async function startDMWithUser(username: string) {
@@ -4346,6 +4395,7 @@ function handleDMDelete(e: Event) {
         setupVisibilityTracking();
         startHeartbeat();
         initNotificationSound();
+        addAIAssistantButton();
 
         await updateTotalUnreadFromServer();
 

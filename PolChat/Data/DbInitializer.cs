@@ -48,6 +48,21 @@ public static class DbInitializer
             Console.WriteLine("[OK] БД инициализирована: admin + general");
         }
 
+        var aiUser = await db.Users.FirstOrDefaultAsync(u => u.Username == "AI Assistant");
+        if (aiUser == null)
+        {
+            db.Users.Add(new User
+            {
+                Username = "AI Assistant",
+                Password = Guid.NewGuid().ToString(),
+                Role = "system",
+                Status = "online",
+                CreatedAt = DateTime.UtcNow,
+                LastSeen = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
         Console.WriteLine("[OK] Индексы созданы/проверены");
     }
 

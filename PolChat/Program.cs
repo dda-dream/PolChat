@@ -1,21 +1,17 @@
 using ChatApp.Data;
 using ChatApp.Hubs;
 using ChatApp.Services;
-using Microsoft.AspNetCore.Rewrite;
+using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.FileProviders;
-using Microsoft.OpenApi;
 using Serilog;
 using StackExchange.Redis;
 using System.Text;
 
-// test 16:03
- 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Host.UseSerilog();
 
-// Настройка самого Serilog
+// Настройка Serilog
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
     .CreateLogger();
@@ -23,37 +19,51 @@ Log.Logger = new LoggerConfiguration()
 // ===== Configuration =====
 var postgreSQLConnection = builder.Configuration.GetConnectionString("PostgreSQL");
 var redisConnection = builder.Configuration.GetConnectionString("Redis");
-if (redisConnection != null)
+
+if (!string.IsNullOrEmpty(redisConnection))
 {
     builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
     {
         var config = ConfigurationOptions.Parse(redisConnection);
+        config.AbortOnConnectFail = false;
         return ConnectionMultiplexer.Connect(config);
     });
 }
 else
 {
-    Console.WriteLine($"[ERROR] Redis redisConnection string NULL.");
+    Console.WriteLine($"[WARNING] Redis connection string is NULL.");
 }
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddMemoryCache();
 
+// Ollama Configuration
+builder.Services.Configure<OllamaSettings>(builder.Configuration.GetSection("Ollama"));
+builder.Services.AddHttpClient();
+builder.Services.AddScoped<OllamaService>();
+
 // ===== Database =====
 builder.Services.AddDbContext<ChatDbContext>(options =>
-    {
-        options.UseNpgsql(postgreSQLConnection)
-           .UseSnakeCaseNamingConvention();
-    });
+{
+    options.UseNpgsql(postgreSQLConnection)
+       .UseSnakeCaseNamingConvention();
+});
 
 builder.Services.AddSingleton<ISessionService, SessionService>();
 
 // ===== SignalR =====
-builder.Services.AddSignalR()
-    .AddStackExchangeRedis(redisConnection ?? "!!ERROR_REDIS_CONNECTION_NULL!!", options => {
-        options.Configuration.ChannelPrefix = RedisChannel.Literal("PolChatApp:");
-    });
-
+if (!string.IsNullOrEmpty(redisConnection))
+{
+    builder.Services.AddSignalR()
+        .AddStackExchangeRedis(redisConnection, options =>
+        {
+            options.Configuration.ChannelPrefix = RedisChannel.Literal("PolChatApp:");
+        });
+}
+else
+{
+    builder.Services.AddSignalR();
+}
 
 // ===== Background Services =====
 builder.Services.AddHostedService<InactiveUsersBackgroundService>();
@@ -65,19 +75,7 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
     });
 
-// ===== Swagger =====
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c =>
-{
-    c.SwaggerDoc("v1", new OpenApiInfo
-    {
-        Title = "Chat API",
-        Version = "1.0.0",
-        Description = "Chat REST API (ASP.NET Core + PostgreSQL + Redis + SignalR)"
-    });
-});
-
-// ===== CORS (for development) =====
+// ===== CORS =====
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
@@ -92,13 +90,6 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 // ===== Middleware =====
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "Chat API v1"));
-}
-
-
 app.UseRouting();
 app.UseStaticFiles();
 app.UseCors();
@@ -107,6 +98,21 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHub<ChatHub>("/chathub");
 
+// Health check endpoint for Ollama
+app.MapGet("/api/ai/health", async (OllamaService ollamaService) =>
+{
+    try
+    {
+        var isHealthy = await ollamaService.CheckHealthAsync();
+        return Results.Ok(new { status = isHealthy ? "healthy" : "unhealthy", service = "ollama" });
+    }
+    catch
+    {
+        return Results.Ok(new { status = "error", service = "ollama", message = "Cannot connect to Ollama" });
+    }
+});
+
+// Debug routes
 app.MapGet("/_debug/routes/details", (IEnumerable<EndpointDataSource> endpointSources) =>
 {
     var sb = new StringBuilder();
@@ -137,23 +143,41 @@ app.MapGet("/_debug/routes/details", (IEnumerable<EndpointDataSource> endpointSo
     return Results.Text(sb.ToString(), "text/plain");
 });
 
-
-
-
-
 // ===== Startup =====
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ChatDbContext>();
     await DbInitializer.InitializeAsync(db);
-    Console.WriteLine("[OK] База данных инициализирована");
+    Console.WriteLine("[OK] Database initialized");
+
+    // Check Ollama
+    var ollamaService = scope.ServiceProvider.GetService<OllamaService>();
+    if (ollamaService != null)
+    {
+        try
+        {
+            var isOllamaHealthy = await ollamaService.CheckHealthAsync();
+            if (isOllamaHealthy)
+            {
+                Console.WriteLine("[OK] Ollama service is available");
+            }
+            else
+            {
+                Console.WriteLine("[WARNING] Ollama service is not available. Make sure Ollama is running on http://localhost:11434");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[WARNING] Cannot connect to Ollama: {ex.Message}");
+        }
+    }
 }
 
 // ===== HTTPS Configuration =====
-var port = builder.Configuration.GetValue<int>("Server:Port");
+var port = builder.Configuration.GetValue<int>("Server:Port", 5000);
 var useHttps = builder.Configuration.GetValue<bool>("Server:UseHttps", false);
 
-Console.WriteLine($"[START] Chat: {(useHttps ? "https" : "http")}://localhost:{port} (ASP.NET Core + Redis + SignalR)");
+Console.WriteLine($"[START] Chat: {(useHttps ? "https" : "http")}://0.0.0.0:{port}");
 
 if (useHttps)
 {
