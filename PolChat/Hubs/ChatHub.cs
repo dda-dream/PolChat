@@ -57,10 +57,8 @@ public class ChatHub : Hub
                     username
                 });
 
-        // Check pending deliveries for DM channels
         List<(string Id, string ChannelId, string MsgUsername)> pendingList = new();
 
-        // Используем отдельное соединение, которое НЕ закрываем до конца работы
         var connection = _db.Database.GetDbConnection();
         await connection.OpenAsync();
 
@@ -86,16 +84,13 @@ public class ChatHub : Hub
                     pendingList.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2)));
                 }
             }
-            // Reader закрыт, команда закрыта. Соединение всё ещё открыто и им можно пользоваться.
 
             if (pendingList.Count > 0)
             {
                 var ids = pendingList.Select(p => p.Id).ToList();
 
-                // Используем ТО ЖЕ САМОЕ соединение напрямую
                 await using (var cmd = connection.CreateCommand())
                 {
-                    // PostgreSQL с массивом строк
                     cmd.CommandText = @"
                     UPDATE messages SET delivered_to = array_append(delivered_to, @username)
                     WHERE id = ANY(@ids) AND NOT (@username = ANY(delivered_to))";
@@ -107,13 +102,12 @@ public class ChatHub : Hub
 
                     var pIds = cmd.CreateParameter();
                     pIds.ParameterName = "ids";
-                    pIds.Value = ids.ToArray(); // массив строк
+                    pIds.Value = ids.ToArray(); 
                     cmd.Parameters.Add(pIds);
 
                     await cmd.ExecuteNonQueryAsync();
                 }
 
-                // Отправка уведомлений
                 foreach (var msg in pendingList)
                 {
                     await Clients.Group($"user_{msg.MsgUsername}").SendAsync("messages_delivered", 
@@ -127,7 +121,6 @@ public class ChatHub : Hub
         }
         finally
         {
-            // Закрываем соединение только после ВСЕХ операций
             await connection.CloseAsync();
             await connection.DisposeAsync();
         }
@@ -144,7 +137,6 @@ public class ChatHub : Hub
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"user_{username}");
             _logger.LogInformation("[WS] - {Username}", username);
 
-            // Check if still online from other connections
             var stillOnline = _connections.Values.Any(c => c.Username == username);
             if (!stillOnline)
             {
@@ -214,7 +206,6 @@ public class ChatHub : Hub
         _db.Messages.Add(message);
         await _db.SaveChangesAsync();
 
-        // Get reply-to info if needed
         ReplyToInfo? replyToInfo = null;
         if (replyToId != null)
         {
@@ -237,7 +228,6 @@ public class ChatHub : Hub
             }
         }
 
-        // DM: check delivery
         if (channelId.Contains('-'))
         {
             var dm = await _db.DmChannels.FirstOrDefaultAsync(d => d.Id == channelId);
@@ -269,7 +259,6 @@ public class ChatHub : Hub
             }
         }
 
-        // Broadcast message to channel
         var messageToSend = new
         {
             id = msgId,
@@ -282,12 +271,11 @@ public class ChatHub : Hub
             reactions = new List<ReactionInMessage>(),
             readBy = new List<string>(),
             deliveredTo = new List<string>(),
-            replyTo = replyToInfo  // может быть null
+            replyTo = replyToInfo  
         };
 
         await Clients.Group(channelId).SendAsync("new_message", messageToSend);
 
-        // Send temp_id mapping to sender
         if (tempId != null)
         {
             await Clients.Caller.SendAsync("message_sent", 
@@ -298,7 +286,6 @@ public class ChatHub : Hub
                     });
         }
 
-        // DM unread notification
         if (channelId.Contains('-'))
         {
             var dm = await _db.DmChannels.FirstOrDefaultAsync(d => d.Id == channelId);
@@ -359,7 +346,6 @@ public class ChatHub : Hub
             reactions.Add(new ReactionInMessage { Emoji = emoji, Users = new List<string> { username } });
         }
 
-        // Save back as JSONB
         await _db.Database.ExecuteSqlRawAsync(@"
             UPDATE messages SET reactions = {0}::jsonb WHERE id = {1}",
             JsonSerializer.Serialize(reactions), messageId);
@@ -430,11 +416,8 @@ public class ChatHub : Hub
     public async Task<string> GetServerTime()
     {
         var now = DateTime.UtcNow;
-        // возвращаем локальное время сервера в формате "HH:mm:ss"
         return now.ToString("O");
     }
-
-    // === Helper methods ===
 
     private async Task<SessionData?> GetSessionFromContext()
     {

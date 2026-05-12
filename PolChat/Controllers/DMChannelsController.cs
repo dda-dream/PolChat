@@ -1,10 +1,11 @@
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.SignalR;
-using Microsoft.EntityFrameworkCore;
 using ChatApp.Data;
 using ChatApp.Hubs;
 using ChatApp.Models;
 using ChatApp.Services;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace ChatApp.Controllers;
 
@@ -16,14 +17,16 @@ public class DMChannelsController : ControllerBase
     private readonly ChatDbContext _db;
     private readonly ISessionService _sessionService;
     private readonly IHubContext<ChatHub> _hub;
-    IHttpContextAccessor _httpContextAccessor;
+    IMemoryCache _cache;
+    IConfiguration _config;
 
-    public DMChannelsController(ChatDbContext db, ISessionService sessionService, IHubContext<ChatHub> hub, IHttpContextAccessor httpContextAccessor)
+    public DMChannelsController(ChatDbContext db, ISessionService sessionService, IHubContext<ChatHub> hub, IMemoryCache cache,  IConfiguration config)
     {
         _db = db;
         _sessionService = sessionService;
         _hub = hub;
-        _httpContextAccessor = httpContextAccessor;
+        _cache = cache;
+        _config = config;
     }
 
     private async Task<SessionData?> GetSession()
@@ -39,29 +42,37 @@ public class DMChannelsController : ControllerBase
         var session = await GetSession();
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
         var username = session.Username;
+        List<DMChannelDto> dtos;
 
-        var existingUsers = (await _db.Users.Select(u => u.Username).ToListAsync()).ToHashSet();
+        string cacheKey = "/api/dm_channels_{username}";
 
-        var dms = await _db.DmChannels.ToListAsync();
-        var dtos = new List<DMChannelDto>();
-
-        foreach (var dm in dms)
+        if (_cache.TryGetValue(cacheKey, out dtos) == false) 
         {
-            if (!dm.Participants.Contains(username)) continue;
-            var otherUser = dm.Participants.FirstOrDefault(p => p != username);
-            var isDeleted = string.IsNullOrEmpty(otherUser) || !existingUsers.Contains(otherUser);
+            var existingUsers = (await _db.Users.Select(u => u.Username).ToListAsync()).ToHashSet();
 
-            dtos.Add(new DMChannelDto
+            var dms = await _db.DmChannels.ToListAsync();
+
+            foreach (var dm in dms)
             {
-                Id = dm.Id,
-                Name = isDeleted ? Constants.DeletedUserDisplayName : (otherUser ?? Constants.DeletedUserDisplayName),
-                OriginalName = otherUser,
-                Participants = dm.Participants,
-                CreatedBy = dm.CreatedBy,
-                CreatedAt = dm.CreatedAt,
-                IsDeleted = isDeleted
-            });
-        }
+                if (!dm.Participants.Contains(username)) continue;
+                var otherUser = dm.Participants.FirstOrDefault(p => p != username);
+                var isDeleted = string.IsNullOrEmpty(otherUser) || !existingUsers.Contains(otherUser);
+
+                if(dtos == null)
+                    dtos = new List<DMChannelDto>();
+                dtos.Add(new DMChannelDto
+                {
+                    Id = dm.Id,
+                    Name = isDeleted ? Constants.DeletedUserDisplayName : (otherUser ?? Constants.DeletedUserDisplayName),
+                    OriginalName = otherUser,
+                    Participants = dm.Participants,
+                    CreatedBy = dm.CreatedBy,
+                    CreatedAt = dm.CreatedAt,
+                    IsDeleted = isDeleted
+                });
+            }
+            _cache.Set(cacheKey, dtos, TimeSpan.FromSeconds(_config.GetValue<long>("MemoryCache:ExpireSeconds")));
+        } 
 
         return Ok(dtos);
     }

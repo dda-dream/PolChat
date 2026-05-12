@@ -16,13 +16,15 @@ public class MessagesController : ControllerBase
     private readonly ISessionService _sessionService;
     private readonly IHubContext<ChatHub> _hub;
     IMemoryCache _cache;
+    IConfiguration _configuration;
 
-    public MessagesController(ChatDbContext db, ISessionService sessionService, IHubContext<ChatHub> hub, IMemoryCache cache)
+    public MessagesController(ChatDbContext db, ISessionService sessionService, IHubContext<ChatHub> hub, IMemoryCache cache, IConfiguration configuration)
     {
         _db = db;
         _sessionService = sessionService;
         _hub = hub;
         _cache = cache;
+        _configuration = configuration;
     }
 
     private async Task<SessionData?> GetSession()
@@ -347,7 +349,17 @@ public class MessagesController : ControllerBase
         var session = await GetSession();
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
-        var counts = await GetRealUnreadCounts(session.Username);
+        string cacheKey = $"GetUnreadCounts_{session.Username}";
+        Dictionary<string, int>? counts;
+        if (_cache.TryGetValue(cacheKey, out counts) == false)
+        {
+            if (counts == null)
+                counts = new Dictionary<string, int>();
+            counts = await GetRealUnreadCounts(session.Username);
+
+            _cache.Set(cacheKey, counts, TimeSpan.FromSeconds(_configuration.GetValue<long>("MemoryCache:ExpireSeconds")));
+        }
+
         return Ok(counts);
     }
 
