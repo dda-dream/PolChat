@@ -10,3 +10,20 @@ GET https://localhost:55551/api/time
 Accept: application/json
 
 ###
+
+GET https://localhost:55551/api/channels
+Accept: application/json
+
+###
+
+GET https://localhost:55551/api/dm_channels
+Accept: application/json
+
+###
+
+GET https://localhost:55551/api/unread
+Accept: application/json
+
+
+
+###

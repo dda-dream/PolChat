@@ -59,7 +59,7 @@ public class AuthController : ControllerBase
         user.LastSeen = now;
         await _db.SaveChangesAsync();
 
-        Response.Cookies.Append($"SESSION_ID_PORT_{_httpContextAccessor.HttpContext?.Connection.LocalPort}", sessionId, new CookieOptions
+        Response.Cookies.Append($"SESSION_ID", sessionId, new CookieOptions
         {
             HttpOnly = true,
             MaxAge = TimeSpan.FromDays(Constants.SessionTtlDays),
@@ -74,10 +74,10 @@ public class AuthController : ControllerBase
     [HttpGet("/logout")]
     public async Task<IActionResult> Logout()
     {
-        if (Request.Cookies.TryGetValue($"SESSION_ID_PORT_{_httpContextAccessor.HttpContext?.Connection.LocalPort}", out var sid) && !string.IsNullOrEmpty(sid))
+        if (Request.Cookies.TryGetValue($"SESSION_ID", out var sid) && !string.IsNullOrEmpty(sid))
         {
             await _sessionService.DeleteSessionAsync(sid);
-            Response.Cookies.Delete($"SESSION_ID_PORT_{_httpContextAccessor.HttpContext?.Connection.LocalPort}");
+            Response.Cookies.Delete($"SESSION_ID");
         }
         return Redirect("/login");
     }
@@ -131,7 +131,7 @@ public class AuthController : ControllerBase
     [HttpGet("/")]
     public async Task<IActionResult> Index()
     {
-        Request.Cookies.TryGetValue($"SESSION_ID_PORT_{_httpContextAccessor.HttpContext?.Connection.LocalPort}", out var sid);
+        Request.Cookies.TryGetValue($"SESSION_ID", out var sid);
         var session = string.IsNullOrEmpty(sid) ? null : await _sessionService.GetSessionAsync(sid);
 
         if (session == null)

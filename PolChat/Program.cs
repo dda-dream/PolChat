@@ -37,6 +37,7 @@ else
 }
 
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddMemoryCache();
 
 // ===== Database =====
 builder.Services.AddDbContext<ChatDbContext>(options =>

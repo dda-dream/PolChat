@@ -1,10 +1,11 @@
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.SignalR;
-using Microsoft.EntityFrameworkCore;
 using ChatApp.Data;
 using ChatApp.Hubs;
 using ChatApp.Models;
 using ChatApp.Services;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace ChatApp.Controllers;
 
@@ -15,19 +16,21 @@ public class ChannelsController : ControllerBase
     private readonly ChatDbContext _db;
     private readonly ISessionService _sessionService;
     private readonly IHubContext<ChatHub> _hub;
-    IHttpContextAccessor _httpContextAccessor;
+    IMemoryCache _cache;
+    IConfiguration _config;
 
-    public ChannelsController(ChatDbContext db, ISessionService sessionService, IHubContext<ChatHub> hub, IHttpContextAccessor httpContextAccessor)
+    public ChannelsController(ChatDbContext db, ISessionService sessionService, IHubContext<ChatHub> hub, IMemoryCache cache, IConfiguration config)
     {
         _db = db;
         _sessionService = sessionService;
         _hub = hub;
-        _httpContextAccessor = httpContextAccessor;
+        _cache = cache;
+        _config = config;
     }
 
     private async Task<SessionData?> GetSession()
     {
-        Request.Cookies.TryGetValue($"SESSION_ID_PORT_{_httpContextAccessor.HttpContext?.Connection.LocalPort}", out var sid);
+        Request.Cookies.TryGetValue($"SESSION_ID", out var sid);
         return await _sessionService.GetSessionAsync(sid);
     }
 
@@ -54,9 +57,16 @@ public class ChannelsController : ControllerBase
         var session = await GetSession();
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
-        var channels = await _db.Channels.OrderBy(c => c.CreatedAt).ToListAsync();
-        var existingUsers = (await _db.Users.Select(u => u.Username).ToListAsync()).ToHashSet();
-        var dtos = channels.Select(c => ToChannelDto(c, existingUsers)).ToList();
+        List<ChannelDto>? dtos;
+        string cacheKey = "/api/channels";
+        if (_cache.TryGetValue(cacheKey, out dtos) == false)
+        {
+
+            var channels = await _db.Channels.OrderBy(c => c.CreatedAt).ToListAsync();
+            var existingUsers = (await _db.Users.Select(u => u.Username).ToListAsync()).ToHashSet();
+            dtos = channels.Select(c => ToChannelDto(c, existingUsers)).ToList();
+        }
+        
         return Ok(dtos);
     }
 

@@ -1,10 +1,11 @@
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.SignalR;
-using Microsoft.EntityFrameworkCore;
 using ChatApp.Data;
 using ChatApp.Hubs;
 using ChatApp.Models;
 using ChatApp.Services;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace ChatApp.Controllers;
 
@@ -14,19 +15,21 @@ public class MessagesController : ControllerBase
     private readonly ChatDbContext _db;
     private readonly ISessionService _sessionService;
     private readonly IHubContext<ChatHub> _hub;
-    IHttpContextAccessor _httpContextAccessor;
+    IMemoryCache _cache;
+    IConfiguration _configuration;
 
-    public MessagesController(ChatDbContext db, ISessionService sessionService, IHubContext<ChatHub> hub, IHttpContextAccessor httpContextAccessor)
+    public MessagesController(ChatDbContext db, ISessionService sessionService, IHubContext<ChatHub> hub, IMemoryCache cache, IConfiguration configuration)
     {
         _db = db;
         _sessionService = sessionService;
         _hub = hub;
-        _httpContextAccessor = httpContextAccessor;
+        _cache = cache;
+        _configuration = configuration;
     }
 
     private async Task<SessionData?> GetSession()
     {
-        Request.Cookies.TryGetValue($"SESSION_ID_PORT_{_httpContextAccessor.HttpContext?.Connection.LocalPort}", out var sid);
+        Request.Cookies.TryGetValue($"SESSION_ID", out var sid);
         return await _sessionService.GetSessionAsync(sid);
     }
 
@@ -45,17 +48,21 @@ public class MessagesController : ControllerBase
             return BadRequest(new { error = "Invalid timestamp format" });
         }
 
-        // Приводим к UTC для корректного сравнения с БД
         var sinceTimeUtc = sinceTime.Kind == DateTimeKind.Utc ? sinceTime : sinceTime.ToUniversalTime();
 
-        // Получаем сообщения после указанного времени
-        var messages = await _db.Messages
+        List<Message>? messages = new List<Message>();
+        string cacheKey = $"messages_{channelId}-{sinceTimeUtc}";
+        if (_cache.TryGetValue(cacheKey, out messages) == false)
+        {
+            messages = await _db.Messages
             .Where(m => m.ChannelId == channelId && m.Timestamp > sinceTimeUtc)
             .OrderBy(m => m.Timestamp)
             .Take(limit)
             .ToListAsync();
 
-        // Форматируем и возвращаем
+            _cache.Set(cacheKey, messages, TimeSpan.FromSeconds(1));
+        } 
+        
         var existingUsers = (await _db.Users.Select(u => u.Username).ToListAsync()).ToHashSet();
 
         var messageDtos = messages.Select(row =>
@@ -342,7 +349,17 @@ public class MessagesController : ControllerBase
         var session = await GetSession();
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
-        var counts = await GetRealUnreadCounts(session.Username);
+        string cacheKey = $"GetUnreadCounts_{session.Username}";
+        Dictionary<string, int>? counts;
+        if (_cache.TryGetValue(cacheKey, out counts) == false)
+        {
+            if (counts == null)
+                counts = new Dictionary<string, int>();
+            counts = await GetRealUnreadCounts(session.Username);
+
+            _cache.Set(cacheKey, counts, TimeSpan.FromSeconds(_configuration.GetValue<long>("MemoryCache:ExpireSeconds")));
+        }
+
         return Ok(counts);
     }
 
