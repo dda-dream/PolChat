@@ -60,7 +60,7 @@ public class MessagesController : ControllerBase
             .Take(limit)
             .ToListAsync();
 
-            _cache.Set(cacheKey, messages, TimeSpan.FromSeconds(1));
+            _cache.Set(cacheKey, messages, TimeSpan.FromSeconds(_configuration.GetValue<long>("MemoryCache:ExpireSeconds")));
         } 
         
         var existingUsers = (await _db.Users.Select(u => u.Username).ToListAsync()).ToHashSet();
@@ -172,74 +172,83 @@ public class MessagesController : ControllerBase
         var session = await GetSession();
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
-        var offset = (page - 1) * limit;
-        var existingUsers = (await _db.Users.Select(u => u.Username).ToListAsync()).ToHashSet();
-
-        var totalCount = await _db.Messages.CountAsync(m => m.ChannelId == channelId);
-
-        var rows = await _db.Messages
-            .Where(m => m.ChannelId == channelId)
-            .OrderByDescending(m => m.Timestamp)
-            .Skip(offset)
-            .Take(limit)
-            .ToListAsync();
-        rows.Reverse();
-
-        var replyToIds = rows.Where(r => r.ReplyToId != null).Select(r => r.ReplyToId!).Distinct().ToList();
-        var replyMessages = new Dictionary<string, Message>();
-        if (replyToIds.Count > 0)
+        MessagesResponse? messagesResponse;
+        string cacheKey = $"/api/messages/_{channelId}-{page}-{limit}";
+        if (_cache.TryGetValue(cacheKey, out messagesResponse) == false)
         {
-            var replyRows = await _db.Messages.Where(m => replyToIds.Contains(m.Id)).ToListAsync();
-            foreach (var rr in replyRows) replyMessages[rr.Id] = rr;
-        }
+            var offset = (page - 1) * limit;
+            var existingUsers = (await _db.Users.Select(u => u.Username).ToListAsync()).ToHashSet();
 
-        var messages = new List<MessageDto>();
-        foreach (var row in rows)
-        {
-            var senderExists = existingUsers.Contains(row.Username);
-            var msg = new MessageDto
+            var totalCount = await _db.Messages.CountAsync(m => m.ChannelId == channelId);
+
+            var rows = await _db.Messages
+                .Where(m => m.ChannelId == channelId)
+                .OrderByDescending(m => m.Timestamp)
+                .Skip(offset)
+                .Take(limit)
+                .ToListAsync();
+            rows.Reverse();
+
+            var replyToIds = rows.Where(r => r.ReplyToId != null).Select(r => r.ReplyToId!).Distinct().ToList();
+            var replyMessages = new Dictionary<string, Message>();
+            if (replyToIds.Count > 0)
             {
-                Id = row.Id,
-                ChannelId = row.ChannelId,
-                Username = senderExists ? row.Username : Constants.DeletedUserDisplayName,
-                Content = row.Content,
-                FileUrl = row.FileUrl,
-                Timestamp = row.Timestamp.ToString("O"),
-                Edited = row.Edited,
-                EditedAt = row.EditedAt,
-                Reactions = row.Reactions ?? new List<ReactionInMessage>(),
-                ReadBy = row.ReadBy ?? Array.Empty<string>(),
-                DeliveredTo = row.DeliveredTo ?? new List<string>(),
-                IsDeletedSender = !senderExists
+                var replyRows = await _db.Messages.Where(m => replyToIds.Contains(m.Id)).ToListAsync();
+                foreach (var rr in replyRows) replyMessages[rr.Id] = rr;
+            }
+
+            var messages = new List<MessageDto>();
+            foreach (var row in rows)
+            {
+                var senderExists = existingUsers.Contains(row.Username);
+                var msg = new MessageDto
+                {
+                    Id = row.Id,
+                    ChannelId = row.ChannelId,
+                    Username = senderExists ? row.Username : Constants.DeletedUserDisplayName,
+                    Content = row.Content,
+                    FileUrl = row.FileUrl,
+                    Timestamp = row.Timestamp.ToString("O"),
+                    Edited = row.Edited,
+                    EditedAt = row.EditedAt,
+                    Reactions = row.Reactions ?? new List<ReactionInMessage>(),
+                    ReadBy = row.ReadBy ?? Array.Empty<string>(),
+                    DeliveredTo = row.DeliveredTo ?? new List<string>(),
+                    IsDeletedSender = !senderExists
+                };
+
+                if (row.ReplyToId != null && replyMessages.TryGetValue(row.ReplyToId, out var rm))
+                {
+                    var ru = rm.Username;
+                    msg.ReplyTo = new ReplyToInfo
+                    {
+                        Id = rm.Id,
+                        Username = existingUsers.Contains(ru) ? ru : Constants.DeletedUserDisplayName,
+                        Content = rm.Content ?? "",
+                        FileUrl = rm.FileUrl,
+                        IsDeleted = !existingUsers.Contains(ru)
+                    };
+                }
+
+                messages.Add(msg);
+            }
+
+            messagesResponse = new MessagesResponse
+            {
+                Messages = messages,
+                Pagination = new PaginationInfo
+                {
+                    Page = page,
+                    Limit = limit,
+                    Total = totalCount,
+                    HasMore = offset + limit < totalCount
+                }
             };
 
-            if (row.ReplyToId != null && replyMessages.TryGetValue(row.ReplyToId, out var rm))
-            {
-                var ru = rm.Username;
-                msg.ReplyTo = new ReplyToInfo
-                {
-                    Id = rm.Id,
-                    Username = existingUsers.Contains(ru) ? ru : Constants.DeletedUserDisplayName,
-                    Content = rm.Content ?? "",
-                    FileUrl = rm.FileUrl,
-                    IsDeleted = !existingUsers.Contains(ru)
-                };
-            }
-
-            messages.Add(msg);
+            _cache.Set(cacheKey, messagesResponse, TimeSpan.FromSeconds(_configuration.GetValue<long>("MemoryCache:ExpireSeconds"))); 
         }
 
-        return Ok(new MessagesResponse
-        {
-            Messages = messages,
-            Pagination = new PaginationInfo
-            {
-                Page = page,
-                Limit = limit,
-                Total = totalCount,
-                HasMore = offset + limit < totalCount
-            }
-        });
+        return Ok(messagesResponse);
     }
 
     // PUT /api/messages/{messageId}

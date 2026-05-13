@@ -177,7 +177,7 @@ using (var scope = app.Services.CreateScope())
 var port = builder.Configuration.GetValue<int>("Server:Port", 5000);
 var useHttps = builder.Configuration.GetValue<bool>("Server:UseHttps", false);
 
-Console.WriteLine($"[START] Chat: {(useHttps ? "https" : "http")}://0.0.0.0:{port}");
+Console.WriteLine($"[START] Chat: {(useHttps ? "https" : "http")}://127.0.0.1:{port}");
 
 if (useHttps)
 {
