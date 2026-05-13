@@ -1,6 +1,8 @@
 using ChatApp.Data;
 using ChatApp.Hubs;
+using ChatApp.Middleware;
 using ChatApp.Services;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -41,6 +43,7 @@ builder.Services.AddMemoryCache();
 builder.Services.Configure<OllamaSettings>(builder.Configuration.GetSection("Ollama"));
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<OllamaService>();
+builder.Services.AddSingleton<OllamaService>();
 
 // ===== Database =====
 builder.Services.AddDbContext<ChatDbContext>(options =>
@@ -64,6 +67,23 @@ else
 {
     builder.Services.AddSignalR();
 }
+
+
+// Добавляем аутентификацию с куками
+//builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+//    .AddCookie(options =>
+//    {
+//        options.Cookie.HttpOnly = true;
+//        options.Cookie.SameSite = SameSiteMode.Lax;
+//        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+//        options.LoginPath = "/login";
+//        options.AccessDeniedPath = "/login";
+//    });
+
+//builder.Services.AddAuthorization();
+
+
+builder.Services.AddControllers();
 
 // ===== Background Services =====
 builder.Services.AddHostedService<InactiveUsersBackgroundService>();
@@ -93,8 +113,9 @@ var app = builder.Build();
 app.UseRouting();
 app.UseStaticFiles();
 app.UseCors();
-app.UseAuthentication();
-app.UseAuthorization();
+app.UseMiddleware<SessionAuthenticationMiddleware>();
+//app.UseAuthentication();
+//app.UseAuthorization();
 app.MapControllers();
 app.MapHub<ChatHub>("/chathub");
 

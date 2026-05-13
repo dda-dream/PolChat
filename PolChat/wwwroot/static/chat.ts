@@ -194,6 +194,9 @@ if (isChatPage) {
 
     let currentJoinToken = 0;
 
+    let isAIModeActive = false;          // Активен ли AI режим
+    let isAwaitingAIResponse = false;    // Ожидание ответа от сервера (блокировка повторных запросов)
+
     // ============ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ЧАТА ============
 
     // ============ КНОПКИ ПРОКРУТКИ ЧАТА ============
@@ -1899,6 +1902,72 @@ if (isChatPage) {
             return;
         }
 
+        // === AI РЕЖИМ ===
+        if (isAIModeActive) {
+            if (isAwaitingAIResponse) {
+                showNotification('AI уже обрабатывает предыдущий запрос', 'warning');
+                return;
+            }
+
+            isAwaitingAIResponse = true;
+            showNotification('🤖 AI думает над ответом...', 'info');
+
+            const messageInput = document.getElementById('messageInput') as HTMLTextAreaElement;
+            if (messageInput) messageInput.disabled = true;
+
+            try {
+                const context = await getChatContext();
+                const contextString = formatContextForAI(context);
+
+                // ✅ ВАЖНО: добавить credentials: 'include'
+                const response = await fetch('/api/ai/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',  // <-- ЭТО КЛЮЧЕВОЕ ИЗМЕНЕНИЕ
+                    body: JSON.stringify({
+                        message: content,
+                        context: contextString,
+                        channelId: currentChannel,
+                        username: currentUsername
+                    })
+                });
+
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const errorText = await response.text();
+                    throw new Error(`Сервер вернул ошибку: ${errorText.substring(0, 100)}`);
+                }
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Ошибка при обращении к AI');
+                }
+
+                if (data.success) {
+                    showNotification('✅ AI ответил, сообщение появится в чате', 'success');
+                } else {
+                    showNotification('⚠️ ' + (data.error || 'Неизвестная ошибка'), 'warning');
+                }
+
+            } catch (err) {
+                console.error('AI request failed:', err);
+                showNotification(`❌ Ошибка AI: ${(err as Error).message}`, 'danger');
+                activateAIMode();
+            } finally {
+                isAwaitingAIResponse = false;
+                if (messageInput) {
+                    messageInput.disabled = false;
+                    messageInput.value = '';
+                    autoResizeTextarea();
+                    messageInput.focus();
+                }
+                cancelReply();
+                deactivateAIMode();
+            }
+            return;
+        }
+
         // *** РЕДАКТИРОВАНИЕ СООБЩЕНИЯ ***
         // В функции sendMessage, секция редактирования:
 
@@ -3030,33 +3099,78 @@ function handleDMDelete(e: Event) {
     }
 
     // Добавьте кнопку AI в интерфейс
-    async function openAIChat() {
-        const aiUsername = 'AI Assistant';
+    async function activateAIMode() {
+        if (!currentChannel) {
+            showNotification('Сначала выберите чат', 'warning');
+            return;
+        }
+        if (isAIModeActive) {
+            showNotification('AI режим уже активен', 'info');
+            return;
+        }
+        isAIModeActive = true;
+        // Добавляем класс к обёртке поля ввода
+        const inputWrapper = document.querySelector('.input-wrapper');
+        if (inputWrapper) inputWrapper.classList.add('ai-mode-active');
+        // Показываем кнопку отмены
+        const cancelContainer = document.getElementById('aiCancelContainer');
+        if (cancelContainer) cancelContainer.style.display = 'block';
+        // Фокусируем поле ввода
+        const messageInput = document.getElementById('messageInput') as HTMLTextAreaElement;
+        if (messageInput) messageInput.focus();
+        showNotification('AI режим активирован. Напишите сообщение для AI.', 'info');
+    }
+
+    function deactivateAIMode() {
+        if (!isAIModeActive) return;
+        isAIModeActive = false;
+        isAwaitingAIResponse = false;
+        const inputWrapper = document.querySelector('.input-wrapper');
+        if (inputWrapper) inputWrapper.classList.remove('ai-mode-active');
+        const cancelContainer = document.getElementById('aiCancelContainer');
+        if (cancelContainer) cancelContainer.style.display = 'none';
+    }
+
+    function formatContextForAI(context: { username: string; content: string; timestamp: string }[]): string {
+        if (!context || context.length === 0) return '';
+
+        const lines: string[] = [];
+        lines.push('История переписки (последние сообщения):');
+        lines.push('');
+
+        // Берём последние 30 сообщений для контекста
+        const recentMessages = context.slice(-30);
+
+        for (const msg of recentMessages) {
+            const time = new Date(msg.timestamp).toLocaleTimeString('ru-RU', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            lines.push(`[${time}] ${msg.username}: ${msg.content}`);
+        }
+
+        lines.push('');
+        return lines.join('\n');
+    }
+
+    // Обновлённая функция getChatContext (должна возвращать массив объектов)
+    async function getChatContext(): Promise<{ username: string; content: string; timestamp: string }[]> {
+        if (!currentChannel) return [];
         try {
-            // Получаем список DM-каналов
-            const dmsRes = await fetch('/api/dm_channels');
-            const dms = await dmsRes.json();
-            let aiDm = dms.find((dm: DMChannel) => dm.name === aiUsername);
+            const res = await fetch(`/api/messages/${currentChannel}?limit=50&page=1`);
+            if (!res.ok) return [];
+            const data = await res.json();
+            const messages = data.messages || [];
 
-            if (!aiDm) {
-                // Создаём DM с AI Assistant
-                await startDMWithUser(aiUsername);
-                // Обновляем список DM-каналов
-                await loadDMChannels();
-                // Повторно ищем созданный канал
-                const updatedDmsRes = await fetch('/api/dm_channels');
-                const updatedDms = await updatedDmsRes.json();
-                aiDm = updatedDms.find((dm: DMChannel) => dm.name === aiUsername);
-            }
-
-            if (aiDm) {
-                await joinChannel('dm', aiDm.id, aiUsername, 'AI ассистент');
-            } else {
-                showNotification('Не удалось создать чат с AI', 'danger');
-            }
-        } catch (error) {
-            console.error('Error opening AI chat:', error);
-            showNotification('Ошибка при открытии чата с AI', 'danger');
+            // Преобразуем в нужный формат
+            return messages.map((msg: Message) => ({
+                username: msg.username,
+                content: msg.content || (msg.fileUrl ? '[Файл]' : ''),
+                timestamp: msg.timestamp
+            }));
+        } catch (e) {
+            console.error('Ошибка получения контекста:', e);
+            return [];
         }
     }
 
@@ -3067,14 +3181,28 @@ function handleDMDelete(e: Event) {
         const aiButton = document.createElement('button');
         aiButton.className = 'btn btn-outline-info ms-2';
         aiButton.innerHTML = '<i class="fas fa-robot"></i> AI';
-        aiButton.title = 'Чат с AI ассистентом';
+        aiButton.title = 'Вызвать AI в текущий чат (одно сообщение)';
         aiButton.onclick = () => {
-            openAIChat();
+            activateAIMode();
         };
 
         const sendButton = document.getElementById('sendButton');
         if (sendButton && sendButton.parentElement) {
             sendButton.parentElement.insertBefore(aiButton, sendButton.nextSibling);
+        }
+    }
+
+    function initAICancelButton() {
+        const cancelBtn = document.getElementById('cancelAiBtn');
+        if (cancelBtn) {
+            cancelBtn.onclick = () => {
+                if (isAwaitingAIResponse) {
+                    showNotification('Нельзя отменить, AI уже обрабатывает запрос', 'warning');
+                    return;
+                }
+                deactivateAIMode();
+                showNotification('Режим AI отменён', 'info');
+            };
         }
     }
 
@@ -3312,6 +3440,7 @@ function handleDMDelete(e: Event) {
     let joinQueue = Promise.resolve();
 
     async function joinChannel(type: 'channel' | 'dm', id: string, name: string, desc: string) {
+        if (isAIModeActive) deactivateAIMode();
         // Мгновенно обновляем UI (опционально, но улучшает отзывчивость)
         updateUIForChannelSwitch(type, id, name, desc);
 
@@ -4396,6 +4525,7 @@ function handleDMDelete(e: Event) {
         startHeartbeat();
         initNotificationSound();
         addAIAssistantButton();
+        initAICancelButton();
 
         await updateTotalUnreadFromServer();
 

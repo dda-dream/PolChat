@@ -2548,3 +2548,42 @@ body.page-user-management {
     font-size: 24px; /* или любой нужный размер */
 }
 
+
+/* Мигающее свечение поля ввода при активном AI режиме */
+.input-wrapper.ai-mode-active textarea {
+    animation: aiPulse 1s infinite;
+    box-shadow: 0 0 0 2px #007bff, 0 0 0 4px rgba(0,123,255,0.4);
+    border-radius: 24px;
+}
+
+@keyframes aiPulse {
+    0% {
+        box-shadow: 0 0 0 2px #007bff, 0 0 0 4px rgba(0,123,255,0.2);
+    }
+
+    50% {
+        box-shadow: 0 0 0 2px #007bff, 0 0 0 8px rgba(0,123,255,0.6);
+    }
+
+    100% {
+        box-shadow: 0 0 0 2px #007bff, 0 0 0 4px rgba(0,123,255,0.2);
+    }
+}
+
+/* Кнопка отмены AI */
+.ai-cancel-btn {
+    background: #dc3545;
+    color: white;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+    .ai-cancel-btn:hover {
+        background: #c82333;
+        transform: scale(1.05);
+    }
