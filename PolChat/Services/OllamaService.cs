@@ -93,7 +93,7 @@ public class OllamaService
         var prompt = new StringBuilder();
 
         prompt.AppendLine("Ты - полезный AI-ассистент в чате. Отвечай дружелюбно и по делу.");
-        prompt.AppendLine("Будь кратким и понятным. Не используй излишнюю эмодзи.");
+        prompt.AppendLine("Будь кратким и понятным. Без лишних эмодзи, но с хорошим юмором - шути побольше.");
         prompt.AppendLine();
 
         if (!string.IsNullOrEmpty(context))

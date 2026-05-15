@@ -117,6 +117,9 @@ declare global {
         cancelEditing: () => void;     
         scrollToEditingMessage: () => void;
         showReactionUsers?: (messageId: string, emoji: string) => void;
+        saveDMDisplayName?: () => void;
+        confirmDeleteDM?: () => void;
+        goBack?: () => void;
     }
 }
 

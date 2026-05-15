@@ -1,0 +1,401 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Настройки чата - Pol Чат</title>
+    <link href="/static/ext/bootstrap.min.css" rel="stylesheet">
+    <link href="/static/ext/all.min.css" rel="stylesheet">
+    <script src="/static/ext/bootstrap.bundle.min.js"></script>
+    <script src="/static/ext/signalr.min.js"></script>
+    <link href="/static/settings.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .settings-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .settings-card {
+            background: white;
+            border-radius: 24px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .settings-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 24px 30px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+            .settings-header h2 {
+                margin: 0;
+                font-size: 1.5rem;
+            }
+
+                .settings-header h2 i {
+                    margin-right: 10px;
+                }
+
+        .back-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+            .back-btn:hover {
+                background: rgba(255,255,255,0.3);
+            }
+
+        .settings-body {
+            padding: 30px;
+        }
+
+        .setting-section {
+            margin-bottom: 30px;
+            border-bottom: 1px solid #e0e0e0;
+            padding-bottom: 25px;
+        }
+
+            .setting-section:last-child {
+                border-bottom: none;
+                margin-bottom: 0;
+                padding-bottom: 0;
+            }
+
+        .section-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+            .section-title i {
+                color: #667eea;
+                width: 24px;
+            }
+
+        .setting-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .setting-info {
+            flex: 1;
+        }
+
+        .setting-label {
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 4px;
+        }
+
+        .setting-desc {
+            font-size: 12px;
+            color: #6c757d;
+        }
+
+        .setting-value {
+            font-size: 14px;
+            color: #666;
+            word-break: break-all;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .info-label {
+            color: #6c757d;
+            font-size: 0.85rem;
+        }
+
+        .info-value {
+            font-size: 0.85rem;
+            word-break: break-all;
+            text-align: right;
+        }
+
+        .danger-zone {
+            background: #fff5f5;
+            border: 1px solid #ffcccc;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 10px;
+        }
+
+            .danger-zone .section-title {
+                color: #dc3545;
+            }
+
+                .danger-zone .section-title i {
+                    color: #dc3545;
+                }
+
+        .btn-danger {
+            background: #dc3545;
+            border: none;
+            padding: 12px;
+            font-size: 1rem;
+        }
+
+            .btn-danger:hover {
+                background: #c82333;
+            }
+
+        .btn-primary {
+            background: #667eea;
+            border: none;
+            padding: 10px 24px;
+        }
+
+            .btn-primary:hover {
+                background: #5a67d8;
+            }
+
+        .input-group {
+            max-width: 300px;
+        }
+
+            .input-group input {
+                border-radius: 8px 0 0 8px;
+            }
+
+            .input-group button {
+                border-radius: 0 8px 8px 0;
+            }
+
+        code {
+            background: #f5f5f5;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .text-muted-small {
+            font-size: 12px;
+            color: #6c757d;
+        }
+
+        @media (max-width: 576px) {
+            .settings-body {
+                padding: 20px;
+            }
+
+            .setting-row {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .input-group {
+                max-width: 100%;
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="settings-container">
+        <div class="settings-card">
+            <div class="settings-header">
+                <h2>
+                    <i class="fas fa-user"></i>
+                    Настройки чата
+                </h2>
+                <button class="back-btn" onclick="goBack()">
+                    <i class="fas fa-arrow-left"></i> Назад в чат
+                </button>
+            </div>
+            <div class="settings-body">
+                <!-- Отображаемое имя (только для вас) -->
+                <div class="setting-section">
+                    <div class="section-title">
+                        <i class="fas fa-tag"></i>
+                        Отображаемое имя
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <div class="setting-label">Имя собеседника</div>
+                            <div class="setting-desc">Это имя видите только вы. Собеседник не увидит изменений.</div>
+                        </div>
+                        <div class="input-group">
+                            <input type="text" id="dmDisplayName" class="form-control" placeholder="Имя для отображения">
+                            <button class="btn btn-primary" onclick="saveDMDisplayName()">
+                                <i class="fas fa-save"></i> Сохранить
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Информация о чате -->
+                <div class="setting-section">
+                    <div class="section-title">
+                        <i class="fas fa-info-circle"></i>
+                        Информация
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">ID чата:</span>
+                        <span class="info-value"><code id="dmIdDisplay">-</code></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Собеседник:</span>
+                        <span class="info-value" id="dmOtherUser">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Исходное имя:</span>
+                        <span class="info-value" id="dmOriginalName">-</span>
+                    </div>
+                </div>
+
+                <!-- Опасная зона -->
+                <div class="setting-section">
+                    <div class="danger-zone">
+                        <div class="section-title">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            Опасная зона
+                        </div>
+                        <p class="text-muted-small mb-3">
+                            Удаление чата приведёт к безвозвратному удалению всей истории сообщений.
+                            Это действие нельзя отменить.
+                        </p>
+                        <button class="btn btn-danger w-100" onclick="confirmDeleteDM()">
+                            <i class="fas fa-trash-alt"></i> Удалить чат
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentDmId = null;
+        let currentDmName = null;
+        let currentUsername = null;
+
+        // Получаем параметры из URL
+        const urlParams = new URLSearchParams(window.location.search);
+        currentDmId = urlParams.get('id');
+        currentDmName = urlParams.get('name') || 'Чат';
+
+        async function loadPageData() {
+            // Загружаем текущего пользователя
+            try {
+                const response = await fetch('/api/users/me');
+                if (response.ok) {
+                    const userData = await response.json();
+                    currentUsername = userData.username;
+                }
+            } catch (error) {
+                console.error('Error loading user:', error);
+            }
+
+            // Заполняем информацию
+            if (currentDmId) {
+                document.getElementById('dmIdDisplay').textContent = currentDmId;
+                document.getElementById('dmOriginalName').textContent = currentDmName;
+                document.getElementById('dmOtherUser').textContent = getOtherUserName(currentDmId, currentUsername);
+
+                // Загружаем сохранённое имя
+                const savedName = localStorage.getItem(`dm_display_name_${currentDmId}`);
+                const input = document.getElementById('dmDisplayName');
+                if (input) {
+                    input.value = savedName || currentDmName;
+                }
+            }
+        }
+
+        function getOtherUserName(dmId, currentUser) {
+            const parts = dmId.split('-');
+            if (parts.length === 2) {
+                const other = parts[0] === currentUser ? parts[1] : parts[0];
+                // Проверяем, есть ли сохранённое отображаемое имя для этого пользователя
+                const userDisplayName = localStorage.getItem(`user_display_name_${other}`);
+                return userDisplayName || other;
+            }
+            return dmId;
+        }
+
+        function saveDMDisplayName() {
+            if (!currentDmId) {
+                alert('Чат не найден');
+                return;
+            }
+
+            const input = document.getElementById('dmDisplayName');
+            const newName = input.value.trim();
+
+            if (!newName) {
+                alert('Имя не может быть пустым');
+                return;
+            }
+
+            localStorage.setItem(`dm_display_name_${currentDmId}`, newName);
+            alert('Отображаемое имя сохранено');
+        }
+
+        async function confirmDeleteDM() {
+            if (!currentDmId) {
+                alert('Чат не найден');
+                return;
+            }
+
+            if (confirm(`Вы уверены, что хотите удалить чат с "${currentDmName}"?\n\nВся история сообщений будет удалена без возможности восстановления.`)) {
+                try {
+                    const response = await fetch(`/api/dm_channels/${currentDmId}`, {
+                        method: 'DELETE'
+                    });
+
+                    if (response.ok) {
+                        alert('Чат удалён');
+                        window.location.href = '/';
+                    } else {
+                        const data = await response.json();
+                        alert(data.error || 'Ошибка при удалении');
+                    }
+                } catch (error) {
+                    console.error('Error deleting DM:', error);
+                    alert('Ошибка соединения с сервером');
+                }
+            }
+        }
+
+        function goBack() {
+            window.location.href = '/';
+        }
+
+        // Загружаем данные
+        loadPageData();
+
+        // Экспорт функций в глобальную область
+        window.saveDMDisplayName = saveDMDisplayName;
+        window.confirmDeleteDM = confirmDeleteDM;
+        window.goBack = goBack;
+    </script>
+</body>
+</html>

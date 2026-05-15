@@ -196,6 +196,7 @@ if (isChatPage) {
 
     let isAIModeActive = false;          // Активен ли AI режим
     let isAwaitingAIResponse = false;    // Ожидание ответа от сервера (блокировка повторных запросов)
+    let aiBotId: string | null = null;
 
     // ============ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ЧАТА ============
 
@@ -1491,6 +1492,12 @@ if (isChatPage) {
     }
 
     function showFilePreview(file: File) {
+        // Проверяем, есть ли текущий чат
+        if (!currentChannel) {
+            showNotification('Сначала выберите чат для отправки', 'warning');
+            return;
+        }
+
         const url = URL.createObjectURL(file);
         const div = document.getElementById('pastePreview');
         const isImage = file.type.startsWith('image/');
@@ -1503,28 +1510,24 @@ if (isChatPage) {
             content = `<video src="${url}" style="max-width:100%; max-height:200px; border-radius:8px;" controls></video>`;
         } else {
             content = `<div style="padding:20px; text-align:center; background:#f0f2f5; border-radius:8px;">
-        <i class="fas fa-file fa-3x" style="color:#6c757d;"></i>
-        <div style="margin-top:8px; font-size:12px; color:#666;">${escapeHtml(file.name)}</div>
-    </div>`;
+            <i class="fas fa-file fa-3x" style="color:#6c757d;"></i>
+            <div style="margin-top:8px; font-size:12px; color:#666;">${escapeHtml(file.name)}</div>
+        </div>`;
         }
 
         if (div) {
             div.innerHTML = `<div class="preview-content">
-        ${content}
-        <div class="preview-actions" style="margin-top: 12px; display: flex; gap: 8px; justify-content: flex-end;">
-            <button class="btn-cancel" onclick="cancelFilePreview()"><i class="fas fa-times"></i></button>
-        </div>
-    </div>`;
+            ${content}
+            <div class="preview-actions" style="margin-top: 12px; display: flex; gap: 8px; justify-content: flex-end;">
+                <button class="btn-cancel" onclick="cancelFilePreview()"><i class="fas fa-times"></i></button>
+            </div>
+        </div>`;
             div.style.display = 'block';
         }
 
         pendingFileBlob = file;
         pendingFileUrl = url;
         pendingFileName = file.name;
-
-        // Фокусируемся на основном поле ввода для текста
-        const messageInput = document.getElementById('messageInput') as HTMLTextAreaElement | null;
-        if (messageInput) messageInput.focus();
     }
 
     async function sendFileFromPreview() {
@@ -1539,19 +1542,42 @@ if (isChatPage) {
 
         const file = pendingFileBlob;
         const fileName = pendingFileName || 'file';
-
-        // Получаем текст подписи из textarea
-        const captionInput = document.getElementById('fileCaptionInput') as HTMLTextAreaElement | null;
-        let caption = captionInput ? captionInput.value.trim() : '';
-        caption = sanitizeInput(caption);
+        const caption = ''; // подпись не используется, оставлено для совместимости
 
         const replyData = replyToMessageData ? { id: replyToMessageData.id, username: replyToMessageData.username, content: replyToMessageData.content } : null;
 
-        // Сохраняем caption во временное хранилище, чтобы использовать после загрузки файла
+        // ---- ВРЕМЕННОЕ СООБЩЕНИЕ (показываем сразу) ----
+        const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+        const messagesDiv = document.getElementById('messages-area');
+        if (messagesDiv && messagesDiv.innerHTML.includes('Нет сообщений')) {
+            messagesDiv.innerHTML = '';
+        }
+
+        const tempMessage: any = {
+            id: tempId,
+            channelId: currentChannel,
+            username: currentUsername,
+            content: caption,
+            fileUrl: URL.createObjectURL(file), // временный blob URL для превью
+            timestamp: new Date().toISOString(),
+            reactions: [],
+            readBy: [],
+            deliveredTo: [],
+            isTemp: true,
+            edited: false,
+            replyTo: replyData
+        };
+
+        if (messagesDiv) {
+            messagesDiv.insertAdjacentHTML('beforeend', formatMessage(tempMessage));
+            scrollToBottomSafely(false);
+        }
+
+        // Сохраняем caption для последующей отправки (если нужно)
         const tempCaption = caption;
 
         cancelReply();
-        cancelFilePreview();
+        cancelFilePreview(); // очищаем preview, но не удаляем временное сообщение
 
         const formData = new FormData();
         formData.append('file', file, fileName);
@@ -1767,6 +1793,10 @@ if (isChatPage) {
         pendingFileBlob = null;
         pendingFileUrl = null;
         pendingFileName = null;
+
+        // Фокусируемся на поле ввода сообщений
+        const messageInput = document.getElementById('messageInput') as HTMLTextAreaElement | null;
+        if (messageInput) messageInput.focus();
     }
 
     function cancelFile() {
@@ -1870,7 +1900,30 @@ if (isChatPage) {
         showNotification('Редактирование отменено', 'info');
     }
 
+    // Замените isAIChatChannel на:
+    function isAIChatChannel(): boolean {
+        if (!currentChannelType || !currentChannelName) return false;
 
+        // Проверка по имени (быстро и надёжно, если имена не меняются)
+        if (currentChannelType === 'dm') {
+            // Извлекаем имя собеседника из названия DM
+            let otherUserName = currentChannelName;
+            if (currentChannelName.includes(',')) {
+                const participants = currentChannelName.split(',').map(p => p.trim());
+                otherUserName = participants.find(p => p !== currentUsername) || '';
+            }
+            // Сравниваем с возможными именами AI бота
+            const aiBotNames = ['AI Assistant', 'AI Bot', 'Assistant', 'AI'];
+            return aiBotNames.includes(otherUserName);
+        }
+
+        // Для канала
+        if (currentChannelType === 'channel' && currentChannelName.toLowerCase() === 'ai') {
+            return true;
+        }
+
+        return false;
+    }
 
     // ============ ОТПРАВКА СООБЩЕНИЙ ============
 
@@ -1903,74 +1956,16 @@ if (isChatPage) {
         }
 
         // === AI РЕЖИМ ===
-        if (isAIModeActive) {
-            if (isAwaitingAIResponse) {
-                showNotification('AI уже обрабатывает предыдущий запрос', 'warning');
-                return;
+        if (isAIModeActive || isAIChatChannel()) {
+            // Активируем режим если это чат с AI, но режим не активен
+            if (!isAIModeActive && isAIChatChannel()) {
+                isAIModeActive = true;
             }
-
-            isAwaitingAIResponse = true;
-            showNotification('🤖 AI думает над ответом...', 'info');
-
-            const messageInput = document.getElementById('messageInput') as HTMLTextAreaElement;
-            if (messageInput) messageInput.disabled = true;
-
-            try {
-                const context = await getChatContext();
-                const contextString = formatContextForAI(context);
-
-                // ✅ ВАЖНО: добавить credentials: 'include'
-                const response = await fetch('/api/ai/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',  // <-- ЭТО КЛЮЧЕВОЕ ИЗМЕНЕНИЕ
-                    body: JSON.stringify({
-                        message: content,
-                        context: contextString,
-                        channelId: currentChannel,
-                        username: currentUsername
-                    })
-                });
-
-                const contentType = response.headers.get('content-type');
-                if (!contentType || !contentType.includes('application/json')) {
-                    const errorText = await response.text();
-                    throw new Error(`Сервер вернул ошибку: ${errorText.substring(0, 100)}`);
-                }
-
-                const data = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(data.error || 'Ошибка при обращении к AI');
-                }
-
-                if (data.success) {
-                    showNotification('✅ AI ответил, сообщение появится в чате', 'success');
-                } else {
-                    showNotification('⚠️ ' + (data.error || 'Неизвестная ошибка'), 'warning');
-                }
-
-            } catch (err) {
-                console.error('AI request failed:', err);
-                showNotification(`❌ Ошибка AI: ${(err as Error).message}`, 'danger');
-                activateAIMode();
-            } finally {
-                isAwaitingAIResponse = false;
-                if (messageInput) {
-                    messageInput.disabled = false;
-                    messageInput.value = '';
-                    autoResizeTextarea();
-                    messageInput.focus();
-                }
-                cancelReply();
-                deactivateAIMode();
-            }
+            await sendAIMessage();
             return;
         }
 
         // *** РЕДАКТИРОВАНИЕ СООБЩЕНИЯ ***
-        // В функции sendMessage, секция редактирования:
-
         if (editingMessageData) {
             // Проверяем, что мы всё ещё в том же чате
             if (editingMessageData.channelId !== currentChannel || editingMessageData.channelType !== currentChannelType) {
@@ -2970,56 +2965,45 @@ if (isChatPage) {
     }
 
     async function loadDMChannels() {
-    try {
-        const res = await fetch('/api/dm_channels');
-        const dms = await res.json() as DMChannel[];
-        const div = document.getElementById('dm-list');
-        if (!dms || dms.length === 0) {
-            if (div) div.innerHTML = '<div class="text-center text-muted py-3">Нет личных чатов</div>';
-            return;
-        }
-        if (div) {
-            div.innerHTML = dms.map((dm: DMChannel) => {
-                const active = currentChannel === dm.id && currentChannelType === 'dm';
-                const unread = unreadCounts[dm.id] || 0;
-                const displayName = dm.isDeleted ? DELETED_USER_DISPLAY : dm.name;
-                const escapedId = escapeHtml(dm.id);
-                const escapedName = escapeHtml(displayName);
-                
-                // Убираем onclick из HTML
-                return `<div class="dm-item ${active ? 'active' : ''}" data-dm-id="${escapedId}" data-dm-name="${escapedName}">
+        try {
+            const res = await fetch('/api/dm_channels');
+            const dms = await res.json() as DMChannel[];
+            const div = document.getElementById('dm-list');
+            if (!dms || dms.length === 0) {
+                if (div) div.innerHTML = '<div class="text-center text-muted py-3">Нет личных чатов</div>';
+                return;
+            }
+            if (div) {
+                div.innerHTML = dms.map((dm: DMChannel) => {
+                    const active = currentChannel === dm.id && currentChannelType === 'dm';
+                    let unread = unreadCounts[dm.id] || 0;
+                    let displayName = dm.name;
+
+                    // Проверяем, есть ли сохранённое отображаемое имя для этого чата
+                    const savedDisplayName = getDMDisplayName(dm.id);
+                    if (savedDisplayName) {
+                        displayName = savedDisplayName;
+                    } else if (dm.isDeleted) {
+                        displayName = DELETED_USER_DISPLAY;
+                    }
+
+                    const escapedId = escapeHtml(dm.id);
+                    const escapedName = escapeHtml(displayName);
+
+                    return `<div class="dm-item ${active ? 'active' : ''}" data-dm-id="${escapedId}" data-dm-name="${escapedName}">
                     <div class="dm-info">
                         <div class="dm-name"><i class="fas fa-user"></i> ${escapedName}${unread > 0 ? `<span class="unread-badge">${unread > 99 ? '99+' : unread}</span>` : ''}</div>
                     </div>
-                    <div class="dm-actions"><button class="action-btn delete-btn" data-dm-id="${escapedId}" data-dm-name="${escapedName}"><i class="fas fa-trash"></i></button></div>
                 </div>`;
-            }).join('');
-            
-            // Привязываем обработчики для кнопок удаления
-            attachDMDeleteHandlers();
+                }).join('');
+            }
+        } catch (e) {
+            console.error(e);
         }
-    } catch (e) {
-        console.error(e);
     }
-}
 
-function attachDMDeleteHandlers() {
-    const deleteButtons = document.querySelectorAll('.dm-actions .delete-btn');
-    deleteButtons.forEach(btn => {
-        btn.removeEventListener('click', handleDMDelete);
-        btn.addEventListener('click', handleDMDelete);
-    });
-}
 
-function handleDMDelete(e: Event) {
-    e.stopPropagation();
-    const btn = e.currentTarget as HTMLElement;
-    const dmId = btn.getAttribute('data-dm-id');
-    const dmName = btn.getAttribute('data-dm-name');
-    if (dmId && dmName) {
-        deleteDMChannel(dmId, dmName);
-    }
-}
+
 
     async function loadUsersWithStatus() {
         try {
@@ -3109,6 +3093,7 @@ function handleDMDelete(e: Event) {
             return;
         }
         isAIModeActive = true;
+        isAwaitingAIResponse = false;
         // Добавляем класс к обёртке поля ввода
         const inputWrapper = document.querySelector('.input-wrapper');
         if (inputWrapper) inputWrapper.classList.add('ai-mode-active');
@@ -3119,6 +3104,7 @@ function handleDMDelete(e: Event) {
         const messageInput = document.getElementById('messageInput') as HTMLTextAreaElement;
         if (messageInput) messageInput.focus();
         showNotification('AI режим активирован. Напишите сообщение для AI.', 'info');
+        console.log('AI mode activated'); // <-- отладка
     }
 
     function deactivateAIMode() {
@@ -3129,6 +3115,140 @@ function handleDMDelete(e: Event) {
         if (inputWrapper) inputWrapper.classList.remove('ai-mode-active');
         const cancelContainer = document.getElementById('aiCancelContainer');
         if (cancelContainer) cancelContainer.style.display = 'none';
+    }
+
+    async function sendAIMessage() {
+        const input = document.getElementById('messageInput') as HTMLTextAreaElement;
+        if (!input) return;
+
+        let content = input.value.trim();
+        if (!content) return;
+
+        if (isAwaitingAIResponse) {
+            showNotification('AI уже обрабатывает предыдущий запрос', 'warning');
+            return;
+        }
+
+        if (!currentChannel) {
+            showNotification('Выберите чат', 'warning');
+            return;
+        }
+
+        isAwaitingAIResponse = true;
+        showNotification('🤖 AI думает над ответом...', 'info');
+
+        const messageInput = document.getElementById('messageInput') as HTMLTextAreaElement;
+        if (messageInput) messageInput.disabled = true;
+
+        const userMessageContent = content;
+
+        // Локальное отображение сообщения пользователя
+        const userTempId = 'temp_ai_user_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+        const messagesDiv = document.getElementById('messages-area');
+        if (messagesDiv && messagesDiv.innerHTML.includes('Нет сообщений')) {
+            messagesDiv.innerHTML = '';
+        }
+
+        const userTempMessage: any = {
+            id: userTempId,
+            channelId: currentChannel,
+            username: currentUsername,
+            content: userMessageContent,
+            fileUrl: null,
+            timestamp: new Date().toISOString(),
+            reactions: [],
+            readBy: [],
+            deliveredTo: [],
+            isTemp: true,
+            edited: false,
+            replyTo: null
+        };
+
+        if (messagesDiv) {
+            messagesDiv.insertAdjacentHTML('beforeend', formatMessage(userTempMessage));
+            scrollToBottomSafely(false);
+        }
+
+        input.value = '';
+        autoResizeTextarea();
+
+        try {
+            // Отправляем сообщение пользователя через SignalR
+            await connection.invoke('SendMessage', {
+                tempId: userTempId,
+                channelId: currentChannel,
+                content: userMessageContent,
+                fileUrl: null,
+                replyTo: null
+            });
+
+            // Запрос к AI (сервер сам сохранит ответ и разошлёт через SignalR)
+            const context = await getChatContext();
+            const contextString = formatContextForAI(context);
+
+            const response = await fetch('/api/ai/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                    message: userMessageContent,
+                    context: contextString,
+                    channelId: currentChannel,
+                    username: currentUsername
+                })
+            });
+
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                const errorText = await response.text();
+                throw new Error(`Сервер вернул ошибку: ${errorText.substring(0, 100)}`);
+            }
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Ошибка при обращении к AI');
+            }
+
+            if (data.success) {
+                // Сервер сам отправит ответ AI через SignalR, клиент получит его как new_message
+                // Ничего дополнительно не отправляем
+                console.log('AI response received, waiting for server broadcast');
+            } else {
+                showNotification('⚠️ ' + (data.error || 'Неизвестная ошибка'), 'warning');
+            }
+        } catch (err) {
+            console.error('AI request failed:', err);
+            showNotification(`❌ Ошибка AI: ${(err as Error).message}`, 'danger');
+        } finally {
+            isAwaitingAIResponse = false;
+            if (messageInput) {
+                messageInput.disabled = false;
+                messageInput.focus();
+            }
+            cancelReply();
+        }
+    }
+
+    async function loadAIBotId() {
+        try {
+            const users = await getUsersCached();
+            // Ищем бота по разным возможным именам
+            const aiBot = users.find(u =>
+                u.username === 'AI Assistant' ||
+                u.username === 'AI Bot' ||
+                u.username === 'Assistant'
+            );  
+            if (aiBot) {
+                // Используем username как ID, так как у User нет id
+                aiBotId = aiBot.username;  // <-- Используем username вместо id
+                console.log('AI Bot found:', aiBotId);
+            } else {
+                console.warn('AI Bot not found in users list');
+            }
+        } catch (e) {
+            console.error('Failed to load AI bot ID:', e);
+        }
     }
 
     function formatContextForAI(context: { username: string; content: string; timestamp: string }[]): string {
@@ -3207,23 +3327,113 @@ function handleDMDelete(e: Event) {
     }
 
     async function startDMWithUser(username: string) {
-        if (username === currentUsername) { showNotification('Нельзя создать чат с самим собой', 'warning'); return; }
+        if (username === currentUsername) {
+            showNotification('Нельзя создать чат с самим собой', 'warning');
+            return;
+        }
+
         try {
-            const res = await fetch('/api/dm_channels',
-                { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ otherUser: username }) });
+            // 1. Получаем список всех DM
+            const dmsResponse = await fetch('/api/dm_channels');
+            const dms = await dmsResponse.json();
+            console.log('All DMs:', dms); // для отладки
+
+            // 2. Ищем существующий DM с этим пользователем
+            let existingDMId: string | null = null;
+            let existingDMName: string | null = null;
+
+            for (const dm of dms) {
+                let isMatch = false;
+
+                // Формат с запятой: "user1, user2"
+                if (dm.name.includes(',')) {
+                    const participants = dm.name.split(',').map((p: string) => p.trim());
+                    if (participants.includes(username) && participants.includes(currentUsername)) {
+                        isMatch = true;
+                    }
+                }
+                // Формат без запятой: имя равно одному из участников
+                else {
+                    if (dm.name === username || dm.name === currentUsername) {
+                        isMatch = true;
+                    }
+                }
+
+                if (isMatch) {
+                    existingDMId = dm.id;
+                    existingDMName = dm.name;
+                    break;
+                }
+            }
+
+            // 3. Если нашли – открываем
+            if (existingDMId) {
+                console.log('Found existing DM:', existingDMId, existingDMName);
+                await loadDMChannels(); // обновляем отображение
+                await joinChannel('dm', existingDMId, existingDMName || username, '');
+                showNotification(`Открыт чат с ${username}`, 'info');
+                return;
+            }
+
+            // 4. Не нашли – создаём новый
+            console.log('Creating new DM with:', username);
+            const res = await fetch('/api/dm_channels', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ otherUser: username })
+            });
+
             const data = await res.json();
+
             if (res.ok) {
                 await loadDMChannels();
                 await joinChannel('dm', data.id, username, '');
+                showNotification(`Чат с ${username} создан`, 'success');
             }
-            else if (res.status === 409 && data.dmId) {
-                await loadDMChannels();
-                await joinChannel('dm', data.dmId, username, '');
+            else if (res.status === 409) {
+                // Конфликт – чат уже существует, но мы его не нашли по имени
+                console.warn('409 Conflict, response data:', data);
+
+                // Пытаемся взять dmId из ответа сервера
+                let foundId = data.dmId || data.id;
+
+                if (!foundId) {
+                    // Повторно загружаем список DM и ищем более тщательно
+                    const refreshedDms = await fetch('/api/dm_channels').then(r => r.json());
+                    for (const dm of refreshedDms) {
+                        let isMatch = false;
+                        if (dm.name.includes(',')) {
+                            const participants = dm.name.split(',').map((p: string) => p.trim());
+                            if (participants.includes(username) && participants.includes(currentUsername)) {
+                                isMatch = true;
+                            }
+                        } else {
+                            if (dm.name === username || dm.name === currentUsername) {
+                                isMatch = true;
+                            }
+                        }
+                        if (isMatch) {
+                            foundId = dm.id;
+                            existingDMName = dm.name;
+                            break;
+                        }
+                    }
+                }
+
+                if (foundId) {
+                    await loadDMChannels();
+                    await joinChannel('dm', foundId, existingDMName || username, '');
+                    showNotification(`Открыт существующий чат с ${username}`, 'info');
+                } else {
+                    showNotification('Не удалось открыть чат: возможно, он уже существует, но не найден', 'danger');
+                }
             }
-            else showNotification(data.error || 'Ошибка', 'danger');
+            else {
+                showNotification(data.error || 'Ошибка создания чата', 'danger');
+            }
         } catch (e) {
-            console.error(e);
-            showNotification('Ошибка', 'danger');
+            console.error('Error in startDMWithUser:', e);
+            showNotification('Ошибка соединения с сервером', 'danger');
         }
     }
 
@@ -3388,6 +3598,84 @@ function handleDMDelete(e: Event) {
         if (document.title !== title) {
             updateDocumentTitle();
         }
+    }
+
+    // ============ ПЕРЕТАСКИВАНИЕ ФАЙЛОВ ============
+
+    // ============ ПЕРЕТАСКИВАНИЕ ФАЙЛОВ ============
+
+    function initDragAndDrop() {
+        // Используем всё окно документа
+        const dropZone = document.body;
+
+        if (!dropZone) return;
+
+        // Предотвращаем стандартное поведение браузера при перетаскивании
+        dropZone.addEventListener('dragenter', preventDragDefaults);
+        dropZone.addEventListener('dragover', preventDragDefaults);
+        dropZone.addEventListener('dragleave', preventDragDefaults);
+        dropZone.addEventListener('drop', handleDrop);
+
+        // Добавляем визуальную индикацию при перетаскивании
+        dropZone.addEventListener('dragenter', showDragOverlay);
+        dropZone.addEventListener('dragover', showDragOverlay);
+        dropZone.addEventListener('dragleave', hideDragOverlay);
+        dropZone.addEventListener('drop', hideDragOverlay);
+    }
+
+    function preventDragDefaults(e: Event) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    function showDragOverlay(e: Event) {
+        e.preventDefault();
+        let overlay = document.getElementById('dragOverlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'dragOverlay';
+            overlay.className = 'drag-overlay';
+            overlay.innerHTML = `
+            <div class="drag-overlay-content">
+                <i class="fas fa-cloud-upload-alt"></i>
+                <h3>Перетащите файл сюда</h3>
+                <p>Изображения, видео или любые другие файлы</p>
+            </div>
+        `;
+            document.body.appendChild(overlay);
+        }
+        overlay.classList.add('active');
+    }
+
+    function hideDragOverlay(e: Event) {
+        e.preventDefault();
+        const overlay = document.getElementById('dragOverlay');
+        if (overlay) {
+            overlay.classList.remove('active');
+        }
+    }
+
+    function handleDrop(e: Event) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        hideDragOverlay(e);
+
+        const dragEvent = e as unknown as DragEvent;
+        const files = dragEvent.dataTransfer?.files;
+        if (!files || files.length === 0) return;
+
+        // Берём первый файл
+        const file = files[0];
+
+        // Проверяем, есть ли текущий чат
+        if (!currentChannel) {
+            showNotification('Сначала выберите чат для отправки', 'warning');
+            return;
+        }
+
+        // Показываем предпросмотр
+        showFilePreview(file);
     }
 
     // ============ ЗАГРУЗКА СООБЩЕНИЙ ============
@@ -3558,15 +3846,38 @@ function handleDMDelete(e: Event) {
     }
 
     // Функция мгновенного обновления UI при переключении
+    // Функция мгновенного обновления UI при переключении
     function updateUIForChannelSwitch(type: 'channel' | 'dm', id: string, name: string, desc: string) {
         // Обновляем заголовок чата
         const currentChannelNameEl = document.getElementById('current-channel-name');
         const currentChannelDescEl = document.getElementById('current-channel-desc');
         const messageInput = document.getElementById('messageInput') as HTMLInputElement | null;
 
-        if (currentChannelNameEl) currentChannelNameEl.textContent = type === 'dm' ? `${name}` : name;
+        // Для DM используем сохранённое имя
+        let displayName = name;
+        if (type === 'dm') {
+            const savedName = getDMDisplayName(id);
+            if (savedName) displayName = savedName;
+        }
+
+        if (currentChannelNameEl) currentChannelNameEl.textContent = type === 'dm' ? `${displayName}` : displayName;
         if (currentChannelDescEl) currentChannelDescEl.textContent = desc ? `(${desc})` : '';
         if (messageInput) messageInput.disabled = false;
+
+        // Обновляем кнопку управления
+        const manageButton = document.querySelector('.chat-header .btn-outline-primary') as HTMLElement;
+        if (manageButton) {
+            if (type === 'dm') {
+                // Открываем страницу настроек DM
+                manageButton.onclick = () => {
+                    window.location.href = `/dm_settings.html?id=${encodeURIComponent(id)}&name=${encodeURIComponent(displayName)}`;
+                };
+                manageButton.innerHTML = '<i class="fas fa-sliders-h"></i> Настройки';
+            } else {
+                manageButton.onclick = () => openChannelSettings();
+                manageButton.innerHTML = '<i class="fas fa-cog"></i> Управление';
+            }
+        }
 
         // Визуально выделяем активный канал в списке
         document.querySelectorAll('.channel-item, .dm-item').forEach(el => el.classList.remove('active'));
@@ -3574,6 +3885,14 @@ function handleDMDelete(e: Event) {
         const activeItem = document.querySelector(selector);
         if (activeItem) activeItem.classList.add('active');
     }
+
+    function getDMDisplayName(dmId: string): string | null {
+        const key = `dm_display_name_${dmId}`;
+        return localStorage.getItem(key);
+    }
+
+    // ============ УПРАВЛЕНИЕ ЛИЧНЫМИ ЧАТАМИ ============
+
 
     document.addEventListener('click', (e: MouseEvent) => {
         const target = e.target as HTMLElement;
@@ -3945,7 +4264,7 @@ function handleDMDelete(e: Event) {
     connection.on('close', () => updateConnectionStatus(false));
 
     connection.on('new_message', async (message: Message) => {
-        console.log('Received new_message with replyTo:', message.replyTo);
+
         lastMessageTimestamp = message.timestamp;
         if (message.id && message.id.startsWith('temp_') && message.username === currentUsername) {
             console.log(`Ignoring own temp message in new_message: ${message.id}`);
@@ -3954,6 +4273,10 @@ function handleDMDelete(e: Event) {
 
         // Если сообщение уже есть в DOM как временное - игнорируем
         const messagesDiv = document.getElementById('messages-area');
+        if (messagesDiv && document.getElementById(`msg-${message.id}`)) {
+            console.log('Message already exists in DOM, skipping');
+            return;
+        }
         if (messagesDiv) {
             const existingMessages = messagesDiv.querySelectorAll(`.message`);
             for (const existing of existingMessages) {
@@ -4519,6 +4842,9 @@ function handleDMDelete(e: Event) {
         window.scrollToEditingMessage = scrollToEditingMessage;
         window.sendFileMessage = sendFileMessage;
         window.showReactionUsers = showReactionUsers;
+        window.sendFileFromPreview = sendFileFromPreview;
+        window.cancelFilePreview = cancelFilePreview; 
+        window.startDMWithUser = startDMWithUser;
 
         setupActivityTracking();
         setupVisibilityTracking();
@@ -4526,7 +4852,9 @@ function handleDMDelete(e: Event) {
         initNotificationSound();
         addAIAssistantButton();
         initAICancelButton();
+        initDragAndDrop();
 
+        await loadAIBotId();
         await updateTotalUnreadFromServer();
 
         function fixChatHeight() {
