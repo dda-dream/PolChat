@@ -409,18 +409,44 @@ public class MessagesController : ControllerBase
     }
 
     // GET /api/message/{messageId}/reactions
+    // GET /api/message/{messageId}/reactions
     [HttpGet("/api/message/{messageId}/reactions")]
     public async Task<IActionResult> GetMessageReactions(string messageId)
     {
         var session = await GetSession();
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
-        var reactions = _db.Reactions
-                            .AsNoTracking()
-                            .Where(r => r.MessageId == messageId)
-                            .AsAsyncEnumerable();
-                
-        return Ok(reactions);
+        // Получаем сообщение с его реакциями из JSON поля
+        var message = await _db.Messages
+            .Where(m => m.Id == messageId)
+            .Select(m => new { m.Reactions })
+            .FirstOrDefaultAsync();
+
+        if (message == null)
+        {
+            return NotFound(new { error = "Message not found" });
+        }
+
+        // Конвертируем ReactionInMessage в формат, ожидаемый клиентом
+        var reactions = message.Reactions ?? new List<ReactionInMessage>();
+
+        // Преобразуем в формат, который ожидает клиент (список с отдельной записью на каждого пользователя)
+        var result = new List<object>();
+        foreach (var reaction in reactions)
+        {
+            foreach (var user in reaction.Users)
+            {
+                result.Add(new
+                {
+                    messageId = messageId,
+                    userId = user,
+                    emoji = reaction.Emoji,
+                    createdAt = DateTime.UtcNow.ToString("O") // или можно хранить дату в ReactionInMessage
+                });
+            }
+        }
+
+        return Ok(result);
     }
 
 
