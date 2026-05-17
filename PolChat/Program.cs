@@ -1,9 +1,8 @@
 using ChatApp.Data;
 using ChatApp.Hubs;
 using ChatApp.Middleware;
+using ChatApp.Models;
 using ChatApp.Services;
-using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using StackExchange.Redis;
@@ -39,11 +38,12 @@ else
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddMemoryCache();
 
+// ===== HTTP Client Factory (НУЖНО для OllamaService) =====
+builder.Services.AddHttpClient();
+
 // Ollama Configuration
 builder.Services.Configure<OllamaSettings>(builder.Configuration.GetSection("Ollama"));
-builder.Services.AddHttpClient();
 builder.Services.AddScoped<OllamaService>();
-builder.Services.AddSingleton<OllamaService>();
 
 // ===== Database =====
 builder.Services.AddDbContext<ChatDbContext>(options =>
@@ -54,41 +54,38 @@ builder.Services.AddDbContext<ChatDbContext>(options =>
 
 builder.Services.AddSingleton<ISessionService, SessionService>();
 
-// ===== SignalR =====
+// ===== SignalR (НАСТРОЙКА ДО app.Build) =====
 if (!string.IsNullOrEmpty(redisConnection))
 {
-    builder.Services.AddSignalR()
-        .AddStackExchangeRedis(redisConnection, options =>
-        {
-            options.Configuration.ChannelPrefix = RedisChannel.Literal("PolChatApp:");
-        });
+    builder.Services.AddSignalR(options =>
+    {
+        options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
+        options.HandshakeTimeout = TimeSpan.FromSeconds(15);
+        options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+        options.MaximumParallelInvocationsPerClient = 1;
+    })
+    .AddStackExchangeRedis(redisConnection, options =>
+    {
+        options.Configuration.ChannelPrefix = RedisChannel.Literal("PolChatApp:");
+    });
 }
 else
 {
-    builder.Services.AddSignalR();
+    builder.Services.AddSignalR(options =>
+    {
+        options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
+        options.HandshakeTimeout = TimeSpan.FromSeconds(15);
+        options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+        options.MaximumParallelInvocationsPerClient = 1;
+    });
 }
-
-
-// Добавляем аутентификацию с куками
-//builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
-//    .AddCookie(options =>
-//    {
-//        options.Cookie.HttpOnly = true;
-//        options.Cookie.SameSite = SameSiteMode.Lax;
-//        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
-//        options.LoginPath = "/login";
-//        options.AccessDeniedPath = "/login";
-//    });
-
-//builder.Services.AddAuthorization();
-
 
 builder.Services.AddControllers();
 
 // ===== Background Services =====
 builder.Services.AddHostedService<InactiveUsersBackgroundService>();
 
-// ===== Controllers =====
+// ===== Controllers JSON Options =====
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -114,8 +111,6 @@ app.UseRouting();
 app.UseStaticFiles();
 app.UseCors();
 app.UseMiddleware<SessionAuthenticationMiddleware>();
-//app.UseAuthentication();
-//app.UseAuthorization();
 app.MapControllers();
 app.MapHub<ChatHub>("/chathub");
 
@@ -164,14 +159,36 @@ app.MapGet("/_debug/routes/details", (IEnumerable<EndpointDataSource> endpointSo
     return Results.Text(sb.ToString(), "text/plain");
 });
 
-// ===== Startup =====
+// ===== Startup - Инициализация бота =====
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ChatDbContext>();
-    await DbInitializer.InitializeAsync(db);
-    Console.WriteLine("[OK] Database initialized");
+    var aiUser = db.Users.FirstOrDefault(u => u.Username == "AI Assistant");
+    if (aiUser == null)
+    {
+        db.Users.Add(new User
+        {
+            Username = "AI Assistant",
+            Role = "bot",
+            Status = "offline",
+            IsBot = true,
+            CreatedAt = DateTime.UtcNow
+        });
+        db.SaveChanges();
+        Console.WriteLine("[OK] AI Assistant user created with IsBot=true");
+    }
+    else if (!aiUser.IsBot)
+    {
+        aiUser.IsBot = true;
+        db.SaveChanges();
+        Console.WriteLine("[OK] Fixed IsBot flag for AI Assistant");
+    }
+    else
+    {
+        Console.WriteLine("[OK] AI Assistant already exists with IsBot=true");
+    }
 
-    // Check Ollama
+    // Check Ollama health
     var ollamaService = scope.ServiceProvider.GetService<OllamaService>();
     if (ollamaService != null)
     {
@@ -179,13 +196,9 @@ using (var scope = app.Services.CreateScope())
         {
             var isOllamaHealthy = await ollamaService.CheckHealthAsync();
             if (isOllamaHealthy)
-            {
                 Console.WriteLine("[OK] Ollama service is available");
-            }
             else
-            {
                 Console.WriteLine("[WARNING] Ollama service is not available. Make sure Ollama is running on http://localhost:11434");
-            }
         }
         catch (Exception ex)
         {

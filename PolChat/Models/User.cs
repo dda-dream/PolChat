@@ -9,6 +9,7 @@ public class User
     public string Avatar { get; set; } = "default.png";
     public string Status { get; set; } = "offline"; // "online", "away", "offline"
     public DateTime? LastSeen { get; set; }
+    public bool IsBot { get; set; } = false;
 }
 
 public class UserDto

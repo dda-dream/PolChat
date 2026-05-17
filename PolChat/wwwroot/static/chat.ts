@@ -198,13 +198,50 @@ if (isChatPage) {
     let isAwaitingAIResponse = false;    // Ожидание ответа от сервера (блокировка повторных запросов)
     let aiBotId: string | null = null;
 
-    // ============ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ЧАТА ============
+    let messageQueue: Message[] = [];
+    let isProcessingQueue = false;
 
-    // ============ КНОПКИ ПРОКРУТКИ ЧАТА ============
     let scrollButtons: { top: HTMLElement | null; bottom: HTMLElement | null } = {
         top: null,
         bottom: null
     };
+
+    function processMessageQueue() {
+        if (isProcessingQueue || messageQueue.length === 0) return;
+
+        isProcessingQueue = true;
+
+        // Сортируем по timestamp
+        messageQueue.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+        const processNext = () => {
+            if (messageQueue.length === 0) {
+                isProcessingQueue = false;
+                return;
+            }
+
+            const message = messageQueue.shift()!;
+            console.log("Displaying queued message:", message.id, message.username);
+
+            const messagesDiv = document.getElementById('messages-area');
+            if (messagesDiv && !document.getElementById(`msg-${message.id}`)) {
+                if (messagesDiv.innerHTML.includes('Нет сообщений')) messagesDiv.innerHTML = '';
+                messagesDiv.insertAdjacentHTML('beforeend', formatMessage(message));
+
+                // Прокрутка вниз, если пользователь был внизу
+                const isNearBottom = messagesDiv.scrollHeight - messagesDiv.scrollTop - messagesDiv.clientHeight < 100;
+                if (isNearBottom) {
+                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                }
+            } else {
+                console.warn("Message area not ready or message already exists", message.id);
+            }
+
+            setTimeout(processNext, 50);
+        };
+
+        processNext();
+    }
 
     function initScrollButtons() {
         scrollButtons.top = document.getElementById('scrollToTopBtn');
@@ -1900,31 +1937,6 @@ if (isChatPage) {
         showNotification('Редактирование отменено', 'info');
     }
 
-    // Замените isAIChatChannel на:
-    function isAIChatChannel(): boolean {
-        if (!currentChannelType || !currentChannelName) return false;
-
-        // Проверка по имени (быстро и надёжно, если имена не меняются)
-        if (currentChannelType === 'dm') {
-            // Извлекаем имя собеседника из названия DM
-            let otherUserName = currentChannelName;
-            if (currentChannelName.includes(',')) {
-                const participants = currentChannelName.split(',').map(p => p.trim());
-                otherUserName = participants.find(p => p !== currentUsername) || '';
-            }
-            // Сравниваем с возможными именами AI бота
-            const aiBotNames = ['AI Assistant', 'AI Bot', 'Assistant', 'AI'];
-            return aiBotNames.includes(otherUserName);
-        }
-
-        // Для канала
-        if (currentChannelType === 'channel' && currentChannelName.toLowerCase() === 'ai') {
-            return true;
-        }
-
-        return false;
-    }
-
     // ============ ОТПРАВКА СООБЩЕНИЙ ============
 
     async function sendMessage() {
@@ -1956,12 +1968,47 @@ if (isChatPage) {
         }
 
         // === AI РЕЖИМ ===
-        if (isAIModeActive || isAIChatChannel()) {
-            // Активируем режим если это чат с AI, но режим не активен
-            if (!isAIModeActive && isAIChatChannel()) {
-                isAIModeActive = true;
+        if (isAIModeActive && hasText) {
+            const tempId = 'ai_temp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+
+            // Сохраняем текст сообщения для отображения
+            const messageContent = content;
+
+            // Сразу очищаем поле ввода и отключаем AI режим
+            input.value = '';
+            autoResizeTextarea();
+            deactivateAIMode();  // Отключаем AI режим ДО отправки на сервер
+
+            // Показываем временное сообщение
+            const messagesDiv = document.getElementById('messages-area');
+            if (messagesDiv) {
+                const tempMessage: any = {
+                    id: tempId,
+                    channelId: currentChannel,
+                    username: currentUsername,
+                    content: messageContent,
+                    timestamp: new Date().toISOString(),
+                    reactions: [],
+                    readBy: [],
+                    deliveredTo: [],
+                    isTemp: true,
+                    edited: false
+                };
+                messagesDiv.insertAdjacentHTML('beforeend', formatMessage(tempMessage));
+                scrollToBottomSafely(false);
             }
-            await sendAIMessage();
+
+            try {
+                // Отправляем на сервер с tempId
+                await connection.invoke('SendAIMessage', currentChannel, messageContent, tempId);
+                showNotification('Сообщение отправлено AI', 'info');
+            } catch (err) {
+                console.error('[AIMode] Error:', err);
+                showNotification('Ошибка отправки сообщения AI', 'danger');
+                // Удаляем временное сообщение при ошибке
+                const tempMsg = document.getElementById(`msg-${tempId}`);
+                if (tempMsg) tempMsg.remove();
+            }
             return;
         }
 
@@ -3082,153 +3129,51 @@ if (isChatPage) {
         return `${d} д. назад`;
     }
 
-    // Добавьте кнопку AI в интерфейс
-    async function activateAIMode() {
+    function activateAIMode() {
         if (!currentChannel) {
             showNotification('Сначала выберите чат', 'warning');
             return;
         }
+
         if (isAIModeActive) {
             showNotification('AI режим уже активен', 'info');
             return;
         }
+
         isAIModeActive = true;
         isAwaitingAIResponse = false;
+
         // Добавляем класс к обёртке поля ввода
         const inputWrapper = document.querySelector('.input-wrapper');
         if (inputWrapper) inputWrapper.classList.add('ai-mode-active');
+
         // Показываем кнопку отмены
         const cancelContainer = document.getElementById('aiCancelContainer');
         if (cancelContainer) cancelContainer.style.display = 'block';
+
         // Фокусируем поле ввода
         const messageInput = document.getElementById('messageInput') as HTMLTextAreaElement;
         if (messageInput) messageInput.focus();
-        showNotification('AI режим активирован. Напишите сообщение для AI.', 'info');
-        console.log('AI mode activated'); // <-- отладка
+
+        showNotification('AI режим активирован. Напишите сообщение, AI ответит в этот канал.', 'info');
     }
 
     function deactivateAIMode() {
         if (!isAIModeActive) return;
+
         isAIModeActive = false;
         isAwaitingAIResponse = false;
+
         const inputWrapper = document.querySelector('.input-wrapper');
         if (inputWrapper) inputWrapper.classList.remove('ai-mode-active');
+
         const cancelContainer = document.getElementById('aiCancelContainer');
         if (cancelContainer) cancelContainer.style.display = 'none';
+
+        showNotification('AI режим отключён', 'info');
     }
 
-    async function sendAIMessage() {
-        const input = document.getElementById('messageInput') as HTMLTextAreaElement;
-        if (!input) return;
-
-        let content = input.value.trim();
-        if (!content) return;
-
-        if (isAwaitingAIResponse) {
-            showNotification('AI уже обрабатывает предыдущий запрос', 'warning');
-            return;
-        }
-
-        if (!currentChannel) {
-            showNotification('Выберите чат', 'warning');
-            return;
-        }
-
-        isAwaitingAIResponse = true;
-        showNotification('🤖 AI думает над ответом...', 'info');
-
-        const messageInput = document.getElementById('messageInput') as HTMLTextAreaElement;
-        if (messageInput) messageInput.disabled = true;
-
-        const userMessageContent = content;
-
-        // Локальное отображение сообщения пользователя
-        const userTempId = 'temp_ai_user_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
-        const messagesDiv = document.getElementById('messages-area');
-        if (messagesDiv && messagesDiv.innerHTML.includes('Нет сообщений')) {
-            messagesDiv.innerHTML = '';
-        }
-
-        const userTempMessage: any = {
-            id: userTempId,
-            channelId: currentChannel,
-            username: currentUsername,
-            content: userMessageContent,
-            fileUrl: null,
-            timestamp: new Date().toISOString(),
-            reactions: [],
-            readBy: [],
-            deliveredTo: [],
-            isTemp: true,
-            edited: false,
-            replyTo: null
-        };
-
-        if (messagesDiv) {
-            messagesDiv.insertAdjacentHTML('beforeend', formatMessage(userTempMessage));
-            scrollToBottomSafely(false);
-        }
-
-        input.value = '';
-        autoResizeTextarea();
-
-        try {
-            // Отправляем сообщение пользователя через SignalR
-            await connection.invoke('SendMessage', {
-                tempId: userTempId,
-                channelId: currentChannel,
-                content: userMessageContent,
-                fileUrl: null,
-                replyTo: null
-            });
-
-            // Запрос к AI (сервер сам сохранит ответ и разошлёт через SignalR)
-            const context = await getChatContext();
-            const contextString = formatContextForAI(context);
-
-            const response = await fetch('/api/ai/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({
-                    message: userMessageContent,
-                    context: contextString,
-                    channelId: currentChannel,
-                    username: currentUsername
-                })
-            });
-
-            const contentType = response.headers.get('content-type');
-            if (!contentType || !contentType.includes('application/json')) {
-                const errorText = await response.text();
-                throw new Error(`Сервер вернул ошибку: ${errorText.substring(0, 100)}`);
-            }
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.error || 'Ошибка при обращении к AI');
-            }
-
-            if (data.success) {
-                // Сервер сам отправит ответ AI через SignalR, клиент получит его как new_message
-                // Ничего дополнительно не отправляем
-                console.log('AI response received, waiting for server broadcast');
-            } else {
-                showNotification('⚠️ ' + (data.error || 'Неизвестная ошибка'), 'warning');
-            }
-        } catch (err) {
-            console.error('AI request failed:', err);
-            showNotification(`❌ Ошибка AI: ${(err as Error).message}`, 'danger');
-        } finally {
-            isAwaitingAIResponse = false;
-            if (messageInput) {
-                messageInput.disabled = false;
-                messageInput.focus();
-            }
-            cancelReply();
-        }
-    }
+    
 
     async function loadAIBotId() {
         try {
@@ -3248,49 +3193,6 @@ if (isChatPage) {
             }
         } catch (e) {
             console.error('Failed to load AI bot ID:', e);
-        }
-    }
-
-    function formatContextForAI(context: { username: string; content: string; timestamp: string }[]): string {
-        if (!context || context.length === 0) return '';
-
-        const lines: string[] = [];
-        lines.push('История переписки (последние сообщения):');
-        lines.push('');
-
-        // Берём последние 30 сообщений для контекста
-        const recentMessages = context.slice(-30);
-
-        for (const msg of recentMessages) {
-            const time = new Date(msg.timestamp).toLocaleTimeString('ru-RU', {
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-            lines.push(`[${time}] ${msg.username}: ${msg.content}`);
-        }
-
-        lines.push('');
-        return lines.join('\n');
-    }
-
-    // Обновлённая функция getChatContext (должна возвращать массив объектов)
-    async function getChatContext(): Promise<{ username: string; content: string; timestamp: string }[]> {
-        if (!currentChannel) return [];
-        try {
-            const res = await fetch(`/api/messages/${currentChannel}?limit=50&page=1`);
-            if (!res.ok) return [];
-            const data = await res.json();
-            const messages = data.messages || [];
-
-            // Преобразуем в нужный формат
-            return messages.map((msg: Message) => ({
-                username: msg.username,
-                content: msg.content || (msg.fileUrl ? '[Файл]' : ''),
-                timestamp: msg.timestamp
-            }));
-        } catch (e) {
-            console.error('Ошибка получения контекста:', e);
-            return [];
         }
     }
 
@@ -3725,55 +3627,58 @@ if (isChatPage) {
         setTimeout(() => updateScrollButtonsVisibility(), 100);
     }
 
-    let joinQueue = Promise.resolve();
+   
 
     async function joinChannel(type: 'channel' | 'dm', id: string, name: string, desc: string) {
         if (isAIModeActive) deactivateAIMode();
-        // Мгновенно обновляем UI (опционально, но улучшает отзывчивость)
+
+        if (pendingFileBlob) cancelFilePreview();
+        if (editingMessageData) cancelEditing();
+        if (replyToMessageData) cancelReply();
+
+        // Выход из предыдущего канала (без ожидания)
+        if (connection.state === signalR.HubConnectionState.Connected && currentChannel) {
+            connection.invoke('LeaveChannel', currentChannel).catch(e => console.warn(e));
+        }
+
+        // Обновляем UI сразу (поле ввода включаем)
         updateUIForChannelSwitch(type, id, name, desc);
 
-        // Ставим в очередь, не блокируя следующие клики
-        joinQueue = joinQueue.then(async () => {
-            // Проверяем, не переключились ли уже на этот же канал
-            if (currentChannel === id && currentChannelType === type) return;
+        // Обновляем глобальные переменные
+        currentChannel = id;
+        currentChannelType = type;
+        currentChannelName = name;
+        currentPage = 1;
+        hasMoreMessages = true;
+        receivedMessages.clear();
 
-            // ---- вся логика переключения (без confirm) ----
-            // Убираем confirm – при потере файла/редактирования просто сбрасываем состояние
-            if (pendingFileBlob) cancelFilePreview();
-            if (editingMessageData) cancelEditing();
-            if (replyToMessageData) cancelReply();
-
-            // Выход из предыдущего канала (fire-and-forget)
-            if (connection.state === signalR.HubConnectionState.Connected && currentChannel) {
-                connection.invoke('LeaveChannel', currentChannel).catch((e: Error) => console.warn(e));
+        // Подписываемся на новый канал с таймаутом
+        if (connection.state === signalR.HubConnectionState.Connected) {
+            try {
+                await Promise.race([
+                    connection.invoke('JoinChannel', id),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Join timeout')), 5000))
+                ]);
+                console.log(`Joined channel ${id}`);
+            } catch (e) {
+                console.error(`Failed to join channel ${id}:`, e);
             }
+        }
 
-            // Обновляем глобальные переменные
-            currentChannel = id;
-            currentChannelType = type;
-            currentChannelName = name;
-            currentPage = 1;
-            hasMoreMessages = true;
-            receivedMessages.clear();
+        // Загружаем сообщения
+        await loadMessagesOptimized(id, true);
 
-            // Показываем индикатор загрузки
-            const messagesArea = document.getElementById('messages-area');
-            if (messagesArea) messagesArea.innerHTML = '<div class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin"></i> Загрузка...</div>';
+        // Отмечаем прочитанным
+        await markChannelMessagesRead(id);
+        updateActiveChannelInList(id, type);
 
-            // Подключаемся к новому каналу (не ждём)
-            if (connection.state === signalR.HubConnectionState.Connected) {
-                connection.invoke('JoinChannel', id).catch((e: Error) => console.warn(e));
-            }
+        if (window.innerWidth <= 768) closeSidebar();
 
-            // Загружаем сообщения (без отмены, но с быстрой сменой состояния)
-            await loadMessagesOptimized(id, true);
-
-            // Отмечаем прочитанным
-            markChannelMessagesRead(id).catch(e => console.warn(e));
-            updateActiveChannelInList(id, type);
-            if (window.innerWidth <= 768) closeSidebar();
-            document.getElementById('messageInput')?.focus();
-        });
+        const messageInput = document.getElementById('messageInput') as HTMLTextAreaElement | null;
+        if (messageInput) {
+            messageInput.disabled = false;
+            messageInput.focus();
+        }
     }
 
     // Новая оптимизированная функция загрузки сообщений
@@ -3845,8 +3750,6 @@ if (isChatPage) {
         });
     }
 
-    // Функция мгновенного обновления UI при переключении
-    // Функция мгновенного обновления UI при переключении
     function updateUIForChannelSwitch(type: 'channel' | 'dm', id: string, name: string, desc: string) {
         // Обновляем заголовок чата
         const currentChannelNameEl = document.getElementById('current-channel-name');
@@ -3902,6 +3805,9 @@ if (isChatPage) {
         const channelItem = target.closest('.channel-item, .dm-item') as HTMLElement;
         if (!channelItem) return;
 
+        const isDm = target.closest('.dm-item') as HTMLElement;
+        const isChannel = target.closest('.channel-item') as HTMLElement;
+
         // Проверяем, не кликнули ли по кнопке действия (например, удаление DM)
         const actionButton = target.closest('.dm-actions .delete-btn, .channel-actions .delete-btn, button, .action-btn');
         if (actionButton) {
@@ -3914,9 +3820,13 @@ if (isChatPage) {
         e.preventDefault();
         e.stopPropagation();
 
+        let name = '';
+        if (isChannel)
+            name = channelItem.dataset.channelName || '';
+        if (isDm)
+            name = channelItem.dataset.dmName || '';
+
         const id = channelItem.dataset.channelId || channelItem.dataset.dmId;
-        const nameElement = channelItem.querySelector('.channel-name, .dm-name') as HTMLElement;
-        const name = channelItem.dataset.channelName || nameElement?.innerText?.trim() || '';
         const desc = channelItem.dataset.channelDesc || '';
         const type = channelItem.classList.contains('channel-item') ? 'channel' : 'dm';
 
@@ -4264,6 +4174,30 @@ if (isChatPage) {
     connection.on('close', () => updateConnectionStatus(false));
 
     connection.on('new_message', async (message: Message) => {
+
+        console.log("new_message received:", JSON.stringify(message));
+
+        // AI сообщения всегда определяем по флагу isBot
+        if (message.isBot === true) {
+            console.log("AI message received, adding to queue");
+            messageQueue.push(message);
+            processMessageQueue();
+            return;
+        }
+
+        // fallback для старых сообщений (если isBot не передан)
+        if (message.username === "AI Assistant") {
+            console.log("AI message by name, adding to queue");
+            messageQueue.push(message);
+            processMessageQueue();
+            return;
+        }
+
+        if (message.id && message.id.startsWith('ai_temp_') && message.username === currentUsername) {
+            // Удаляем временное сообщение пользователя
+            const tempMsgDiv = document.getElementById(`msg-${message.id}`);
+            if (tempMsgDiv) tempMsgDiv.remove();
+        }
 
         lastMessageTimestamp = message.timestamp;
         if (message.id && message.id.startsWith('temp_') && message.username === currentUsername) {
@@ -5448,7 +5382,6 @@ if (isRegisterPage) {
     updateStrengthIndicator('');
 }
 
-// ============ КОД ТОЛЬКО ДЛЯ СТРАНИЦЫ НАСТРОЕК КАНАЛА ============
 // ============ КОД ТОЛЬКО ДЛЯ СТРАНИЦЫ НАСТРОЕК КАНАЛА ============
 if (isSettingsPage) {
 

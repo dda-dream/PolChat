@@ -26,6 +26,7 @@ declare global {
         } | null;
         isDeletedSender?: boolean;
         isTemp?: boolean;
+        isBot?: boolean;
     }
      
     interface User {
