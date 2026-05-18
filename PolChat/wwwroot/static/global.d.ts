@@ -121,6 +121,7 @@ declare global {
         saveDMDisplayName?: () => void;
         confirmDeleteDM?: () => void;
         goBack?: () => void;
+        initChat?: () => void;
     }
 }
 

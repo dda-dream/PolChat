@@ -3339,52 +3339,6 @@ if (isChatPage) {
         }
     }
 
-    async function deleteDMChannel(dmId: string, username: string) {
-        if (confirm(`Удалить чат с ${username}?`)) {
-            try {
-                const res = await fetch(`/api/dm_channels/${dmId}`, { method: 'DELETE' });
-                if (res.ok) {
-                    if (currentChannel === dmId && currentChannelType === 'dm') {
-                        currentChannel = null;
-                        const messagesArea = document.getElementById('messages-area');
-                        const currentChannelNameEl = document.getElementById('current-channel-name');
-                        const messageInput = document.getElementById('messageInput') as HTMLInputElement | null;
-                        if (messagesArea) messagesArea.innerHTML = '<div class="text-center text-muted mt-5">Выберите чат слева</div>';
-                        if (currentChannelNameEl) currentChannelNameEl.textContent = 'Выберите чат';
-                        if (messageInput) messageInput.disabled = true;
-                    }
-                    await loadDMChannels();
-                }
-            } catch (e) {
-                console.error(e);
-                showNotification('Ошибка', 'danger');
-            }
-        }
-    }
-
-    async function deleteChannel(chId: string, chName: string) {
-        if (confirm(`Удалить канал "${chName}"?`)) {
-            try {
-                const res = await fetch(`/api/channels/${chId}`, { method: 'DELETE' });
-                if (res.ok) {
-                    if (currentChannel === chId && currentChannelType === 'channel') {
-                        currentChannel = null;
-                        const messagesArea = document.getElementById('messages-area');
-                        const currentChannelNameEl = document.getElementById('current-channel-name');
-                        const messageInput = document.getElementById('messageInput') as HTMLInputElement | null;
-                        if (messagesArea) messagesArea.innerHTML = '<div class="text-center text-muted mt-5">Выберите чат слева</div>';
-                        if (currentChannelNameEl) currentChannelNameEl.textContent = 'Выберите чат';
-                        if (messageInput) messageInput.disabled = true;
-                    }
-                    await loadChannels(true);
-                }
-            } catch (e) {
-                console.error(e);
-                showNotification('Ошибка', 'danger');
-            }
-        }
-    }
-
     function showCreateChannelModal() {
         const name = prompt('Название канала:');
         if (name && name.trim()) {
@@ -4182,6 +4136,7 @@ if (isChatPage) {
             console.log("AI message received, adding to queue");
             messageQueue.push(message);
             processMessageQueue();
+            scrollToBottomSafely(true);
             return;
         }
 
@@ -4190,6 +4145,7 @@ if (isChatPage) {
             console.log("AI message by name, adding to queue");
             messageQueue.push(message);
             processMessageQueue();
+            scrollToBottomSafely(true);
             return;
         }
 
@@ -4669,7 +4625,7 @@ if (isChatPage) {
                 const unreadBadge = nameSpan.querySelector('.unread-badge');
                 nameSpan.innerHTML = '';
                 if (icon) nameSpan.appendChild(icon);
-                nameSpan.appendChild(document.createTextNode(' ' + newName));
+                nameSpan.appendChild(document.createTextNode(newName));
                 if (unreadBadge) nameSpan.appendChild(unreadBadge);
             }
         }
@@ -4720,11 +4676,11 @@ if (isChatPage) {
     // TODO: Requires Hub event - currently not broadcast by backend
     connection.on('channel_created', async () => await loadChannels(true));
     // TODO: Requires Hub event - currently not broadcast by backend
-    connection.on('channel_deleted', async () => { if (currentChannelType === 'channel') { currentChannel = null; await loadChannels(true); } });
+    connection.on('channel_deleted', async () => { if (currentChannelType === 'channel') { currentChannel = null ; loadChannels(true); } });
     // TODO: Requires Hub event - currently not broadcast by backend
     connection.on('dm_channel_created', () => loadDMChannels());
     // TODO: Requires Hub event - currently not broadcast by backend
-    connection.on('dm_channel_deleted', async () => { if (currentChannelType === 'dm') { currentChannel = null; await loadDMChannels(); } });
+    connection.on('dm_channel_deleted', async () => { if (currentChannelType === 'dm') { currentChannel = null; loadDMChannels(); } });
     connection.on('typing', (data: { channelId: string; username: string }) => {
         if (data.channelId === currentChannel && data.username !== currentUsername) {
             const td = document.getElementById('typingIndicator');
@@ -4751,8 +4707,6 @@ if (isChatPage) {
         window.sendMessage = sendMessage;
         window.showCreateChannelModal = showCreateChannelModal;
         window.startDMWithUser = startDMWithUser;
-        window.deleteDMChannel = deleteDMChannel;
-        window.deleteChannel = deleteChannel;
         window.openChannelSettings = openChannelSettings;
         window.replyToMessage = replyToMessage;
         window.cancelReply = cancelReply;
@@ -4779,6 +4733,7 @@ if (isChatPage) {
         window.sendFileFromPreview = sendFileFromPreview;
         window.cancelFilePreview = cancelFilePreview; 
         window.startDMWithUser = startDMWithUser;
+        window.initChat = initChat;
 
         setupActivityTracking();
         setupVisibilityTracking();
@@ -4959,10 +4914,22 @@ if (isChatPage) {
             try {
                 const last = JSON.parse(lastChat);
                 if (last.channelId && last.channelType) {
+                    let channel = {} as Channel;
+                    if (channelsCache) {
+                        for (const ch of channelsCache) {
+                            if (ch.id === last.channelId) {
+                                channel = ch;
+                                break;
+                            }
+                        }
+                    }
+                        const name = channel?.name;
+                        const desc = channel?.description;
+
                     if (last.channelType === 'channel') {
-                        joinChannel('channel', last.channelId, last.channelName || 'Канал', '');
+                        joinChannel('channel', last.channelId, name || '', desc || '');
                     } else if (last.channelType === 'dm') {
-                        joinChannel('dm', last.channelId, last.channelName || 'Чат', '');
+                        joinChannel('dm', last.channelId, name || '', desc || '');
                     }
                 }
             } catch (e) {
@@ -5695,6 +5662,10 @@ if (isSettingsPage) {
                 if (response.ok) {
                     showGlobalNotification('Канал удален', 'success');
                     sessionStorage.setItem('channelDeleted', 'true');
+                    const lastChat = localStorage.getItem('lastChat');
+                    if (lastChat) {
+                        localStorage.removeItem('lastChat');
+                    }
                     setTimeout(() => {
                         goBack();
                     }, 1500);
@@ -5708,13 +5679,12 @@ if (isSettingsPage) {
         }
     }
 
+
+
     function goBack() {
-        const returnToChat = sessionStorage.getItem('returnToChat');
-        if (returnToChat === 'true') {
-            sessionStorage.removeItem('returnToChat');
-            window.location.href = '/';
-        } else {
-            window.location.href = '/';
+        window.location.href = '/';
+        if (typeof window.initChat === 'function') {
+            window.initChat();
         }
     }
 

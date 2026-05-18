@@ -373,6 +373,7 @@
 
                     if (response.ok) {
                         alert('Чат удалён');
+                        localStorage.removeItem('lastChat');
                         window.location.href = '/';
                     } else {
                         const data = await response.json();
@@ -383,10 +384,6 @@
                     alert('Ошибка соединения с сервером');
                 }
             }
-        }
-
-        function goBack() {
-            window.location.href = '/';
         }
 
         // Загружаем данные
