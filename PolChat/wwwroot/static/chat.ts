@@ -998,13 +998,13 @@ if (isChatPage) {
                     // Передаём mouseEvent для позиционирования рядом с курсором
                     showReactionUsers(msgId, emoji, e);
                 }
-                if (isEmojiClick){
+                if (isEmojiClick) {
                     // Добавляем/убираем реакцию (стандартное поведение)
                     addReaction(msgId, emoji);
                 }
             }
 
-        
+
 
 
             return;
@@ -1056,7 +1056,7 @@ if (isChatPage) {
             return;
         }
 
-        
+
 
         // Обработка клика по счетчику прочитавших
         const readCounter = target.closest('.read-counter');
@@ -2022,18 +2022,33 @@ if (isChatPage) {
             }
 
             try {
-                const response = await fetch(`/api/messages/${editingMessageData.id}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ content: content })
-                });
+                const msgDiv = document.getElementById(`msg-${editingMessageData.id}`);
 
-                if (response.ok) {
-                    // НЕМЕДЛЕННО ОБНОВЛЯЕМ DOM
-                    const msgDiv = document.getElementById(`msg-${editingMessageData.id}`);
-                    if (msgDiv) {
-                        let textDiv = msgDiv.querySelector('.message-text');
+                if (msgDiv) {
+                    let textDiv = msgDiv.querySelector('.message-text') as HTMLElement;
+                    let text = textDiv?.innerText || '';
 
+                    if (content === text) {
+                        cancelEditing();
+                        const input = document.getElementById('messageInput') as HTMLTextAreaElement;
+                        if (input) {
+                            input.value = '';
+                            autoResizeTextarea();
+                            input.focus();
+                        }
+                        cancelReply();
+                        showNotification('✅ Сообщение отредактировано', 'success');
+                        return;
+                    }
+
+
+                    const response = await fetch(`/api/messages/${editingMessageData.id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ content: content })
+                    });
+
+                    if (response.ok) {
                         if (content && content.trim()) {
                             // Если есть текст - создаём или обновляем .message-text
                             if (textDiv) {
@@ -2093,15 +2108,14 @@ if (isChatPage) {
                     }
                     cancelReply();
                     showNotification('✅ Сообщение отредактировано', 'success');
-                } else {
-                    const error = await response.json();
-                    showNotification(error.error || 'Ошибка редактирования', 'danger');
                 }
-            } catch (error) {
-                showNotification('Ошибка при редактировании', 'danger');
+                } catch (error) {
+                    showNotification('Ошибка при редактировании', 'danger');
+                }
+                return;
             }
-            return;
-        }
+        
+
 
         // ---------- НОВОЕ СООБЩЕНИЕ ----------
         isSending = true;
@@ -2156,13 +2170,13 @@ if (isChatPage) {
         let messageElement = document.getElementById(`msg-${tempId}`);
 
         try {
-                await connection.invoke('SendMessage', {
-                    tempId: tempId,
-                    channelId: currentChannel,
-                    content: content,
-                    fileUrl: null,
-                    replyTo: replyData
-                });
+            await connection.invoke('SendMessage', {
+                tempId: tempId,
+                channelId: currentChannel,
+                content: content,
+                fileUrl: null,
+                replyTo: replyData
+            });
 
             input.value = '';
             autoResizeTextarea();
@@ -3107,7 +3121,7 @@ if (isChatPage) {
                 const displayName = `${escapeHtml(u.username)} <span style="font-size: 0.7rem; color: #6c757d;">(${escapeHtml(statusText)})</span>`;
 
                 html += `<div class="user-item">
-                <div class="user-info" onclick="startDMWithUser('${escapeHtml(u.username)}')">
+                <div class="user-info">
                     <div class="user-status ${statusClass}"></div>
                     <div>${displayName}</strong>${u.role === 'admin' ? '<i class="fas fa-crown text-warning ms-1"></i>' : ''}</div>
                 </div>
@@ -3173,7 +3187,7 @@ if (isChatPage) {
         showNotification('AI режим отключён', 'info');
     }
 
-    
+
 
     async function loadAIBotId() {
         try {
@@ -3183,7 +3197,7 @@ if (isChatPage) {
                 u.username === 'AI Assistant' ||
                 u.username === 'AI Bot' ||
                 u.username === 'Assistant'
-            );  
+            );
             if (aiBot) {
                 // Используем username как ID, так как у User нет id
                 aiBotId = aiBot.username;  // <-- Используем username вместо id
@@ -3288,9 +3302,11 @@ if (isChatPage) {
             const data = await res.json();
 
             if (res.ok) {
+                console.log('res.ok');
                 await loadDMChannels();
                 await joinChannel('dm', data.id, username, '');
                 showNotification(`Чат с ${username} создан`, 'success');
+                return;
             }
             else if (res.status === 409) {
                 // Конфликт – чат уже существует, но мы его не нашли по имени
@@ -3581,7 +3597,7 @@ if (isChatPage) {
         setTimeout(() => updateScrollButtonsVisibility(), 100);
     }
 
-   
+
 
     async function joinChannel(type: 'channel' | 'dm', id: string, name: string, desc: string) {
         if (isAIModeActive) deactivateAIMode();
@@ -4086,7 +4102,7 @@ if (isChatPage) {
         }, 30000);
     }
 
-    
+
 
     // ============ УВЕДОМЛЕНИЯ ============
 
@@ -4193,7 +4209,7 @@ if (isChatPage) {
         if (message.readBy) {
             messageReadBy.set(message.id, message.readBy);
         }
-        
+
         // Если сообщение в текущем канале - показываем сразу
         if (isCurrent) {
             if (messagesDiv && messagesDiv.innerHTML.includes('Нет сообщений')) messagesDiv.innerHTML = '';
@@ -4389,8 +4405,11 @@ if (isChatPage) {
     connection.on('message_edited', (data: { id: string; content: string }) => {
         const msgDiv = document.getElementById(`msg-${data.id}`);
         if (msgDiv) {
-            let textDiv = msgDiv.querySelector('.message-text');
-
+            let textDiv = msgDiv.querySelector('.message-text') as HTMLElement;
+            let textFromDiv = textDiv?.innerText || '';
+            if (textFromDiv === data.content) {
+                return;
+            }
             if (data.content && data.content.trim()) {
                 // Если есть текст - создаём или обновляем
                 if (textDiv) {
@@ -4676,7 +4695,7 @@ if (isChatPage) {
     // TODO: Requires Hub event - currently not broadcast by backend
     connection.on('channel_created', async () => await loadChannels(true));
     // TODO: Requires Hub event - currently not broadcast by backend
-    connection.on('channel_deleted', async () => { if (currentChannelType === 'channel') { currentChannel = null ; loadChannels(true); } });
+    connection.on('channel_deleted', async () => { if (currentChannelType === 'channel') { currentChannel = null; loadChannels(true); } });
     // TODO: Requires Hub event - currently not broadcast by backend
     connection.on('dm_channel_created', () => loadDMChannels());
     // TODO: Requires Hub event - currently not broadcast by backend
@@ -4731,7 +4750,7 @@ if (isChatPage) {
         window.sendFileMessage = sendFileMessage;
         window.showReactionUsers = showReactionUsers;
         window.sendFileFromPreview = sendFileFromPreview;
-        window.cancelFilePreview = cancelFilePreview; 
+        window.cancelFilePreview = cancelFilePreview;
         window.startDMWithUser = startDMWithUser;
         window.initChat = initChat;
 
@@ -4923,8 +4942,8 @@ if (isChatPage) {
                             }
                         }
                     }
-                        const name = channel?.name;
-                        const desc = channel?.description;
+                    const name = channel?.name;
+                    const desc = channel?.description;
 
                     if (last.channelType === 'channel') {
                         joinChannel('channel', last.channelId, name || '', desc || '');
@@ -5899,3 +5918,5 @@ if (isUserManagementPage) {
         }
     });
 }
+
+

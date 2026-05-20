@@ -71,7 +71,7 @@ public class DMChannelsController : ControllerBase
                     IsDeleted = isDeleted
                 });
             }
-            _cache.Set(cacheKey, dtos, TimeSpan.FromSeconds(_config.GetValue<long>("MemoryCache:ExpireSeconds")));
+            //_cache.Set(cacheKey, dtos, TimeSpan.FromSeconds(_config.GetValue<long>("MemoryCache:ExpireSeconds")));
         } 
 
         return Ok(dtos);

@@ -1,7 +1,9 @@
 ﻿using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
+using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace ChatApp.Services;
 
@@ -11,17 +13,36 @@ public class OllamaService
     private readonly ILogger<OllamaService> _logger;
     private readonly IMemoryCache _cache;
     private readonly OllamaSettings _settings;
+    private readonly HttpClient _searchHttpClient;
+    private readonly WebSearchService _webSearch;
 
     public OllamaService(
         IOptions<OllamaSettings> settings,
         IHttpClientFactory httpClientFactory,
         ILogger<OllamaService> logger,
-        IMemoryCache memoryCache)
+        IMemoryCache memoryCache,
+        WebSearchService webSearch)
     {
+        _webSearch = webSearch;
         _settings = settings.Value;
         _httpClient = httpClientFactory.CreateClient();
         _httpClient.BaseAddress = new Uri(_settings.Url);
         _httpClient.Timeout = TimeSpan.FromSeconds(_settings.TimeoutSeconds);
+
+        _searchHttpClient = httpClientFactory.CreateClient();
+        _searchHttpClient.Timeout = TimeSpan.FromSeconds(30);
+        _searchHttpClient.DefaultRequestHeaders.Add("User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+        _searchHttpClient.DefaultRequestHeaders.Add("Accept",
+            "application/json, text/plain, */*");
+        _searchHttpClient.DefaultRequestHeaders.Add("Accept-Language",
+            "ru-RU,ru;q=0.9,en;q=0.8");
+
+        if (!string.IsNullOrEmpty(_settings.ApiKey))
+        {
+            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {_settings.ApiKey}");
+        }
+
         _logger = logger;
         _cache = memoryCache;
     }
@@ -33,79 +54,155 @@ public class OllamaService
     {
         try
         {
-            // Проверяем кэш
-            string cacheKey = $"ollama_{userMessage}_{context?.GetHashCode()}";
-            if (_cache.TryGetValue(cacheKey, out string? cachedResponse) && cachedResponse != null)
+            if (NeedsWebSearch(userMessage))
             {
-                return cachedResponse;
+                _logger.LogInformation("Web search needed for: {UserMessage}", userMessage);
+                var searchResults = await PerformDeepWebSearchAsync(userMessage, cancellationToken);
+
+                if (!string.IsNullOrEmpty(searchResults))
+                {
+                    return await GenerateResponseWithContextAsync(userMessage, searchResults, cancellationToken);
+                }
             }
 
-            var request = new
+            var messages = new List<object>
             {
-                model = _settings.Model,
-                prompt = BuildPrompt(userMessage, context),
-                stream = false,
-                options = new
+                new
                 {
-                    temperature = _settings.Temperature,
-                    top_p = 0.9,
-                    max_tokens = _settings.MaxTokens
+                    role = "system",
+                    content = @"Ты - полезный AI-ассистент в чате. Отвечай дружелюбно и по делу. Будь кратким и понятным."
+                },
+                new
+                {
+                    role = "user",
+                    content = userMessage
                 }
             };
 
-            var content = new StringContent(
-                JsonSerializer.Serialize(request),
-                Encoding.UTF8,
-                "application/json");
-
-            var response = await _httpClient.PostAsync("/api/generate", content, cancellationToken);
-
-            if (!response.IsSuccessStatusCode)
+            if (!string.IsNullOrEmpty(context))
             {
-                _logger.LogError("Ollama API error: {StatusCode}", response.StatusCode);
-                return "Извините, AI-ассистент временно недоступен.";
+                messages.Insert(1, new { role = "assistant", content = context });
             }
 
-            var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
-            var result = JsonSerializer.Deserialize<OllamaResponse>(responseJson);
-
-            string aiResponse = result?.response ?? "Не удалось получить ответ от AI.";
-
-            // Кэшируем на 5 минут
-            _cache.Set(cacheKey, aiResponse, TimeSpan.FromMinutes(5));
-
-            return aiResponse;
-        }
-        catch (TaskCanceledException)
-        {
-            _logger.LogWarning("Ollama request timeout after {Timeout} seconds", _settings.TimeoutSeconds);
-            return "AI-ассистент не ответил в течение допустимого времени.";
+            return await CallOllamaApiAsync(messages, cancellationToken);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error calling Ollama API");
-            return "Произошла ошибка при обращении к AI-ассистенту.";
+            _logger.LogError(ex, "Error in GenerateResponseAsync");
+            return "Произошла ошибка при обработке запроса.";
         }
     }
 
-    private string BuildPrompt(string userMessage, string? context)
+    private async Task<string> PerformDeepWebSearchAsync(string query, CancellationToken cancellationToken)
     {
-        var prompt = new StringBuilder();
-
-        prompt.AppendLine("Ты - полезный AI-ассистент в чате. Отвечай дружелюбно и по делу.");
-        prompt.AppendLine("Будь кратким и понятным. Без лишних эмодзи, но с хорошим юмором - шути побольше.");
-        prompt.AppendLine();
-
-        if (!string.IsNullOrEmpty(context))
+        try
         {
-            prompt.AppendLine($"Контекст: {context}");
-            prompt.AppendLine();
+            _logger.LogInformation("Starting deep web search for: {Query}", query);
+
+            // 1. Получаем результаты поиска
+            var searchResults = await _webSearch.SearchAsync(query);
+
+            if (!searchResults.Any())
+            {
+                return "По вашему запросу ничего не найдено.";
+            }
+            string allContent = ""; 
+            // 2. Параллельно загружаем содержимое страниц
+            var pageContents = new List<string>();
+            foreach (var result in searchResults.Take(1))
+            {
+                allContent = result.Snippet;
+            }
+
+
+            return allContent;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Deep web search failed");
+            return $"Ошибка при поиске: {ex.Message}";
+        }
+    }
+
+    private bool NeedsWebSearch(string userMessage)
+    {
+        //var keywords = new[]
+        //{
+        //    "новости", "погода", "курс", "сегодня", "сейчас",
+        //    "последние", "свежие", "произошло", "случилось",
+        //    "news", "weather", "today", "current", "latest",
+        //    "сколько", "когда", "где", "какой сейчас", "найди",
+        //    "поищи", "узнай", "расскажи", "покажи"
+        //};
+
+        //var lowerMessage = userMessage.ToLower();
+        //return keywords.Any(k => lowerMessage.Contains(k));
+        return true;
+    }
+
+    private async Task<string> GenerateResponseWithContextAsync(
+        string userMessage,
+        string searchResults,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var messages = new List<object>
+            {
+                new
+                {
+                    role = "system",
+                    content = @"Ты - полезный AI-ассистент. Проанализируй предоставленные результаты поиска и дай информативный ответ.
+- Используй информацию из источников
+- Указывай источники данных
+- Если информация отсутствует - честно скажи об этом
+- Будь точным и полезным"
+                },
+                new
+                {
+                    role = "user",
+                    content = $"Вопрос: {userMessage}\n\nНайденная информация:\n{searchResults}\n\nДай ответ на вопрос."
+                }
+            };
+
+            var aiResponse = await CallOllamaApiAsync(messages, cancellationToken);
+
+            return $"🔍 Результаты поиска:\n\n{aiResponse}\n\n---\n📎 Источники: данные из поисковой выдачи";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating response with context");
+            return $"🔍 Найденная информация:\n\n{searchResults}";
+        }
+    }
+
+    private async Task<string> CallOllamaApiAsync(List<object> messages, CancellationToken cancellationToken)
+    {
+        var request = new
+        {
+            model = _settings.Model,
+            messages = messages,
+            stream = false,
+            temperature = _settings.Temperature,
+            max_tokens = _settings.MaxTokens
+        };
+
+        var jsonRequest = JsonSerializer.Serialize(request);
+        var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
+        var response = await _httpClient.PostAsync("/api/chat", content, cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogError("Ollama API error: {StatusCode}, Body: {ErrorBody}",
+                response.StatusCode, errorBody);
+            return "Извините, AI-ассистент временно недоступен.";
         }
 
-        prompt.AppendLine($"Пользователь: {userMessage}");
-        prompt.AppendLine("Ассистент:");
+        var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
+        var result = JsonSerializer.Deserialize<OllamaChatResponse>(responseJson);
 
-        return prompt.ToString();
+        return result?.message?.content ?? "Не удалось получить ответ от AI.";
     }
 
     public async Task<bool> CheckHealthAsync()
@@ -121,9 +218,15 @@ public class OllamaService
         }
     }
 
-    private class OllamaResponse
+    private class OllamaChatResponse
     {
-        public string? response { get; set; }
+        public OllamaMessage? message { get; set; }
         public bool done { get; set; }
+    }
+
+    private class OllamaMessage
+    {
+        public string? role { get; set; }
+        public string? content { get; set; }
     }
 }

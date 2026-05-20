@@ -43,6 +43,7 @@ builder.Services.AddHttpClient();
 
 // Ollama Configuration
 builder.Services.Configure<OllamaSettings>(builder.Configuration.GetSection("Ollama"));
+builder.Services.AddSingleton<WebSearchService>();
 builder.Services.AddScoped<OllamaService>();
 
 // ===== Database =====

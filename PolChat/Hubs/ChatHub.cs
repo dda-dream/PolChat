@@ -253,7 +253,21 @@ public class ChatHub : Hub
                     return;
                 }
 
-                var response = await ollama.GenerateResponseAsync(userMessage, "");
+                var rows = await db.Messages
+                .Where(m => m.ChannelId == channelId)
+                .OrderByDescending(m => m.Timestamp)
+                .ToListAsync();
+                rows.Reverse();
+
+                string context = "";
+                foreach (var row in rows)
+                {
+                    context += row.Content + Environment.NewLine;
+                }
+
+
+                var response = await ollama.GenerateResponseAsync(userMessage, context);
+
                 if (string.IsNullOrWhiteSpace(response))
                 {
                     response = "Извините, не могу ответить на это сообщение.";
