@@ -49,15 +49,16 @@ public class OllamaService
 
     public async Task<string> GenerateResponseAsync(
         string userMessage,
-        string? context = null,
-        CancellationToken cancellationToken = default)
+    string? context = null,
+    CancellationToken cancellationToken = default,
+    string? connectionId = null) 
     {
         try
         {
             if (NeedsWebSearch(userMessage))
             {
                 _logger.LogInformation("Web search needed for: {UserMessage}", userMessage);
-                var searchResults = await PerformDeepWebSearchAsync(userMessage, cancellationToken);
+                var searchResults = await PerformDeepWebSearchAsync(userMessage, cancellationToken, connectionId);
 
                 if (!string.IsNullOrEmpty(searchResults))
                 {
@@ -93,27 +94,30 @@ public class OllamaService
         }
     }
 
-    private async Task<string> PerformDeepWebSearchAsync(string query, CancellationToken cancellationToken)
+    private async Task<string> PerformDeepWebSearchAsync(string query, CancellationToken cancellationToken, string? connectionId = null)
     {
         try
         {
             _logger.LogInformation("Starting deep web search for: {Query}", query);
 
-            // 1. Получаем результаты поиска
-            var searchResults = await _webSearch.SearchAsync(query);
+            // Передаем connectionId в SearchAsync
+            var searchResults = await _webSearch.SearchAsync(query, 10, connectionId);
 
             if (!searchResults.Any())
             {
                 return "По вашему запросу ничего не найдено.";
             }
-            string allContent = ""; 
-            // 2. Параллельно загружаем содержимое страниц
+
             var pageContents = new List<string>();
-            foreach (var result in searchResults.Take(1))
+            foreach (var result in searchResults)
             {
-                allContent = result.Snippet;
+                if (!string.IsNullOrEmpty(result.Snippet))
+                {
+                    pageContents.Add(result.Snippet);
+                }
             }
 
+            var allContent = string.Join("\n\n---\n\n", pageContents);
 
             return allContent;
         }

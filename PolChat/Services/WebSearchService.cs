@@ -1,4 +1,6 @@
 ﻿// WebSearchService.cs
+using ChatApp.Hubs;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Playwright;
 using System.Text.RegularExpressions;
 
@@ -10,10 +12,12 @@ public class WebSearchService : IAsyncDisposable
     private IPlaywright? _playwright;
     private IBrowser? _browser;
     private readonly SemaphoreSlim _semaphore = new(1, 1);
+    IHubContext<ChatHub> _hubContext;
 
-    public WebSearchService(ILogger<WebSearchService> logger)
+    public WebSearchService(ILogger<WebSearchService> logger, IHubContext<ChatHub> hubContext)
     {
         _logger = logger;
+        _hubContext = hubContext;
     }
 
     private async Task<IBrowser> GetBrowserAsync()
@@ -28,12 +32,18 @@ public class WebSearchService : IAsyncDisposable
                     _playwright = await Playwright.CreateAsync();
                     _browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
                     {
+                        Channel = "chromium",
                         Headless = true,
+                        SlowMo = 100,
                         Args = new[]
                         {
-                            "--disable-blink-features=AutomationControlled",
-                            "--no-sandbox",
-                            "--disable-dev-shm-usage"
+                        "--disable-blink-features=AutomationControlled", 
+                        "--no-sandbox",
+                        "--disable-dev-shm-usage",
+                        "--disable-features=IsolateOrigins,site-per-process",
+                        "--disable-web-security",
+                        "--disable-features=BlockInsecurePrivateNetworkRequests",
+                        "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                         }
                     });
                     _logger.LogInformation("Browser launched");
@@ -47,23 +57,51 @@ public class WebSearchService : IAsyncDisposable
         return _browser;
     }
 
-    public async Task<List<SearchResult>> SearchAsync(string query, int maxResults = 5)
+    public async Task<List<SearchResult>> SearchAsync(string query, int maxResults = 5, string? connectionId = null)
     {
         var results = new List<SearchResult>();
 
         try
         {
+            // Отправляем статус начала поиска
+            await NotifySearchStatus(connectionId, "🔍 Начинаем поиск в интернете...", "searching");
+
             _logger.LogInformation("Searching DuckDuckGo for: {Query}", query);
 
             string url = $"https://html.duckduckgo.com/html/?q={Uri.EscapeDataString(query)}";
-            var searchResults = await GetFullPageTextAsync(url);
 
-            results.Add(new SearchResult
+            // Отправляем статус получения ссылок
+            await NotifySearchStatus(connectionId, "📑 Получаем ссылки из поисковой выдачи...", "fetching_links");
+
+            var urls = await ExtractUrlsStepByStepAsync(url);
+
+            await NotifySearchStatus(connectionId, $"✅ Найдено {urls.Count} ссылок. Начинаем анализ...", "links_found", urls.Count);
+
+            int processed = 0;
+            foreach (var resultUrl in urls.Take(maxResults))
             {
-                Url = url,
-                Title = "",
-                Snippet = searchResults
-            });
+                processed++;
+
+                // Отправляем статус обработки каждой ссылки
+                await NotifySearchStatus(
+                    connectionId,
+                    $"📖 Анализируем страницу {processed} из {Math.Min(maxResults, urls.Count)}: {resultUrl[..Math.Min(50, resultUrl.Length)]}...",
+                    "processing_page",
+                    processed,
+                    Math.Min(maxResults, urls.Count));
+
+                var content = await GetFullPageTextAsync(resultUrl);
+
+                results.Add(new SearchResult
+                {
+                    Url = resultUrl,
+                    Title = "",
+                    Snippet = content
+                });
+            }
+
+            // Отправляем статус завершения
+            await NotifySearchStatus(connectionId, $"✅ Поиск завершен. Найдено {results.Count} страниц с информацией.", "completed", results.Count);
 
             _logger.LogInformation("Found {Count} results", results.Count);
             return results;
@@ -71,10 +109,99 @@ public class WebSearchService : IAsyncDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Search failed for query: {Query}", query);
+            await NotifySearchStatus(connectionId, $"❌ Ошибка поиска: {ex.Message}", "error");
             return results;
+        }
+    }
+
+    private async Task NotifySearchStatus(string? connectionId, string message, string status, int? current = null, int? total = null)
+    {
+        if (string.IsNullOrEmpty(connectionId))
+            return;
+
+        try
+        {
+            await _hubContext.Clients.Client(connectionId).SendAsync("search_status", new
+            {
+                message = message,
+                status = status,
+                current = current,
+                total = total,
+                timestamp = DateTime.UtcNow
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send search status to client");
+        }
+    }
+
+
+    public async Task<List<string>> ExtractUrlsStepByStepAsync(string url)
+    {
+        var browser = await GetBrowserAsync();
+        var context = await browser.NewContextAsync();
+        var page = await context.NewPageAsync();
+        var urls = new List<string>();
+
+        try
+        {
+            await page.GotoAsync(url);
+
+            // Ждем загрузки
+            await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+
+            // Получаем количество результатов
+            var resultCount = await page.Locator(".result").CountAsync();
+            _logger.LogInformation("Found {Count} result elements", resultCount);
+
+            if (resultCount == 0)
+            {
+                _logger.LogWarning("No result elements found");
+                return urls;
+            }
+
+            // Проходим по каждому результату
+            for (int i = 0; i < resultCount; i++)
+            {
+                try
+                {
+                    // Получаем ссылку из каждого результата
+                    var href = await page.Locator(".result").Nth(i).Locator(".result__a").GetAttributeAsync("href");
+
+                    if (!string.IsNullOrEmpty(href))
+                    {
+                        // Очищаем URL
+                        string cleanUrl = href;
+                        if (href.Contains("uddg="))
+                        {
+                            var match = System.Text.RegularExpressions.Regex.Match(href, @"uddg=(https?[^&]+)");
+                            if (match.Success)
+                            {
+                                cleanUrl = System.Web.HttpUtility.UrlDecode(match.Groups[1].Value);
+                            }
+                        }
+
+                        if (cleanUrl.StartsWith("http"))
+                        {
+                            urls.Add(cleanUrl);
+                            _logger.LogDebug("Found URL: {Url}", cleanUrl);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to extract URL for result {Index}", i);
+                }
+            }
+
+            _logger.LogInformation("Successfully extracted {Count} URLs", urls.Count);
+            return urls;
         }
         finally
         {
+            await page.CloseAsync();
+            await context.CloseAsync();
         }
     }
 

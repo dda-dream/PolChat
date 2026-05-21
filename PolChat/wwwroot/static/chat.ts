@@ -4715,6 +4715,115 @@ if (isChatPage) {
         }
     });
 
+    // Обработчик статуса поиска от AI (отправка сообщений в чат)
+    connection.on('search_status', async (status: {
+        message: string;
+        status: string;
+        current?: number;
+        total?: number;
+        timestamp: string
+    }) => {
+        console.log('Search status update:', status);
+
+        // Создаем полноценный объект сообщения
+        const tempId = `search_status_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
+        let emoji = '';
+        let messageClass = '';
+
+        switch (status.status) {
+            case 'searching':
+                emoji = '🔍';
+                break;
+            case 'fetching_links':
+                emoji = '📑';
+                break;
+            case 'processing_page':
+                emoji = '📖';
+                break;
+            case 'links_found':
+                emoji = '✅';
+                break;
+            case 'completed':
+                emoji = '✅';
+                messageClass = 'text-success';
+                break;
+            case 'error':
+                emoji = '❌';
+                messageClass = 'text-danger';
+                break;
+            default:
+                emoji = '🤖';
+        }
+
+        // Формируем текст сообщения с прогрессом
+        let fullMessage = `${emoji} ${status.message}`;
+        if (status.current && status.total && status.status === 'processing_page') {
+            fullMessage += ` (${status.current}/${status.total})`;
+        }
+
+        // Создаем полноценный объект Message (не Partial)
+        const statusMessage: Message = {
+            id: tempId,
+            channelId: currentChannel || '',
+            username: 'AI Assistant',
+            content: fullMessage,
+            fileUrl: null,
+            timestamp: new Date().toISOString(),
+            edited: false,
+            reactions: [],
+            readBy: [],
+            deliveredTo: [],
+            replyTo: null,
+            isBot: true,
+            isDeletedSender: false
+        };
+
+        // Добавляем сообщение в чат
+        const messagesDiv = document.getElementById('messages-area');
+        if (messagesDiv && currentChannel) {
+            if (messagesDiv.innerHTML.includes('Нет сообщений')) {
+                messagesDiv.innerHTML = '';
+            }
+
+            // Удаляем предыдущее статусное сообщение этого типа
+            const existingStatusMsg = messagesDiv.querySelector(`.message[data-status-type="${status.status}"]`);
+            if (existingStatusMsg && status.status !== 'completed' && status.status !== 'error') {
+                existingStatusMsg.remove();
+            }
+
+            // Добавляем атрибут для отслеживания
+            const messageHtml = formatMessage(statusMessage);
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = messageHtml;
+            const msgElement = tempDiv.firstChild as HTMLElement;
+            if (msgElement) {
+                msgElement.setAttribute('data-status-type', status.status);
+                messagesDiv.appendChild(msgElement);
+            } else {
+                messagesDiv.insertAdjacentHTML('beforeend', messageHtml);
+            }
+
+            // Прокручиваем вниз
+            scrollToBottomSafely(false);
+
+            // Если это завершающее сообщение (completed/error), удаляем его через 5 секунд
+            if (status.status === 'completed' || status.status === 'error') {
+                setTimeout(() => {
+                    const msg = document.getElementById(`msg-${tempId}`);
+                    if (msg) msg.remove();
+                }, 5000);
+            }
+        }
+
+        // Показываем уведомление для завершающих статусов
+        if (status.status === 'completed') {
+            showNotification(`✅ ${status.message}`, 'success');
+        } else if (status.status === 'error') {
+            showNotification(`❌ ${status.message}`, 'danger');
+        }
+    });
+
     // ============ ИНИЦИАЛИЗАЦИЯ ЧАТА ============
 
     async function initChat() {
@@ -4753,6 +4862,7 @@ if (isChatPage) {
         window.cancelFilePreview = cancelFilePreview;
         window.startDMWithUser = startDMWithUser;
         window.initChat = initChat;
+        window.showSearchIndicator = window.showSearchIndicator;
 
         setupActivityTracking();
         setupVisibilityTracking();

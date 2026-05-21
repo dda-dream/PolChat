@@ -122,6 +122,7 @@ declare global {
         confirmDeleteDM?: () => void;
         goBack?: () => void;
         initChat?: () => void;
+        showSearchIndicator?: (show: boolean, message?: string) => void;
     }
 }
 
