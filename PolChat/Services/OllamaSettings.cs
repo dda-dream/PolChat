@@ -9,4 +9,5 @@ public class OllamaSettings
     public int MaxTokens { get; set; } = 500;
     public string ApiKey { get; set; } = string.Empty;
     public string BraveApiKey { get; set; } = string.Empty;
+    public string ReasoningEffort { get; set; } = "high";
 }

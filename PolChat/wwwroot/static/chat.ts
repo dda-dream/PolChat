@@ -912,6 +912,11 @@ if (isChatPage) {
             }
         }
 
+        // Кнопка-стрелка для раскрытия действий
+        const actionsArrow = `<span class="message-actions-arrow" data-msg-id="${escapeHtml(msg.id)}" title="Действия с сообщением">
+        <i class="fas fa-chevron-down"></i>
+    </span>`;
+
         const actionButtons = `<div class="message-actions" id="actions-${escapeHtml(msg.id)}">
         <button class="message-action-btn" data-action="reply" data-msg-id="${escapeHtml(msg.id)}" data-username="${escapeHtml(msg.username)}" data-content='${JSON.stringify(msg.content || "").replace(/'/g, "&#39;")}'>
             <i class="fas fa-reply"></i> Ответить
@@ -938,6 +943,7 @@ if (isChatPage) {
                         ${editedIndicator}
                         ${currentChannelType === 'dm' ? messageStatus : ''}
                         ${readCounterHtml}
+                        ${actionsArrow}
                     </div>
                     ${replyHtml}
                     ${safeContent ? `<div class="message-text">${safeContent}</div>` : ''}
@@ -976,11 +982,22 @@ if (isChatPage) {
     function handleMessageActions(e: MouseEvent) {
         const target = e.target as HTMLElement;
 
-        console.log('Click detected on:', target.className, target.tagName); // Добавьте это
+        console.log('Click detected on:', target.className, target.tagName);
+
+        // Обработка клика по стрелке действий
+        const actionsArrow = target.closest('.message-actions-arrow');
+        if (actionsArrow) {
+            e.preventDefault();
+            e.stopPropagation();
+            const msgId = actionsArrow.getAttribute('data-msg-id');
+            if (msgId) {
+                toggleMessageActions(msgId, e);  // ← передаём событие мыши
+            }
+            return;
+        }
 
         // Обработка клика по реакции
         const reactionBadge = target.closest('.reaction-badge');
-
 
         if (reactionBadge) {
             const msgId = reactionBadge.getAttribute('data-msg-id');
@@ -1003,10 +1020,6 @@ if (isChatPage) {
                     addReaction(msgId, emoji);
                 }
             }
-
-
-
-
             return;
         }
 
@@ -1045,19 +1058,6 @@ if (isChatPage) {
             return;
         }
 
-        // Обработка клика по сообщению (для показа действий)
-        const messageBubble = target.closest('.message-bubble');
-        if (messageBubble) {
-            const msgDiv = messageBubble.closest('.message');
-            if (msgDiv) {
-                const msgId = msgDiv.id.replace('msg-', '');
-                toggleMessageActions(msgId);
-            }
-            return;
-        }
-
-
-
         // Обработка клика по счетчику прочитавших
         const readCounter = target.closest('.read-counter');
         if (readCounter) {
@@ -1070,7 +1070,7 @@ if (isChatPage) {
             return;
         }
 
-        // Обработка клика по ответу (reply) - используем переменную replyId
+        // Обработка клика по ответу (reply)
         const messageReply = target.closest('.message-reply');
         if (messageReply) {
             e.preventDefault();
@@ -1083,7 +1083,7 @@ if (isChatPage) {
         }
 
         // Закрываем панель действий при клике вне
-        if (!target.closest('.message-actions')) {
+        if (!target.closest('.message-actions') && !target.closest('.message-actions-arrow')) {
             closeAllMessageActions();
         }
     }
@@ -1123,20 +1123,69 @@ if (isChatPage) {
         const oldScrollHeight = messagesDiv.scrollHeight;
         const oldScrollTop = messagesDiv.scrollTop;
 
-        const newMessages = messages.filter((msg: Message) => !receivedMessages.has(msg.id));
-        if (newMessages.length === 0) return;
+        // Сортируем старые сообщения
+        const sortedMessages = [...messages].sort((a, b) =>
+            new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        );
 
+        const newMessages = sortedMessages.filter((msg: Message) => !receivedMessages.has(msg.id));
+        if (newMessages.length === 0) return;
 
         initMessageStatuses(newMessages);
 
         for (const msg of newMessages) {
             if (msg.readBy) messageReadBy.set(msg.id, msg.readBy);
         }
-        let newMessagesHtml = '';
-        for (const msg of newMessages) {
-            receivedMessages.add(msg.id);
-            newMessagesHtml += formatMessage(msg);
+
+        // Получаем первую дату из существующих сообщений
+        const firstExistingMsg = messagesDiv.querySelector('.message');
+        let firstExistingDate: Date | null = null;
+        if (firstExistingMsg) {
+            const timeElement = firstExistingMsg.querySelector('.message-time');
+            if (timeElement && timeElement.textContent) {
+                // Парсим дату из формата "DD.MM.YYYY HH:MM"
+                const timeText = timeElement.textContent;
+                const dateMatch = timeText.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+                if (dateMatch) {
+                    firstExistingDate = new Date(parseInt(dateMatch[3]), parseInt(dateMatch[2]) - 1, parseInt(dateMatch[1]));
+                }
+            }
         }
+
+        let lastDate: Date | null = null;
+        let newMessagesHtml = '';
+        const tempDiv = document.createElement('div');
+
+        // Сначала добавляем разделители для новых сообщений
+        for (let i = 0; i < newMessages.length; i++) {
+            const msg = newMessages[i];
+            const msgDate = new Date(msg.timestamp);
+
+            // Добавляем разделитель дня
+            if (shouldAddDayHeader(lastDate, msgDate)) {
+                tempDiv.innerHTML = formatDayHeader(msgDate);
+                newMessagesHtml += tempDiv.innerHTML;
+                lastDate = msgDate;
+            }
+
+            receivedMessages.add(msg.id);
+            tempDiv.innerHTML = formatMessage(msg);
+            newMessagesHtml += tempDiv.innerHTML;
+            tempDiv.innerHTML = '';
+        }
+
+        // Проверяем, нужен ли разделитель между последним новым и первым существующим
+        if (newMessages.length > 0 && firstExistingDate) {
+            const lastNewMsg = newMessages[newMessages.length - 1];
+            const lastNewDate = new Date(lastNewMsg.timestamp);
+
+            if (shouldAddDayHeader(lastNewDate, firstExistingDate)) {
+                tempDiv.innerHTML = formatDayHeader(firstExistingDate);
+                newMessagesHtml += tempDiv.innerHTML;
+                tempDiv.innerHTML = '';
+            }
+        }
+
         if (newMessagesHtml) {
             messagesDiv.insertAdjacentHTML('afterbegin', newMessagesHtml);
             attachReadCounterHandlers();
@@ -2387,21 +2436,116 @@ if (isChatPage) {
         }
     }
 
-    function toggleMessageActions(messageId: string) {
+    function toggleMessageActions(messageId: string, mouseEvent?: MouseEvent) {
         const actionsDiv = document.getElementById(`actions-${messageId}`);
-        if (actionsDiv) {
-            // Закрываем другие открытые меню
-            if (currentlyActiveMessageActions && currentlyActiveMessageActions !== actionsDiv) {
-                currentlyActiveMessageActions.classList.remove('show');
+        const actionsArrow = document.querySelector(`.message-actions-arrow[data-msg-id="${messageId}"]`);
+
+        if (!actionsDiv) return;
+
+        // Закрываем другие открытые меню
+        if (currentlyActiveMessageActions && currentlyActiveMessageActions !== actionsDiv) {
+            currentlyActiveMessageActions.classList.remove('show');
+            const oldArrow = document.querySelector(`.message-actions-arrow[data-msg-id="${currentlyActiveMessageActions.id.replace('actions-', '')}"]`);
+            if (oldArrow) {
+                oldArrow.classList.remove('active');
+                const icon = oldArrow.querySelector('i');
+                if (icon) icon.className = 'fas fa-chevron-down';
             }
-            actionsDiv.classList.toggle('show');
-            currentlyActiveMessageActions = actionsDiv.classList.contains('show') ? actionsDiv : null;
+        }
+
+        // Переключаем текущее меню
+        const willShow = !actionsDiv.classList.contains('show');
+
+        if (willShow && mouseEvent) {
+            // Получаем размеры панели (пока скрыта, но можно измерить после временного показа)
+            actionsDiv.style.display = 'flex';
+            actionsDiv.style.visibility = 'hidden';
+            const actionsRect = actionsDiv.getBoundingClientRect();
+            actionsDiv.style.display = '';
+            actionsDiv.style.visibility = '';
+
+            // Координаты курсора
+            let left = mouseEvent.clientX + 10;
+            let top = mouseEvent.clientY - actionsRect.height / 2 - 35;
+
+            // Корректировка по горизонтали
+            if (left + actionsRect.width > window.innerWidth - 10) {
+                left = mouseEvent.clientX - actionsRect.width - 10;
+            }
+            if (left < 10) left = 10;
+
+            // Корректировка по вертикали
+            if (top < 10) {
+                top = mouseEvent.clientY + 10;
+            }
+            if (top + actionsRect.height > window.innerHeight - 10) {
+                top = mouseEvent.clientY - actionsRect.height - 10;
+            }
+
+            actionsDiv.style.left = `${left}px`;
+            actionsDiv.style.top = `${top}px`;
+            actionsDiv.style.right = 'auto';
+            actionsDiv.style.bottom = 'auto';
+        }
+
+        actionsDiv.classList.toggle('show');
+        currentlyActiveMessageActions = actionsDiv.classList.contains('show') ? actionsDiv : null;
+
+        // Обновляем иконку стрелки
+        if (actionsArrow) {
+            if (actionsDiv.classList.contains('show')) {
+                actionsArrow.classList.add('active');
+                const icon = actionsArrow.querySelector('i');
+                if (icon) icon.className = 'fas fa-chevron-up';
+            } else {
+                actionsArrow.classList.remove('active');
+                const icon = actionsArrow.querySelector('i');
+                if (icon) icon.className = 'fas fa-chevron-down';
+            }
+        }
+
+        // Закрытие при клике вне
+        if (actionsDiv.classList.contains('show')) {
+            const closeHandler = (e: Event) => {
+                const target = e.target as HTMLElement;
+                if (!actionsDiv.contains(target) && !actionsArrow?.contains(target)) {
+                    closeAllMessageActions();
+                    document.removeEventListener('click', closeHandler);
+                    document.removeEventListener('scroll', closeHandler);
+                }
+            };
+            setTimeout(() => {
+                document.addEventListener('click', closeHandler);
+                document.addEventListener('scroll', closeHandler);
+            }, 100);
+            (actionsDiv as any)._closeHandler = closeHandler;
+        } else if ((actionsDiv as any)._closeHandler) {
+            document.removeEventListener('click', (actionsDiv as any)._closeHandler);
+            document.removeEventListener('scroll', (actionsDiv as any)._closeHandler);
+            delete (actionsDiv as any)._closeHandler;
         }
     }
 
     function closeAllMessageActions() {
         if (currentlyActiveMessageActions) {
             currentlyActiveMessageActions.classList.remove('show');
+
+            // Удаляем обработчик закрытия
+            if ((currentlyActiveMessageActions as any)._closeHandler) {
+                document.removeEventListener('click', (currentlyActiveMessageActions as any)._closeHandler);
+                document.removeEventListener('scroll', (currentlyActiveMessageActions as any)._closeHandler);
+                delete (currentlyActiveMessageActions as any)._closeHandler;
+            }
+
+            // Обновляем иконку стрелки
+            const msgId = currentlyActiveMessageActions.id.replace('actions-', '');
+            const actionsArrow = document.querySelector(`.message-actions-arrow[data-msg-id="${msgId}"]`);
+            if (actionsArrow) {
+                actionsArrow.classList.remove('active');
+                const icon = actionsArrow.querySelector('i');
+                if (icon) icon.className = 'fas fa-chevron-down';
+            }
+
             currentlyActiveMessageActions = null;
         }
     }
@@ -3692,17 +3836,36 @@ if (isChatPage) {
             return;
         }
 
+        // Сортируем сообщения по времени (от старых к новым для правильного порядка)
+        const sortedMessages = [...msgs].sort((a, b) =>
+            new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        );
+
         // Используем DocumentFragment для пакетного обновления DOM
         const fragment = document.createDocumentFragment();
         const tempDiv = document.createElement('div');
 
-        msgs.forEach((msg: Message) => {
+        let lastDate: Date | null = null;
+
+        for (let i = 0; i < sortedMessages.length; i++) {
+            const msg = sortedMessages[i];
+            const msgDate = new Date(msg.timestamp);
+
+            // Добавляем разделитель дня если нужно
+            if (shouldAddDayHeader(lastDate, msgDate)) {
+                tempDiv.innerHTML = formatDayHeader(msgDate);
+                const headerElement = tempDiv.firstElementChild;
+                if (headerElement) fragment.appendChild(headerElement);
+                tempDiv.innerHTML = '';
+                lastDate = msgDate;
+            }
+
             if (msg.readBy) messageReadBy.set(msg.id, msg.readBy);
             tempDiv.innerHTML = formatMessage(msg);
             const msgElement = tempDiv.firstElementChild;
             if (msgElement) fragment.appendChild(msgElement);
             tempDiv.innerHTML = '';
-        });
+        }
 
         if (div) {
             div.innerHTML = '';
@@ -4103,6 +4266,43 @@ if (isChatPage) {
     }
 
 
+    // ============ ФУНКЦИИ ДЛЯ РАЗДЕЛЕНИЯ СООБЩЕНИЙ ПО ДНЯМ ============
+
+    function getDayHeader(date: Date): string {
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+
+        const messageDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+        if (messageDate.getTime() === today.getTime()) {
+            return 'Сегодня';
+        } else if (messageDate.getTime() === yesterday.getTime()) {
+            return 'Вчера';
+        } else {
+            // Форматируем дату: "15 марта 2024"
+            const months = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+                'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+            return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+        }
+    }
+
+    function shouldAddDayHeader(prevDate: Date | null, currentDate: Date): boolean {
+        if (!prevDate) return true;
+
+        const prevDay = new Date(prevDate.getFullYear(), prevDate.getMonth(), prevDate.getDate());
+        const currentDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
+
+        return prevDay.getTime() !== currentDay.getTime();
+    }
+
+    function formatDayHeader(date: Date): string {
+        return `<div class="day-divider">
+        <span class="day-divider-text">${escapeHtml(getDayHeader(date))}</span>
+    </div>`;
+    }
+
 
     // ============ УВЕДОМЛЕНИЯ ============
 
@@ -4215,24 +4415,37 @@ if (isChatPage) {
             if (messagesDiv && messagesDiv.innerHTML.includes('Нет сообщений')) messagesDiv.innerHTML = '';
 
             if (messagesDiv) {
-                // ВАЖНО: Убеждаемся, что все глобальные функции определены 
-                // и передаем их через window
+                // Получаем последнее сообщение в чате для проверки необходимости разделителя
+                const lastMsgElement = messagesDiv.querySelector('.message:last-child');
+                let lastMsgDate: Date | null = null;
+
+                if (lastMsgElement) {
+                    const timeElement = lastMsgElement.querySelector('.message-time');
+                    if (timeElement && timeElement.textContent) {
+                        const timeText = timeElement.textContent;
+                        const dateMatch = timeText.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+                        if (dateMatch) {
+                            lastMsgDate = new Date(parseInt(dateMatch[3]), parseInt(dateMatch[2]) - 1, parseInt(dateMatch[1]));
+                        }
+                    }
+                }
+
+                const newMsgDate = new Date(message.timestamp);
+                let htmlToAdd = '';
+
+                // Добавляем разделитель если нужно
+                if (shouldAddDayHeader(lastMsgDate, newMsgDate)) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = formatDayHeader(newMsgDate);
+                    htmlToAdd += tempDiv.innerHTML;
+                }
+
                 const messageHtml = formatMessage(message);
-                messagesDiv.insertAdjacentHTML('beforeend', messageHtml);
+                htmlToAdd += messageHtml;
+
+                messagesDiv.insertAdjacentHTML('beforeend', htmlToAdd);
                 attachReadCounterHandlers();
                 bindMessageEvents();
-                // Принудительно регистрируем обработчики для нового сообщения
-                const newMsgElement = document.getElementById(`msg-${message.id}`);
-                if (newMsgElement) {
-                    // Убеждаемся, что кнопки действий имеют правильные onclick
-                    const actionButtons = newMsgElement.querySelectorAll('.message-action-btn');
-                    actionButtons.forEach(btn => {
-                        const onclickAttr = btn.getAttribute('onclick');
-                        if (onclickAttr && typeof (window as any)[onclickAttr.split('(')[0]] === 'function') {
-                            // Обработчик уже есть в window, ничего не делаем
-                        }
-                    });
-                }
 
                 // Прокручиваем вниз только если пользователь был внизу
                 const isNearBottom = messagesDiv.scrollHeight - messagesDiv.scrollTop - messagesDiv.clientHeight < 100;

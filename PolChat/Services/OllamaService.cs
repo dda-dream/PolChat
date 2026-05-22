@@ -130,18 +130,13 @@ public class OllamaService
 
     private bool NeedsWebSearch(string userMessage)
     {
-        //var keywords = new[]
-        //{
-        //    "новости", "погода", "курс", "сегодня", "сейчас",
-        //    "последние", "свежие", "произошло", "случилось",
-        //    "news", "weather", "today", "current", "latest",
-        //    "сколько", "когда", "где", "какой сейчас", "найди",
-        //    "поищи", "узнай", "расскажи", "покажи"
-        //};
+        var keywords = new[]
+        {
+            "ищи", "искать", "найди"
+        };
 
-        //var lowerMessage = userMessage.ToLower();
-        //return keywords.Any(k => lowerMessage.Contains(k));
-        return true;
+        var lowerMessage = userMessage.ToLower();
+        return keywords.Any(k => lowerMessage.Contains(k));
     }
 
     private async Task<string> GenerateResponseWithContextAsync(
@@ -188,7 +183,8 @@ public class OllamaService
             messages = messages,
             stream = false,
             temperature = _settings.Temperature,
-            max_tokens = _settings.MaxTokens
+            max_tokens = _settings.MaxTokens,
+            think = _settings.ReasoningEffort
         };
 
         var jsonRequest = JsonSerializer.Serialize(request);
