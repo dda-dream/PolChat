@@ -4942,7 +4942,6 @@ if (isChatPage) {
         const tempId = `search_status_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
         let emoji = '';
-        let messageClass = '';
 
         switch (status.status) {
             case 'searching':
@@ -4959,11 +4958,9 @@ if (isChatPage) {
                 break;
             case 'completed':
                 emoji = '✅';
-                messageClass = 'text-success';
                 break;
             case 'error':
                 emoji = '❌';
-                messageClass = 'text-danger';
                 break;
             default:
                 emoji = '🤖';
