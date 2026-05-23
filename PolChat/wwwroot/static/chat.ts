@@ -860,7 +860,21 @@ if (isChatPage) {
         const isDeletedSender = msg.isDeletedSender === true || msg.username === DELETED_USER_DISPLAY;
         const isOwn = (!isDeletedSender && msg.username === currentUsername);
         const displayUsername = getSafeUsername(msg.username, isDeletedSender);
-        const avatarLetter = getUserAvatarLetter(msg.username, isDeletedSender);
+
+        // Получаем аватар пользователя из кэша
+        let avatarHtml = '';
+        const userFromCache = usersCache.find(u => u.username === msg.username);
+        const avatarUrl = userFromCache?.avatar;
+
+        if (avatarUrl && avatarUrl !== 'null' && avatarUrl !== 'undefined' && avatarUrl.trim() !== '') {
+            // Если есть URL аватара - показываем картинку
+            avatarHtml = `<img src="${escapeHtml(avatarUrl)}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;" onerror="this.style.display='none'; this.parentElement.style.background='linear-gradient(135deg, #667eea 0%, #764ba2 100%)'; this.parentElement.innerHTML='${escapeHtml(displayUsername.charAt(0).toUpperCase())}';">`;
+        } else {
+            // Если нет аватара - показываем букву
+            const avatarLetter = getUserAvatarLetter(msg.username, isDeletedSender);
+            avatarHtml = `<div style="width:100%; height:100%; border-radius:50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">${escapeHtml(avatarLetter)}</div>`;
+        }
+
         const time = new Date(msg.timestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
         const date = new Date(msg.timestamp).toLocaleDateString('ru-RU');
         const fullTime = `${date} ${time}`;
@@ -873,9 +887,9 @@ if (isChatPage) {
                 ? (msg.replyTo.content.length > 50 ? msg.replyTo.content.substring(0, 47) + '...' : msg.replyTo.content)
                 : (msg.replyTo.fileUrl ? '📎 Файл' : '');
             replyHtml = `<div class="message-reply" data-reply-id="${escapeHtml(msg.replyTo.id)}">
-            <div class="reply-header"><i class="fas fa-reply"></i> ${escapeHtml(replyDisplayName)}</div>
-            <div class="reply-content">${escapeHtml(replyContent)}</div>
-        </div>`;
+        <div class="reply-header"><i class="fas fa-reply"></i> ${escapeHtml(replyDisplayName)}</div>
+        <div class="reply-content">${escapeHtml(replyContent)}</div>
+    </div>`;
         }
 
         let fileHtml = '';
@@ -907,53 +921,53 @@ if (isChatPage) {
 
             if (readCount > 0) {
                 readCounterHtml = `<span class="read-counter ms-2" data-msg-id="${escapeHtml(msg.id)}" style="cursor: pointer; font-size: 10px; color: #6c757d; display: inline-flex; align-items: center; gap: 3px;">
-                <i class="fas fa-eye"></i> ${readCount}
-            </span>`;
+            <i class="fas fa-eye"></i> ${readCount}
+        </span>`;
             }
         }
 
         // Кнопка-стрелка для раскрытия действий
         const actionsArrow = `<span class="message-actions-arrow" data-msg-id="${escapeHtml(msg.id)}" title="Действия с сообщением">
-        <i class="fas fa-chevron-down"></i>
-    </span>`;
+    <i class="fas fa-chevron-down"></i>
+</span>`;
 
         const actionButtons = `<div class="message-actions" id="actions-${escapeHtml(msg.id)}">
-        <button class="message-action-btn" data-action="reply" data-msg-id="${escapeHtml(msg.id)}" data-username="${escapeHtml(msg.username)}" data-content='${JSON.stringify(msg.content || "").replace(/'/g, "&#39;")}'>
-            <i class="fas fa-reply"></i> Ответить
-        </button>
-        ${isOwn ? `<button class="message-action-btn" data-action="edit" data-msg-id="${escapeHtml(msg.id)}" data-content='${JSON.stringify(msg.content || "").replace(/'/g, "&#39;")}'>
-            <i class="fas fa-edit"></i> Редактировать
-        </button>
-        <button class="message-action-btn" data-action="delete" data-msg-id="${escapeHtml(msg.id)}">
-            <i class="fas fa-trash"></i> Удалить
-        </button>` : ''}
-        <button class="message-action-btn" data-action="reaction" data-msg-id="${escapeHtml(msg.id)}">
-            <i class="far fa-smile"></i> Реакция
-        </button>
-    </div>`;
+    <button class="message-action-btn" data-action="reply" data-msg-id="${escapeHtml(msg.id)}" data-username="${escapeHtml(msg.username)}" data-content='${JSON.stringify(msg.content || "").replace(/'/g, "&#39;")}'>
+        <i class="fas fa-reply"></i> Ответить
+    </button>
+    ${isOwn ? `<button class="message-action-btn" data-action="edit" data-msg-id="${escapeHtml(msg.id)}" data-content='${JSON.stringify(msg.content || "").replace(/'/g, "&#39;")}'>
+        <i class="fas fa-edit"></i> Редактировать
+    </button>
+    <button class="message-action-btn" data-action="delete" data-msg-id="${escapeHtml(msg.id)}">
+        <i class="fas fa-trash"></i> Удалить
+    </button>` : ''}
+    <button class="message-action-btn" data-action="reaction" data-msg-id="${escapeHtml(msg.id)}">
+        <i class="far fa-smile"></i> Реакция
+    </button>
+</div>`;
 
         return `<div class="message ${isOwn ? 'message-own' : ''}" id="msg-${escapeHtml(msg.id)}" data-channel-id="${escapeHtml(msg.channelId || currentChannel || '')}" data-channel-type="${escapeHtml(currentChannelType || 'channel')}">
-        <div class="message-wrapper">
-            <div class="message-avatar">${escapeHtml(avatarLetter)}</div>
-            <div class="message-content-wrapper">
-                <div class="message-bubble">
-                    <div class="message-header">
-                        <span class="message-username">${safeUsername}</span>
-                        <span class="message-time">${escapeHtml(fullTime)}</span>
-                        ${editedIndicator}
-                        ${currentChannelType === 'dm' ? messageStatus : ''}
-                        ${readCounterHtml}
-                        ${actionsArrow}
-                    </div>
-                    ${replyHtml}
-                    ${safeContent ? `<div class="message-text">${safeContent}</div>` : ''}
-                    ${fileHtml}
-                    ${reactionsHtml}
+    <div class="message-wrapper">
+        <div class="message-avatar">${avatarHtml}</div>
+        <div class="message-content-wrapper">
+            <div class="message-bubble">
+                <div class="message-header">
+                    <span class="message-username">${safeUsername}</span>
+                    <span class="message-time">${escapeHtml(fullTime)}</span>
+                    ${editedIndicator}
+                    ${currentChannelType === 'dm' ? messageStatus : ''}
+                    ${readCounterHtml}
+                    ${actionsArrow}
                 </div>
-                ${actionButtons}
+                ${replyHtml}
+                ${safeContent ? `<div class="message-text">${safeContent}</div>` : ''}
+                ${fileHtml}
+                ${reactionsHtml}
             </div>
+            ${actionButtons}
         </div>
-    </div>`;
+    </div>
+</div>`;
     }
 
     function formatText(c: string | null | undefined): string {
@@ -2717,11 +2731,39 @@ if (isChatPage) {
             const res = await fetch('/api/users');
             usersCache = await res.json();
             usersCacheTime = now;
+
+            // Обновляем отображение пользователей
+            loadUsersWithStatus();
+
+            // Обновляем аватары в уже отображенных сообщениях (если нужно)
+            updateAvatarsInMessages();
+
             return usersCache;
         } catch (e) {
             console.error(e);
             return usersCache || [];
         }
+    }
+
+    function updateAvatarsInMessages() {
+        const messages = document.querySelectorAll('.message');
+        messages.forEach(msgDiv => {
+            const usernameElem = msgDiv.querySelector('.message-username');
+            if (!usernameElem) return;
+
+            const username = usernameElem.textContent;
+            const user = usersCache.find(u => u.username === username);
+            const avatarDiv = msgDiv.querySelector('.message-avatar');
+
+            if (avatarDiv && user) {
+                if (user.avatar && user.avatar !== 'null' && user.avatar !== 'undefined' && user.avatar.trim() !== '') {
+                    avatarDiv.innerHTML = `<img src="${escapeHtml(user.avatar)}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;" onerror="this.style.display='none'; this.parentElement.style.background='linear-gradient(135deg, #667eea 0%, #764ba2 100%)'; this.parentElement.innerHTML='${escapeHtml(username?.charAt(0).toUpperCase() || '?')}';">`;
+                } else {
+                    const letter = username?.charAt(0).toUpperCase() || '?';
+                    avatarDiv.innerHTML = `<div style="width:100%; height:100%; border-radius:50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">${escapeHtml(letter)}</div>`;
+                }
+            }
+        });
     }
 
     function updateChannelUnreadCount(channelId: string, newCount: number, isDM: boolean) {
@@ -3220,7 +3262,6 @@ if (isChatPage) {
 
             // СОРТИРОВКА ПОЛЬЗОВАТЕЛЕЙ
             const sortedUsers = [...others].sort((a, b) => {
-                // Сначала определяем "вес" статуса для сортировки
                 const getStatusWeight = (status: string) => {
                     switch (status) {
                         case 'online': return 3;
@@ -3232,16 +3273,14 @@ if (isChatPage) {
                 const weightA = getStatusWeight(a.status);
                 const weightB = getStatusWeight(b.status);
 
-                // Если статусы разные - сортируем по статусу
                 if (weightA !== weightB) {
-                    return weightB - weightA; // Выше тот, у кого больше вес
+                    return weightB - weightA;
                 }
 
-                // Если статусы одинаковые (оба offline или оба away) - сортируем по времени lastSeen
                 if (a.status === 'offline' && b.status === 'offline') {
                     const timeA = a.lastSeen ? new Date(a.lastSeen).getTime() : 0;
                     const timeB = b.lastSeen ? new Date(b.lastSeen).getTime() : 0;
-                    return timeB - timeA; // Более недавние выше
+                    return timeB - timeA;
                 }
 
                 if (a.status === 'away' && b.status === 'away') {
@@ -3250,7 +3289,6 @@ if (isChatPage) {
                     return timeB - timeA;
                 }
 
-                // Для online можно сортировать по имени (опционально)
                 if (a.status === 'online' && b.status === 'online') {
                     return a.username.localeCompare(b.username);
                 }
@@ -3262,12 +3300,21 @@ if (isChatPage) {
                 const statusClass = u.status === 'online' ? 'status-online' : (u.status === 'away' ? 'status-away' : 'status-offline');
                 const statusText = u.status === 'online' ? 'онлайн' : (u.status === 'away' ? 'отошел' : formatLastSeen(u.lastSeen));
 
+                // Аватар пользователя
+                let avatarHtml = '';
+                if (u.avatar && u.avatar !== 'null' && u.avatar !== 'undefined' && u.avatar.trim() !== '') {
+                    avatarHtml = `<img src="${escapeHtml(u.avatar)}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;" onerror="this.style.display='none'; this.parentElement.style.background='linear-gradient(135deg, #667eea 0%, #764ba2 100%)'; this.parentElement.innerHTML='${escapeHtml(u.username.charAt(0).toUpperCase())}';">`;
+                } else {
+                    avatarHtml = `<div style="width:32px; height:32px; border-radius:50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">${escapeHtml(u.username.charAt(0).toUpperCase())}</div>`;
+                }
+
                 const displayName = `${escapeHtml(u.username)} <span style="font-size: 0.7rem; color: #6c757d;">(${escapeHtml(statusText)})</span>`;
 
                 html += `<div class="user-item">
-                <div class="user-info">
-                    <div class="user-status ${statusClass}"></div>
-                    <div>${displayName}</strong>${u.role === 'admin' ? '<i class="fas fa-crown text-warning ms-1"></i>' : ''}</div>
+                <div class="user-info" style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width:32px; height:32px;">${avatarHtml}</div>
+                    <div class="user-status ${statusClass}" style="width: 10px; height: 10px; border-radius: 50%; margin-left: 5px;"></div>
+                    <div>${displayName}${u.role === 'admin' ? '<i class="fas fa-crown text-warning ms-1"></i>' : ''}</div>
                 </div>
                 <button class="chat-user-btn" onclick="event.stopPropagation(); startDMWithUser('${escapeHtml(u.username)}')"><i class="fas fa-comment"></i></button>
             </div>`;
@@ -5034,6 +5081,34 @@ if (isChatPage) {
         }
     });
 
+    // Загрузка настроек уведомлений с сервера
+    async function loadNotificationSettings() {
+        try {
+            const response = await fetch('/api/users/settings');
+            if (response.ok) {
+                const data = await response.json();
+                notificationsEnabled = data.notificationsEnabled !== false;
+                const notificationToggle = document.getElementById('notificationToggle') as HTMLInputElement | null;
+                if (notificationToggle) {
+                    notificationToggle.checked = notificationsEnabled;
+                }
+                localStorage.setItem('notifications_enabled', notificationsEnabled.toString());
+            }
+        } catch (error) {
+            console.error('Error loading notification settings:', error);
+            // fallback на localStorage
+            const saved = localStorage.getItem('notifications_enabled');
+            if (saved !== null) {
+                notificationsEnabled = saved === 'true';
+                const notificationToggle = document.getElementById('notificationToggle') as HTMLInputElement | null;
+                if (notificationToggle) {
+                    notificationToggle.checked = notificationsEnabled;
+                }
+            }
+        }
+    }
+
+
     // ============ ИНИЦИАЛИЗАЦИЯ ЧАТА ============
 
     async function initChat() {
@@ -5163,15 +5238,9 @@ if (isChatPage) {
             });
         }
 
-        const saved = localStorage.getItem('notifications_enabled');
-        if (saved !== null) notificationsEnabled = saved === 'true';
-        const notificationToggle = document.getElementById('notificationToggle') as HTMLInputElement | null;
-        if (notificationToggle) {
-            notificationToggle.addEventListener('change', (e) => {
-                notificationsEnabled = (e.target as HTMLInputElement).checked;
-                localStorage.setItem('notifications_enabled', notificationsEnabled.toString());
-            });
-        }
+        
+        // В initChat() вызовите эту функцию
+        await loadNotificationSettings();
 
         const textarea = document.getElementById('messageInput') as HTMLTextAreaElement | null;
         if (textarea) {
@@ -5583,8 +5652,8 @@ if (isRegisterPage) {
             } else if (username.value.length > 20) {
                 feedback.innerHTML = '<span class="text-danger">❌ Имя не должно превышать 20 символов</span>';
                 return false;
-            } else if (!/^[a-zA-Z0-9_]+$/.test(username.value)) {
-                feedback.innerHTML = '<span class="text-danger">❌ Используйте только буквы, цифры и знак подчеркивания</span>';
+            } else if (!/^[a-zA-Zа-яА-Я0-9_]+$/.test(username.value)) {
+                feedback.innerHTML = '<span class="text-danger">❌ Используйте только буквы (русские/английские), цифры и знак подчеркивания</span>';
                 return false;
             } else {
                 feedback.innerHTML = '<span class="text-success">✓ Имя подходит</span>';

@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using System.Collections.Concurrent;
 using System.Text.Json;
+using static System.Collections.Specialized.BitVector32;
 
 namespace ChatApp.Hubs;
 
@@ -215,16 +216,21 @@ public class ChatHub : Hub
                                         return;
                                     }
 
-                                    // Отправляем статус начала поиска
-                                    await hubContext.Clients.Client(connectionIdCopy).SendAsync("search_status", new
-                                    {
-                                        message = "🔍 Начинаю поиск информации...",
-                                        status = "searching",
-                                        timestamp = DateTime.UtcNow
-                                    });
+                              
+                                    var rows = await db.Messages
+                                        .Where(m => m.ChannelId == channelId)
+                                        .OrderBy(m => m.Timestamp)
+                                        .Select(m => new { m.Content })
+                                        .ToListAsync();
 
-                                    // Генерируем ответ с поиском
-                                    var response = await ollama.GenerateResponseAsync(contentCopy, null, default, connectionIdCopy);
+                                    var context = "";
+                                    var length = context.Length;
+                                    foreach (var r in rows)
+                                    {
+                                        context += r + "\n---\n";
+                                    }
+
+                                    var response = await ollama.GenerateResponseAsync(contentCopy, context, default, connectionIdCopy);
 
                                     if (string.IsNullOrWhiteSpace(response))
                                     {
@@ -360,7 +366,21 @@ public class ChatHub : Hub
                     var botUser = await db.Users.FirstOrDefaultAsync(u => u.IsBot == true);
                     if (botUser == null) return;
 
-                    var response = await ollama.GenerateResponseAsync(contentCopy, null, default, connectionIdCopy);
+
+                    var rows = await db.Messages
+                        .Where(m => m.ChannelId == channelId)
+                        .OrderBy(m => m.Timestamp)
+                        .Select(m => new { m.Content })
+                        .ToListAsync();
+
+                    var context = "";
+                    var length = context.Length;
+                    foreach (var r in rows)
+                    {
+                        context += r + "\n---\n";
+                    }
+
+                    var response = await ollama.GenerateResponseAsync(contentCopy, context, default, connectionIdCopy);
 
                     if (string.IsNullOrWhiteSpace(response))
                     {

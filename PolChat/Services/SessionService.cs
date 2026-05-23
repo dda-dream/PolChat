@@ -10,7 +10,9 @@ public interface ISessionService
 {
     Task<SessionData?> GetSessionAsync(string? sessionId);
     Task<string> CreateSessionAsync(SessionData data);
+    Task RemoveSessionAsync(string sessionId);
     Task DeleteSessionAsync(string sessionId);
+
 }
 
 public class SessionService : ISessionService
@@ -35,7 +37,6 @@ public class SessionService : ISessionService
             var data = await _redis.StringGetAsync($"session_id:{sessionId}");
             if (data.IsNullOrEmpty) return null;
 
-            var session = JsonSerializer.Deserialize<SessionData>(data.ToString()!);
             return JsonSerializer.Deserialize<SessionData>(data.ToString()!);
         }
         catch (Exception ex)
@@ -51,7 +52,7 @@ public class SessionService : ISessionService
         var json = JsonSerializer.Serialize(data);
 
         try
-        {   
+        {
             await _redis.StringSetAsync(
                 $"session_id:{sessionId}",
                 json,
@@ -64,6 +65,12 @@ public class SessionService : ISessionService
         }
 
         return sessionId;
+    }
+
+    // Реализация RemoveSessionAsync (просто вызывает DeleteSessionAsync)
+    public async Task RemoveSessionAsync(string sessionId)
+    {
+        await DeleteSessionAsync(sessionId);
     }
 
     public async Task DeleteSessionAsync(string sessionId)

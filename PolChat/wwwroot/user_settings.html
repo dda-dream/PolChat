@@ -1,0 +1,846 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Настройки пользователя - Pol Чат</title>
+    <link href="/static/ext/bootstrap.min.css" rel="stylesheet">
+    <link href="/static/ext/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .settings-container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .settings-card {
+            background: white;
+            border-radius: 24px;
+            overflow: hidden;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+        }
+
+        .settings-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 30px 24px;
+            color: white;
+            text-align: center;
+        }
+
+        .avatar-container {
+            position: relative;
+            display: inline-block;
+            margin-bottom: 15px;
+            cursor: pointer;
+        }
+
+        .user-avatar {
+            width: 120px;
+            height: 120px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+            font-weight: bold;
+            border: 3px solid white;
+            transition: all 0.3s ease;
+            overflow: hidden;
+            position: relative;
+        }
+
+            .user-avatar img {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+            }
+
+        .avatar-container:hover .user-avatar {
+            opacity: 0.8;
+            transform: scale(1.05);
+        }
+
+        .avatar-edit-overlay {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            background: rgba(0,0,0,0.6);
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 16px;
+        }
+
+        .settings-header h2 {
+            margin: 0 0 5px;
+            font-size: 24px;
+        }
+
+        .settings-header p {
+            margin: 0;
+            opacity: 0.9;
+            font-size: 14px;
+        }
+
+        .settings-section {
+            padding: 20px 24px;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+            .settings-section:last-child {
+                border-bottom: none;
+            }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+            .section-title i {
+                color: #667eea;
+                width: 24px;
+            }
+
+        .setting-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 0;
+            cursor: pointer;
+            transition: background 0.2s;
+            border-radius: 12px;
+        }
+
+            .setting-item:hover {
+                background: #f8f9fa;
+            }
+
+        .setting-info {
+            flex: 1;
+        }
+
+        .setting-label {
+            font-weight: 500;
+            margin-bottom: 4px;
+            display: block;
+        }
+
+        .setting-desc {
+            font-size: 12px;
+            color: #6c757d;
+        }
+
+        .setting-value {
+            color: #6c757d;
+            font-size: 14px;
+            margin-right: 12px;
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+            .info-row:last-child {
+                border-bottom: none;
+            }
+
+        .info-label {
+            color: #6c757d;
+            font-size: 13px;
+        }
+
+        .info-value {
+            font-size: 13px;
+            font-weight: 500;
+            color: #333;
+        }
+
+        .logout-btn {
+            width: 100%;
+            padding: 14px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+            .logout-btn:hover {
+                background: #c82333;
+                transform: translateY(-1px);
+                box-shadow: 0 4px 12px rgba(220,53,69,0.3);
+            }
+
+        .back-btn {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: white;
+            border: none;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            z-index: 100;
+        }
+
+            .back-btn:hover {
+                transform: scale(1.05);
+                box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+            }
+
+            .back-btn i {
+                font-size: 20px;
+                color: #333;
+            }
+
+        .notification-toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.9);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 30px;
+            font-size: 14px;
+            z-index: 2000;
+            animation: slideUp 0.3s ease;
+            white-space: nowrap;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateX(-50%) translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+        }
+
+        .modal-custom {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+            .modal-custom.active {
+                display: flex;
+            }
+
+        .modal-content-custom {
+            background: white;
+            border-radius: 20px;
+            max-width: 400px;
+            width: 90%;
+            padding: 24px;
+            animation: modalSlideIn 0.3s ease;
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal-content-custom h3 {
+            margin-bottom: 20px;
+            font-size: 20px;
+        }
+
+        .modal-content-custom input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 12px;
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+
+            .modal-content-custom input:focus {
+                outline: none;
+                border-color: #667eea;
+            }
+
+        .modal-buttons {
+            display: flex;
+            gap: 12px;
+        }
+
+            .modal-buttons button {
+                flex: 1;
+                padding: 12px;
+                border: none;
+                border-radius: 12px;
+                cursor: pointer;
+                font-weight: 500;
+            }
+
+            .modal-buttons .save-btn {
+                background: #28a745;
+                color: white;
+            }
+
+            .modal-buttons .cancel-btn {
+                background: #6c757d;
+                color: white;
+            }
+
+        .avatar-upload-area {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .avatar-preview {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            margin: 0 auto 15px;
+            background: #f0f2f5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+            .avatar-preview img {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+            }
+
+            .avatar-preview .preview-placeholder {
+                font-size: 48px;
+                color: #adb5bd;
+            }
+
+        .upload-btn {
+            background: #667eea;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: all 0.2s;
+        }
+
+            .upload-btn:hover {
+                background: #5a67d8;
+                transform: translateY(-1px);
+            }
+
+        .delete-avatar-btn {
+            background: #dc3545;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: all 0.2s;
+        }
+
+            .delete-avatar-btn:hover {
+                background: #c82333;
+            }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            .settings-header {
+                padding: 24px 20px;
+            }
+
+            .user-avatar {
+                width: 100px;
+                height: 100px;
+                font-size: 36px;
+            }
+
+            .settings-section {
+                padding: 16px 20px;
+            }
+
+            .back-btn {
+                top: 15px;
+                left: 15px;
+                width: 40px;
+                height: 40px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <button class="back-btn" onclick="goBack()">
+        <i class="fas fa-arrow-left"></i>
+    </button>
+
+    <div class="settings-container">
+        <div class="settings-card">
+            <div class="settings-header">
+                <div class="avatar-container" onclick="openAvatarModal()">
+                    <div class="user-avatar" id="userAvatar">
+                        <span id="avatarLetter">?</span>
+                    </div>
+                    <div class="avatar-edit-overlay">
+                        <i class="fas fa-camera"></i>
+                    </div>
+                </div>
+                <h2 id="username">Загрузка...</h2>
+                <p id="userRole"></p>
+            </div>
+
+            <div class="settings-section">
+                <div class="section-title">
+                    <i class="fas fa-user-circle"></i>
+                    <span>Информация об аккаунте</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label"><i class="fas fa-calendar-alt"></i> Дата регистрации</span>
+                    <span class="info-value" id="createdAt">—</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label"><i class="fas fa-clock"></i> Последний визит</span>
+                    <span class="info-value" id="lastSeen">—</span>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <div class="section-title">
+                    <i class="fas fa-user-edit"></i>
+                    <span>Настройки профиля</span>
+                </div>
+                <div class="setting-item" onclick="openUsernameModal()">
+                    <div class="setting-info">
+                        <span class="setting-label">Имя пользователя</span>
+                        <span class="setting-desc">Изменить отображаемое имя</span>
+                    </div>
+                    <div class="setting-value" id="currentUsername">—</div>
+                    <i class="fas fa-chevron-right" style="color: #adb5bd;"></i>
+                </div>
+                <div class="setting-item" onclick="openAvatarModal()">
+                    <div class="setting-info">
+                        <span class="setting-label">Фото профиля</span>
+                        <span class="setting-desc">Загрузить или изменить фото</span>
+                    </div>
+                    <i class="fas fa-chevron-right" style="color: #adb5bd;"></i>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <div class="section-title">
+                    <i class="fas fa-shield-alt"></i>
+                    <span>Безопасность</span>
+                </div>
+                <button class="logout-btn" id="logoutBtn">
+                    <i class="fas fa-sign-out-alt"></i> Выйти из аккаунта
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно смены имени -->
+    <div id="usernameModal" class="modal-custom">
+        <div class="modal-content-custom">
+            <h3>Изменить имя пользователя</h3>
+            <input type="text" id="newUsernameInput" placeholder="Новое имя (3-20 символов)" maxlength="20">
+            <div class="modal-buttons">
+                <button class="save-btn" onclick="updateUsername()">Сохранить</button>
+                <button class="cancel-btn" onclick="closeUsernameModal()">Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно загрузки аватара -->
+    <div id="avatarModal" class="modal-custom">
+        <div class="modal-content-custom">
+            <h3>Фото профиля</h3>
+            <div class="avatar-upload-area">
+                <div class="avatar-preview" id="avatarPreview">
+                    <div class="preview-placeholder">
+                        <i class="fas fa-user fa-3x"></i>
+                    </div>
+                </div>
+                <input type="file" id="avatarInput" accept="image/jpeg,image/png,image/gif,image/webp" style="display: none;">
+                <button class="upload-btn" onclick="document.getElementById('avatarInput').click()">
+                    <i class="fas fa-upload"></i> Загрузить фото
+                </button>
+                <button class="delete-avatar-btn" id="deleteAvatarBtn" style="display: none;" onclick="deleteAvatar()">
+                    <i class="fas fa-trash"></i> Удалить фото
+                </button>
+            </div>
+            <div class="modal-buttons">
+                <button class="cancel-btn" onclick="closeAvatarModal()">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentUser = null;
+        let isUploading = false;
+
+        function showNotification(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = 'notification-toast';
+            toast.innerHTML = `<i class="fas ${type === 'success' ? 'fa-check-circle' : type === 'danger' ? 'fa-exclamation-triangle' : 'fa-info-circle'}"></i> ${message}`;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        function formatDate(dateString) {
+            if (!dateString) return '—';
+            const date = new Date(dateString);
+            return date.toLocaleString('ru-RU', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        async function loadUserSettings() {
+            try {
+                const response = await fetch('/api/users/settings');
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        window.location.href = '/login';
+                        return;
+                    }
+                    throw new Error('Failed to load settings');
+                }
+
+                const data = await response.json();
+                currentUser = data;
+
+                // Обновляем UI
+                updateAvatarDisplay(data.avatar);
+                document.getElementById('username').textContent = data.username;
+                document.getElementById('currentUsername').textContent = data.username;
+                document.getElementById('userRole').textContent = data.role === 'admin' ? 'Администратор' : 'Пользователь';
+                document.getElementById('createdAt').textContent = formatDate(data.createdAt);
+                document.getElementById('lastSeen').textContent = formatDate(data.lastSeen);
+
+            } catch (error) {
+                console.error('Error loading settings:', error);
+                showNotification('Ошибка загрузки настроек', 'danger');
+            }
+        }
+
+        function updateAvatarDisplay(avatarUrl) {
+            const avatarContainer = document.getElementById('userAvatar');
+
+            if (avatarUrl && avatarUrl !== 'null' && avatarUrl !== 'undefined') {
+                // Если есть загруженный аватар
+                avatarContainer.innerHTML = `<img src="${avatarUrl}?t=${Date.now()}" alt="avatar" style="width:100%; height:100%; object-fit:cover;">`;
+            } else {
+                // По умолчанию - первая буква имени
+                const letter = currentUser?.username?.charAt(0).toUpperCase() || '?';
+                avatarContainer.innerHTML = `<span id="avatarLetter" style="font-size: 36px; font-weight: bold;">${letter}</span>`;
+            }
+        }
+
+        function updateAvatarPreview(file) {
+            const previewContainer = document.getElementById('avatarPreview');
+            const reader = new FileReader();
+
+            reader.onload = function (e) {
+                previewContainer.innerHTML = `<img src="${e.target.result}" alt="Preview">`;
+            };
+
+            reader.readAsDataURL(file);
+        }
+
+        async function uploadAvatar(file) {
+            if (isUploading) return;
+
+            // Проверка размера
+            if (file.size > 2 * 1024 * 1024) {
+                showNotification('Файл слишком большой. Максимум 2MB', 'danger');
+                return;
+            }
+
+            // Проверка типа
+            const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+            if (!allowedTypes.includes(file.type)) {
+                showNotification('Разрешены только JPEG, PNG, GIF, WEBP', 'danger');
+                return;
+            }
+
+            isUploading = true;
+            const uploadBtn = document.querySelector('.upload-btn');
+            const originalText = uploadBtn.innerHTML;
+            uploadBtn.innerHTML = '<span class="loading-spinner"></span> Загрузка...';
+            uploadBtn.disabled = true;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch('/api/users/settings/avatar', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    currentUser.avatar = data.avatarUrl;
+                    updateAvatarDisplay(data.avatarUrl);
+                    showNotification('Аватар обновлен!', 'success');
+                    closeAvatarModal();
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    showNotification(data.error || 'Ошибка загрузки', 'danger');
+                }
+            } catch (error) {
+                console.error('Error uploading avatar:', error);
+                showNotification('Ошибка соединения с сервером', 'danger');
+            } finally {
+                isUploading = false;
+                uploadBtn.innerHTML = originalText;
+                uploadBtn.disabled = false;
+            }
+        }
+
+        async function deleteAvatar() {
+            if (!confirm('Вы уверены, что хотите удалить фото профиля?')) return;
+
+            try {
+                const response = await fetch('/api/users/settings/avatar', {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    currentUser.avatar = null;
+                    updateAvatarDisplay(null);
+                    showNotification('Фото профиля удалено', 'success');
+                    closeAvatarModal();
+                    setTimeout(() => location.reload(), 500);
+                } else {
+                    showNotification('Ошибка удаления фото', 'danger');
+                }
+            } catch (error) {
+                console.error('Error deleting avatar:', error);
+                showNotification('Ошибка соединения с сервером', 'danger');
+            }
+        }
+
+        function openUsernameModal() {
+            const modal = document.getElementById('usernameModal');
+            const input = document.getElementById('newUsernameInput');
+            input.value = currentUser.username;
+            modal.classList.add('active');
+            input.focus();
+        }
+
+        function closeUsernameModal() {
+            document.getElementById('usernameModal').classList.remove('active');
+        }
+
+        async function updateUsername() {
+            const newUsername = document.getElementById('newUsernameInput').value.trim();
+
+            if (!newUsername) {
+                showNotification('Введите имя пользователя', 'danger');
+                return;
+            }
+
+            if (newUsername.length < 3 || newUsername.length > 20) {
+                showNotification('Имя должно быть от 3 до 20 символов', 'danger');
+                return;
+            }
+
+            // Разрешаем русские и английские буквы, цифры и подчеркивание
+            if (!/^[a-zA-Zа-яА-Я0-9_]+$/.test(newUsername)) {
+                showNotification('Используйте только буквы (русские/английские), цифры и знак подчеркивания', 'danger');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/users/settings/username', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ newUsername: newUsername })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showNotification('Имя пользователя изменено! Перезагрузка...', 'success');
+                    // Сохраняем новое имя в localStorage
+                    localStorage.setItem('currentUsername', newUsername);
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
+                } else {
+                    showNotification(data.error || 'Ошибка изменения имени', 'danger');
+                }
+            } catch (error) {
+                console.error('Error updating username:', error);
+                showNotification('Ошибка соединения с сервером', 'danger');
+            }
+
+            closeUsernameModal();
+        }
+
+        function openAvatarModal() {
+            const modal = document.getElementById('avatarModal');
+            const deleteBtn = document.getElementById('deleteAvatarBtn');
+            const previewContainer = document.getElementById('avatarPreview');
+
+            // Сбрасываем预览
+            if (currentUser.avatar && currentUser.avatar !== 'null') {
+                previewContainer.innerHTML = `<img src="${currentUser.avatar}?t=${Date.now()}" alt="Current">`;
+                deleteBtn.style.display = 'block';
+            } else {
+                previewContainer.innerHTML = '<div class="preview-placeholder"><i class="fas fa-user fa-3x"></i></div>';
+                deleteBtn.style.display = 'none';
+            }
+
+            modal.classList.add('active');
+
+            // Обработчик выбора файла
+            const avatarInput = document.getElementById('avatarInput');
+            avatarInput.onchange = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    updateAvatarPreview(file);
+                    uploadAvatar(file);
+                }
+                avatarInput.value = '';
+            };
+        }
+
+        function closeAvatarModal() {
+            document.getElementById('avatarModal').classList.remove('active');
+        }
+
+        async function logout() {
+            const confirmed = confirm('Вы уверены, что хотите выйти из аккаунта?');
+            if (!confirmed) return;
+
+            try {
+                const response = await fetch('/api/users/logout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (response.ok) {
+                    localStorage.removeItem('rememberedUser');
+                    localStorage.removeItem('lastChat');
+                    localStorage.removeItem('notifications_enabled');
+
+                    showNotification('Выход выполнен успешно', 'success');
+                    setTimeout(() => {
+                        window.location.href = '/login';
+                    }, 500);
+                } else {
+                    showNotification('Ошибка при выходе', 'danger');
+                }
+            } catch (error) {
+                console.error('Logout error:', error);
+                showNotification('Ошибка соединения с сервером', 'danger');
+            }
+        }
+
+        function goBack() {
+            window.location.href = '/';
+        }
+
+        // Закрытие модальных окон по клику вне
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('modal-custom')) {
+                e.target.classList.remove('active');
+            }
+        });
+
+        // Инициализация
+        document.addEventListener('DOMContentLoaded', () => {
+            loadUserSettings();
+
+            const logoutBtn = document.getElementById('logoutBtn');
+            if (logoutBtn) {
+                logoutBtn.addEventListener('click', logout);
+            }
+        });
+    </script>
+</body>
+</html>

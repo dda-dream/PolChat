@@ -2,6 +2,7 @@
 using ChatApp.Hubs;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Playwright;
+using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 
 namespace ChatApp.Services;
@@ -57,9 +58,9 @@ public class WebSearchService : IAsyncDisposable
         return _browser;
     }
 
-    public async Task<List<SearchResult>> SearchAsync(string query, int maxResults = 5, string? connectionId = null)
+    public async Task<List<SearchResult>> SearchAsync(string query, int maxResults = 5, string? connectionId = null, int maxConcurrency = 3)
     {
-        var results = new List<SearchResult>();
+        var results = new ConcurrentBag<SearchResult>();
 
         try
         {
@@ -75,42 +76,85 @@ public class WebSearchService : IAsyncDisposable
 
             var urls = await ExtractUrlsStepByStepAsync(url);
 
-            await NotifySearchStatus(connectionId, $"✅ Найдено {urls.Count} ссылок. Начинаем анализ...", "links_found", urls.Count);
+            var urlsToProcess = urls.Take(maxResults).ToList();
+            var totalToProcess = urlsToProcess.Count;
 
-            int processed = 0;
-            foreach (var resultUrl in urls.Take(maxResults))
-            {
-                processed++;
+            await NotifySearchStatus(connectionId, $"✅ Найдено {totalToProcess} ссылок. Начинаем параллельный анализ...", "links_found", totalToProcess);
 
-                // Отправляем статус обработки каждой ссылки
-                await NotifySearchStatus(
-                    connectionId,
-                    $"📖 Анализируем страницу {processed} из {Math.Min(maxResults, urls.Count)}: {resultUrl[..Math.Min(50, resultUrl.Length)]}...",
-                    "processing_page",
-                    processed,
-                    Math.Min(maxResults, urls.Count));
+            // Создаем Semaphore для ограничения параллелизма
+            using var semaphore = new SemaphoreSlim(maxConcurrency);
 
-                var content = await GetFullPageTextAsync(resultUrl);
+            // Создаем задачи для параллельной обработки
+            var tasks = urlsToProcess.Select((resultUrl, index) => ProcessUrlAsync(
+                resultUrl,
+                index + 1,
+                totalToProcess,
+                connectionId,
+                semaphore,
+                results)).ToList();
 
-                results.Add(new SearchResult
-                {
-                    Url = resultUrl,
-                    Title = "",
-                    Snippet = content
-                });
-            }
+            // Ожидаем завершения всех задач
+            await Task.WhenAll(tasks);
 
             // Отправляем статус завершения
             await NotifySearchStatus(connectionId, $"✅ Поиск завершен. Найдено {results.Count} страниц с информацией.", "completed", results.Count);
 
             _logger.LogInformation("Found {Count} results", results.Count);
-            return results;
+            return results.ToList();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Search failed for query: {Query}", query);
             await NotifySearchStatus(connectionId, $"❌ Ошибка поиска: {ex.Message}", "error");
-            return results;
+            return results.ToList();
+        }
+    }
+
+    private async Task ProcessUrlAsync(
+        string resultUrl,
+        int processed,
+        int totalToProcess,
+        string? connectionId,
+        SemaphoreSlim semaphore,
+        ConcurrentBag<SearchResult> results)
+    {
+        await semaphore.WaitAsync();
+        try
+        {
+            // Отправляем статус обработки каждой ссылки
+            await NotifySearchStatus(
+                connectionId,
+                $"📖 Анализируем страницу {processed} из {totalToProcess}: {resultUrl[..Math.Min(50, resultUrl.Length)]}...",
+                "processing_page",
+                processed,
+                totalToProcess);
+
+            var content = await GetFullPageTextAsync(resultUrl);
+
+            results.Add(new SearchResult
+            {
+                Url = resultUrl,
+                Title = "",
+                Snippet = content
+            });
+
+            _logger.LogDebug("Processed {Processed}/{Total}: {Url}", processed, totalToProcess, resultUrl);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to process URL: {Url}", resultUrl);
+
+            // Добавляем результат с ошибкой
+            results.Add(new SearchResult
+            {
+                Url = resultUrl,
+                Title = "",
+                Snippet = $"[Ошибка загрузки: {ex.Message}]"
+            });
+        }
+        finally
+        {
+            semaphore.Release();
         }
     }
 

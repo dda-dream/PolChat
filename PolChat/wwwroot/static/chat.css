@@ -362,6 +362,433 @@ body.page-chat {
             border-color: rgba(255, 255, 255, 0.3);
         }
     }
+    /* ============ МОБИЛЬНЫЕ СТИЛИ (до 768px) ============ */
+    @media (max-width: 768px) {
+        /* Анимации для сайдбара */
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 280px;
+            transform: translateX(-100%);
+            z-index: 1000;
+            box-shadow: none;
+            border-right: none;
+        }
+
+            .sidebar.open {
+                transform: translateX(0);
+                box-shadow: 2px 0 20px rgba(0,0,0,0.2);
+            }
+
+        .sidebar-overlay {
+            display: block;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(4px);
+            z-index: 999;
+            transition: opacity 0.3s ease;
+            opacity: 0;
+            visibility: hidden;
+        }
+
+            .sidebar-overlay.active {
+                opacity: 1;
+                visibility: visible;
+            }
+
+        .menu-toggle {
+            display: flex !important;
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            z-index: 1001;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 2px 15px rgba(0,0,0,0.3);
+            transition: all 0.2s;
+            align-items: center;
+            justify-content: center;
+        }
+        /* ============ ОСНОВНЫЕ ПРОПОРЦИИ ЭКРАНА ============ */
+        .chat-container {
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .main-chat {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        /* Область сообщений - занимает 2/3 экрана */
+        .messages-area {
+            flex: 2;
+            min-height: 0;
+            padding: 12px;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        /* Область ввода - фиксированная высота */
+        .input-area {
+            flex: 0 0 auto;
+            background: white;
+            padding: 10px 12px;
+            border-top: 1px solid #e0e0e0;
+            width: 100%;
+        }
+        /* Список каналов и пользователей (через кнопку) - не влияет на пропорции */
+        .sidebar {
+            height: 100%;
+            overflow-y: auto;
+        }
+        /* Исправляем высоту контейнера */
+        html, body {
+            height: 100%;
+            overflow: hidden;
+            position: fixed;
+        }
+
+            body.page-chat {
+                height: 100%;
+                overflow: hidden;
+            }
+
+        .chat-header {
+            flex: 0 0 auto;
+            padding: 12px 15px;
+        }
+
+        .message {
+            margin-bottom: 12px;
+        }
+
+        .message-wrapper {
+            max-width: 90%;
+        }
+
+        .message-bubble {
+            padding: 8px 12px;
+            border-radius: 16px;
+        }
+
+        .message-avatar {
+            width: 32px;
+            height: 32px;
+            font-size: 12px;
+        }
+
+        .message-header {
+            font-size: 11px;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+
+        .message-text {
+            font-size: 14px;
+            line-height: 1.4;
+        }
+
+        .input-wrapper {
+            padding: 6px 12px;
+        }
+
+            .input-wrapper textarea {
+                font-size: 15px;
+                min-height: 32px;
+                max-height: 100px;
+            }
+
+        .input-btn {
+            padding: 6px;
+            font-size: 18px;
+        }
+
+        .send-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .reaction-panel {
+            padding: 6px 10px;
+            gap: 6px;
+        }
+
+        .reaction-option {
+            font-size: 20px;
+            padding: 4px 6px;
+        }
+
+        .emoji-picker-container {
+            width: 280px;
+            bottom: 70px;
+            right: 10px;
+            left: auto;
+        }
+
+        .scroll-buttons {
+            bottom: 80px;
+            right: 10px;
+        }
+
+        .scroll-btn {
+            width: 40px;
+            height: 40px;
+            font-size: 14px;
+        }
+
+        .notification {
+            top: 10px;
+            right: 10px;
+            left: 10px;
+            min-width: auto;
+            max-width: none;
+        }
+
+        .status-notification {
+            bottom: 70px;
+            right: 10px;
+            left: auto;
+            min-width: 200px;
+        }
+
+        .paste-preview {
+            bottom: 70px;
+            right: 10px;
+            left: auto;
+            max-width: 280px;
+        }
+
+        .upload-progress-container {
+            bottom: 70px;
+            min-width: 260px;
+            padding: 10px 16px;
+        }
+
+        .message-reply {
+            padding: 4px 8px;
+            font-size: 11px;
+        }
+
+        .reply-header {
+            font-size: 11px;
+        }
+
+        .message-reactions {
+            margin-top: 6px;
+            gap: 4px;
+        }
+
+        .reaction-badge {
+            padding: 2px 6px;
+            font-size: 12px;
+        }
+
+        .reaction-emoji {
+            font-size: 14px;
+        }
+
+        .reaction-count {
+            font-size: 10px;
+            min-width: 16px;
+        }
+
+        .message-image {
+            max-height: 200px;
+            min-height: 200px;
+        }
+
+        .message-file video {
+            max-height: 200px;
+            min-height: 200px;
+        }
+
+        .video-play-button {
+            width: 45px;
+            height: 45px;
+        }
+
+            .video-play-button i {
+                font-size: 18px;
+            }
+
+        .reaction-users-popup {
+            max-width: 280px;
+            max-height: 300px;
+        }
+
+        .reaction-user-item {
+            font-size: 12px;
+        }
+
+        .channel-item, .dm-item {
+            padding: 8px 12px;
+        }
+
+        .channel-name, .dm-name {
+            font-size: 14px;
+        }
+
+        .channel-description, .dm-preview {
+            font-size: 11px;
+            margin-left: 20px;
+        }
+
+        .users-list .user-info {
+            font-size: 13px;
+        }
+
+        .sidebar-header {
+            padding: 15px;
+        }
+
+        .user-status {
+            width: 8px;
+            height: 8px;
+            margin-right: 8px;
+        }
+
+        .chat-user-btn {
+            padding: 4px 10px;
+            font-size: 14px;
+        }
+
+        .section-header {
+            margin-bottom: 8px;
+        }
+
+        .create-channel-btn, .create-dm-btn {
+            font-size: 12px;
+            padding: 4px 8px;
+        }
+
+        .notification-settings {
+            padding: 8px 12px;
+            font-size: 12px;
+        }
+
+        .test-notification-btn {
+            padding: 4px 8px;
+            font-size: 11px;
+        }
+
+        .btn-sm {
+            font-size: 12px;
+        }
+
+        .server-time-indicators {
+            font-size: 9px;
+            gap: 8px;
+        }
+    }
+    /* ============ ДЛЯ ОЧЕНЬ МАЛЕНЬКИХ ЭКРАНОВ (до 480px) ============ */
+    @media (max-width: 480px) {
+        .messages-area {
+            padding: 8px;
+        }
+
+        .message-wrapper {
+            max-width: 95%;
+        }
+
+        .message-bubble {
+            padding: 6px 10px;
+        }
+
+        .message-avatar {
+            width: 28px;
+            height: 28px;
+            font-size: 11px;
+        }
+
+        .message-text {
+            font-size: 13px;
+        }
+
+        .input-area {
+            padding: 8px 10px;
+        }
+
+        .input-wrapper {
+            padding: 4px 10px;
+        }
+
+        .menu-toggle {
+            width: 44px;
+            height: 44px;
+            bottom: 15px;
+            left: 15px;
+        }
+
+        .sidebar {
+            width: 260px;
+        }
+
+        .reaction-option {
+            font-size: 18px;
+            padding: 3px 5px;
+        }
+
+        .full-reaction-grid {
+            grid-template-columns: repeat(auto-fill, minmax(32px, 1fr));
+            gap: 4px;
+        }
+
+        .full-emoji-item {
+            font-size: 20px;
+            padding: 4px;
+        }
+
+        .emoji-picker-container {
+            width: 260px;
+        }
+
+        .emoji-category {
+            font-size: 12px;
+            padding: 4px 6px;
+        }
+
+        .emoji-item {
+            font-size: 18px;
+            padding: 4px;
+        }
+
+        .scroll-buttons {
+            bottom: 70px;
+            right: 8px;
+        }
+
+        .scroll-btn {
+            width: 36px;
+            height: 36px;
+        }
+    }
+    /* ============ ДЛЯ ПЛАНШЕТОВ (769px - 1024px) ============ */
+    @media (min-width: 769px) and (max-width: 1024px) {
+        .sidebar {
+            width: 260px;
+            min-width: 260px;
+        }
+
+        .message-wrapper {
+            max-width: 75%;
+        }
+
+        .messages-area {
+            padding: 15px;
+        }
+    }
     /* ============ СООБЩЕНИЯ И ИХ ЭЛЕМЕНТЫ ============ */
 
     .messages-area {
@@ -390,6 +817,37 @@ body.page-chat {
         display: flex;
         width: 100%;
     }
+
+    .message-avatar {
+        width: clamp(28px, 7vw, 36px);
+        height: clamp(28px, 7vw, 36px);
+        border-radius: 50%;
+        overflow: hidden;
+        flex-shrink: 0;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+        .message-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .message-avatar div {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: clamp(12px, 3.5vw, 14px);
+            color: white;
+        }
+
     /* Свои сообщения - прижимаем к правому краю */
     .message-own {
         justify-content: flex-end;
@@ -2669,5 +3127,5 @@ body.page-user-management {
 }
 
 .reaction-badge .reaction-emoji {
-    font-size: 16px !important;
+    font-size: 28px !important;
 }

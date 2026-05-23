@@ -1,15 +1,21 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace ChatApp.Models;
 
 public class User
 {
-    public string Username { get; set; } = null!;
+    [Key]
+    [MaxLength(50)]
+    public string Username { get; set; } = null!;  // Первичный ключ
+
     public string Password { get; set; } = null!;
-    public string Role { get; set; } = "user"; // "user" or "admin"
+    public string Role { get; set; } = "user";
     public DateTime CreatedAt { get; set; }
-    public string Avatar { get; set; } = "default.png";
-    public string Status { get; set; } = "offline"; // "online", "away", "offline"
+    public string? Avatar { get; set; }
+    public string Status { get; set; } = "offline";
     public DateTime? LastSeen { get; set; }
     public bool IsBot { get; set; } = false;
+    public bool? NotificationsEnabled { get; set; } = true;
 }
 
 public class UserDto

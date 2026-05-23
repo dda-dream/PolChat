@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
+using System.ComponentModel.DataAnnotations;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -59,7 +60,7 @@ public class OllamaService
             {
                 _logger.LogInformation("Web search needed for: {UserMessage}", userMessage);
                 var searchResults = await PerformDeepWebSearchAsync(userMessage, cancellationToken, connectionId);
-
+                var l = searchResults.Length;
                 if (!string.IsNullOrEmpty(searchResults))
                 {
                     return await GenerateResponseWithContextAsync(userMessage, searchResults, cancellationToken);

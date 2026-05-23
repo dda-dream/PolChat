@@ -5,6 +5,9 @@ public class SessionData
     public string UserId { get; set; } = null!;
     public string Username { get; set; } = null!;
     public string Role { get; set; } = "user";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime ExpiresAt { get; set; } = DateTime.UtcNow.AddDays(7);
+    public DateTime LastActivityAt { get; set; } = DateTime.UtcNow;
 }
 
 public class InitialDataResponse

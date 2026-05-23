@@ -6,6 +6,7 @@ public class DMChannel
     public List<string> Participants { get; set; } = new();
     public string? CreatedBy { get; set; }
     public DateTime CreatedAt { get; set; }
+    public string Name { get; set; } = null!;
 }
 
 public class DMChannelDto
