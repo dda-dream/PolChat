@@ -41,6 +41,12 @@ public class InactiveUsersBackgroundService : BackgroundService
 
                 _logger.LogDebug("Inactive users check completed");
             }
+            catch (OperationCanceledException)
+            {
+                // Это нормальная реакция на остановку сервера.
+                // Просто выходим из цикла, завершая работу сервиса без ошибок.
+                break;
+            }
             catch (Exception ex) when (ex is not TaskCanceledException)
             {
                 _logger.LogError(ex, "Error checking inactive users");

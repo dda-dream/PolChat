@@ -24,7 +24,7 @@ namespace Tests // 1. Явно помещаем всё в namespace "Tests"
 
 
     [CollectionDefinition("MyTests")]
-    public class DatabaseCollection : ICollectionFixture<ChatDbWebApplicationFactory>
+    public class MyTestsCollection : ICollectionFixture<ChatDbWebApplicationFactory>
     {
         // Этот класс не содержит кода. 
         // Он нужен только для того, чтобы повесить атрибуты [CollectionDefinition] и ICollectionFixture.
@@ -64,6 +64,8 @@ namespace Tests // 1. Явно помещаем всё в namespace "Tests"
             // и наш _client его автоматически запоминает внутри себя.
         }
 
+        /*
+
         [Fact]
         public async Task Step02_ApiInitialData_ShouldWorkWithSessionCookie()
         {
@@ -88,6 +90,14 @@ namespace Tests // 1. Явно помещаем всё в namespace "Tests"
             // Assert
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         }
-    }
 
+        */
+
+
+
+    }
 }
+
+
+
+

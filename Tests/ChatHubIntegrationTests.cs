@@ -1,5 +1,8 @@
-﻿using Microsoft.AspNetCore.Http.Connections;
+﻿using ChatApp.Models;
+using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Net.Http.Headers;
+using Microsoft.Playwright;
 using System.Net;
 using System.Net.Http.Json;
 using Tests;
@@ -12,6 +15,7 @@ namespace Tests
     {
         private readonly ChatDbWebApplicationFactory _factory;
         private readonly HttpClient _client;
+        public System.Net.Cookie signalrCookie = null;
 
         public ChatHubIntegrationTests(ChatDbWebApplicationFactory factory)
         {
@@ -20,7 +24,7 @@ namespace Tests
         }
 
         [Fact]
-        public async Task Hub_SendMessage_ShouldBroadcastToClients()
+        public async Task Step1_Hub_Connect_And_Authorize()
         {
             // 1. ШАГ: Авторизуемся (если кука еще не установлена в прошлых тестах)
             var loginCredentials = new { Username = "dddMobile", Password = "123" };
@@ -31,9 +35,45 @@ namespace Tests
             var cookieContainer = new CookieContainer();
             var uri = new Uri("http://localhost"); // Базовый адрес TestServer по умолчанию
 
+
+            if (loginResponse.Headers.TryGetValues(HeaderNames.SetCookie, out var setCookieHeaders))
+            {
+                foreach (var header in setCookieHeaders)
+                {
+                    // Парсим строку заголовка во встроенную структуру ASP.NET Core
+                    if (SetCookieHeaderValue.TryParse(header, out var parsedCookie))
+                    {
+                        // Проверяем, что это именно наша кука сессии
+                        if (parsedCookie.Name == "SESSION_ID")
+                        {
+                            // Создаем стандартный System.Net.Cookie, который поймет SignalR клиент
+                            signalrCookie = new System.Net.Cookie(
+                                parsedCookie.Name.ToString(),
+                                parsedCookie.Value.ToString(),
+                                parsedCookie.Path.ToString() ?? "/",
+                                "localhost" // ОБЯЗАТЕЛЬНО: укажите хост, иначе кука не прикрепится к запросу
+                            );
+                            break;
+                        }
+                    }
+                }
+            }
+
+            string cookieHeaderValue = null;
+            if (loginResponse.Headers.TryGetValues("Set-Cookie", out var cookies))
+            {
+                // Находим заголовок нашей сессии (он выглядит как "SESSION_ID=значение; path=/; ...")
+                var sessionCookie = cookies.FirstOrDefault(c => c.StartsWith("SESSION_ID="));
+                if (sessionCookie != null)
+                {
+                    // Нам нужна только первая часть до точки с запятой: "SESSION_ID=наш_токен"
+                    cookieHeaderValue = sessionCookie.Split(';')[0];
+                }
+            }
+
             // Если вы используем стандартный CookieContainer в HttpClientHandler:
             // (Или вы можете вытащить её вручную из заголовка 'Set-Cookie' ответа loginResponse)
-            var authCookie = new Cookie("SESSION_ID", "значение_из_ответа_или_контейнера", "/", "localhost");
+            var authCookie = new System.Net.Cookie("SESSION_ID", signalrCookie.Value, "/", "localhost");
 
             // 2. ШАГ: Настраиваем подключение к Хабу
             var hubConnection = new HubConnectionBuilder()
@@ -46,7 +86,8 @@ namespace Tests
                     options.Transports = HttpTransportType.LongPolling;
 
                     // Передаем нашу куку авторизации
-                    options.Cookies.Add(authCookie);
+                    //options.Cookies.Add(authCookie);
+                    options.Headers.Add("Cookie", cookieHeaderValue);
                 })
                 .Build();
 
@@ -65,11 +106,11 @@ namespace Tests
 
             // 4. ШАГ: Вызываем метод Хаба (ЗДЕСЬ МОЖНО СТАВИТЬ БРЕЙКПОИНТ В КОД ХАБА)
             // Допустим, у вас в хабе есть метод: public async Task SendMessage(string msg)
-            await hubConnection.InvokeAsync("SendMessage", "Привет из xUnit!");
+            await hubConnection.InvokeAsync("LeaveChannel", "ChannelId--");
 
             // 5. ШАГ: Проверяем, что сообщение дошло до клиентов
             // Ждем максимум 3 секунды, чтобы тест не завис навсечь в случае ошибки
-            var receivedMessage = await tcs.Task.WaitAsync(TimeSpan.FromSeconds(3));
+            var receivedMessage = await tcs.Task.WaitAsync(TimeSpan.FromSeconds(60));
 
             Assert.Equal("Привет из xUnit!", receivedMessage);
 

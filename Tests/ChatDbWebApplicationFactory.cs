@@ -18,24 +18,46 @@ namespace Tests // 1. Явно помещаем всё в namespace "Tests"
 
         public HttpClient SharedClient { get; private set; }
 
+        // ГЛОБАЛЬНЫЙ СТАТИЧЕСКИЙ ЗАМОК И ФЛАГ КОНТРОЛЯ
+        private static readonly SemaphoreSlim _semaphore = new SemaphoreSlim(1, 1);
+        private static bool _isDatabaseCreated = false;
+
         public async Task InitializeAsync()
         {
-            using var connection = new NpgsqlConnection(MasterConnectionString);
-            await connection.OpenAsync();
+            // 1. Входим в замок. Если другой поток уже создает базу, текущий будет послушно ждать.
+            await _semaphore.WaitAsync();
+            try
+            {
+                // 2. Проверяем, не создал ли базу кто-то до нас
+                if (!_isDatabaseCreated)
+                {
+                    using var connection = new NpgsqlConnection(MasterConnectionString);
+                    await connection.OpenAsync();
 
-            // Отключаем всех от рабочей базы 'chat'
-            var terminateSql = "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'chat' AND pid <> pg_backend_pid();";
-            using var terminateCmd = new NpgsqlCommand(terminateSql, connection);
-            await terminateCmd.ExecuteNonQueryAsync();
+                    // Отключаем активные соединения от шаблона 'chat'
+                    var terminateSql = "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'chat' AND pid <> pg_backend_pid();";
+                    using var terminateCmd = new NpgsqlCommand(terminateSql, connection);
+                    await terminateCmd.ExecuteNonQueryAsync();
 
-            // Удаляем старую ОДНУ тестовую базу
-            using var dropCmd = new NpgsqlCommand("DROP DATABASE IF EXISTS chat_test WITH (FORCE);", connection);
-            await dropCmd.ExecuteNonQueryAsync();
+                    // Удаляем старую тестовую базу
+                    using var dropCmd = new NpgsqlCommand("DROP DATABASE IF EXISTS chat_test WITH (FORCE);", connection);
+                    await dropCmd.ExecuteNonQueryAsync();
 
-            // Создаем ОДНУ новую тестовую базу
-            using var cloneCmd = new NpgsqlCommand("CREATE DATABASE chat_test WITH TEMPLATE chat;", connection);
-            await cloneCmd.ExecuteNonQueryAsync();
+                    // Создаем ровно ОДНУ тестовую базу на всю сессию запуска тестов
+                    using var cloneCmd = new NpgsqlCommand("CREATE DATABASE chat_test WITH TEMPLATE chat;", connection);
+                    await cloneCmd.ExecuteNonQueryAsync();
 
+                    // Переключаем флаг, чтобы следующие потоки сюда не заходили
+                    _isDatabaseCreated = true;
+                }
+            }
+            finally
+            {
+                // 3. Обязательно освобождаем замок
+                _semaphore.Release();
+            }
+
+            // Клиент создается для каждого тест-класса свой, но смотрит в одну и ту же базу
             SharedClient = CreateClient();
         }
 
@@ -47,6 +69,11 @@ namespace Tests // 1. Явно помещаем всё в namespace "Tests"
                 if (descriptor != null) services.Remove(descriptor);
 
                 services.AddDbContext<ChatDbContext>(options => options.UseNpgsql(TestConnectionString));
+
+                services.AddSignalR(options =>
+                {
+                    options.EnableDetailedErrors = true;
+                });
             });
         }
 
