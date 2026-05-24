@@ -3557,7 +3557,7 @@ if (isChatPage) {
         }
     }
 
-    function openChannelSettings() {
+    function openChannelSettings() { 
         if (!currentChannel || currentChannelType !== 'channel') {
             return;
         }
@@ -4445,6 +4445,7 @@ if (isChatPage) {
         }
 
         setTimeout(() => updateScrollButtonsVisibility(), 100);
+        
 
         if (receivedMessages.has(message.id)) return;
         await receivedMessages.add(message.id);
@@ -5109,6 +5110,8 @@ if (isChatPage) {
     }
 
 
+
+
     // ============ ИНИЦИАЛИЗАЦИЯ ЧАТА ============
 
     async function initChat() {
@@ -5156,6 +5159,7 @@ if (isChatPage) {
         addAIAssistantButton();
         initAICancelButton();
         initDragAndDrop();
+        scrollToBottomSafely(true);
 
         await loadAIBotId();
         await updateTotalUnreadFromServer();
@@ -5760,12 +5764,126 @@ if (isRegisterPage) {
 // ============ КОД ТОЛЬКО ДЛЯ СТРАНИЦЫ НАСТРОЕК КАНАЛА ============
 if (isSettingsPage) {
 
+
+    let currentDmId: string | null = '';
+    let currentDmName = '';
+    let currentUsername = '';
+
+    // Получаем параметры из URL
+    const urlParams = new URLSearchParams(window.location.search);
+    currentDmId = urlParams.get('id');
+    currentDmName = urlParams.get('name') || 'Чат';
+
+    async function loadPageData() {
+        // Загружаем текущего пользователя
+        try {
+            const response = await fetch('/api/users/me');
+            if (response.ok) {
+                const userData = await response.json();
+                currentUsername = userData.username;
+            }
+        } catch (error) {
+            console.error('Error loading user:', error);
+        }
+
+        // Заполняем информацию
+        if (currentDmId) {
+            const dmIdDisplay = document.getElementById('dmIdDisplay');
+            const dmOriginalName = document.getElementById('dmOriginalName');
+            const dmOtherUser = document.getElementById('dmOtherUser');
+            if (dmIdDisplay)
+                dmIdDisplay.textContent = currentDmId;
+            if (dmOriginalName)
+                dmOriginalName.textContent = currentDmName;
+            if (dmOtherUser) {
+                let result = getOtherUserName(currentDmId, currentUsername);
+
+                dmOtherUser.textContent = result;
+            }
+        
+            // Загружаем сохранённое имя
+            const savedName = localStorage.getItem(`dm_display_name_${currentDmId}`);
+            const input = document.getElementById('dmDisplayName') as HTMLTextAreaElement;
+            if (input) {
+                input.value = savedName || currentDmName;
+            }
+        }
+    }
+
+    function getOtherUserName(dmId: string, currentUser: string) {
+        
+            const parts = dmId.split('-');
+            if (parts.length === 2) {
+                const other = parts[0] === currentUser ? parts[1] : parts[0];
+                // Проверяем, есть ли сохранённое отображаемое имя для этого пользователя
+                const userDisplayName = localStorage.getItem(`user_display_name_${other}`);
+                return userDisplayName || other;
+            }
+        
+        return dmId;
+    }
+
+    function saveDMDisplayName() {
+        if (!currentDmId) {
+            alert('Чат не найден');
+            return;
+        }
+
+        const input = document.getElementById('dmDisplayName') as HTMLTextAreaElement;
+        const newName = input.value.trim();
+
+        if (!newName) {
+            alert('Имя не может быть пустым');
+            return;
+        }
+
+        localStorage.setItem(`dm_display_name_${currentDmId}`, newName);
+        alert('Отображаемое имя сохранено');
+    }
+
+    async function confirmDeleteDM() {
+        if (!currentDmId) {
+            alert('Чат не найден');
+            return;
+        }
+
+        if (confirm(`Вы уверены, что хотите удалить чат с "${currentDmName}"?\n\nВся история сообщений будет удалена без возможности восстановления.`)) {
+            try {
+                const response = await fetch(`/api/dm_channels/${currentDmId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    alert('Чат удалён');
+                    localStorage.removeItem('lastChat');
+                    window.location.href = '/';
+                } else {
+                    const data = await response.json();
+                    alert(data.error || 'Ошибка при удалении');
+                }
+            } catch (error) {
+                console.error('Error deleting DM:', error);
+                alert('Ошибка соединения с сервером');
+            }
+        }
+    }
+
+    // Загружаем данные
+    loadPageData();
+
+    // Экспорт функций в глобальную область
+    window.saveDMDisplayName = saveDMDisplayName;
+    window.confirmDeleteDM = confirmDeleteDM;
+    window.goBack = goBack;
+
+
+
+
     let channelData: Channel | null = null;
     let renameModal: any, descriptionModal: any, infoModal: any, membersModal: any;
     let currentUser = '';
     let canDelete = false;
 
-    const urlParams = new URLSearchParams(window.location.search);
     const channelId = urlParams.get('id');
 
     if (!channelId) {
@@ -5805,9 +5923,15 @@ if (isSettingsPage) {
             channelData = channels.find((c: Channel) => c.id === channelId) || null;
 
             if (!channelData) {
-                showGlobalNotification('Канал не найден', 'danger');
-                setTimeout(() => goBack(), 1500);
-                return;
+                const response = await fetch('/api/dm_channels');
+                const channels = await response.json();
+                channelData = channels.find((c: Channel) => c.id === channelId) || null;
+
+                if (!channelData) {
+                    showGlobalNotification('Канал не найден', 'danger');
+                    setTimeout(() => goBack(), 1500);
+                    return;
+                }
             }
 
             const channelNameEl = document.getElementById('channelName');

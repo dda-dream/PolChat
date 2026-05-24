@@ -103,7 +103,8 @@ public class DMChannelsController : ControllerBase
             Id = Guid.NewGuid().ToString(),
             Participants = new List<string> { username, request.OtherUser },
             CreatedBy = username,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            Name = request.OtherUser
         };
         _db.DmChannels.Add(dm);
         await _db.SaveChangesAsync();
