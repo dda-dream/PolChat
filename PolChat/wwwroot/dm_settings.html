@@ -8,7 +8,8 @@
     <link href="/static/ext/all.min.css" rel="stylesheet">
     <script src="/static/ext/bootstrap.bundle.min.js"></script>
     <script src="/static/ext/signalr.min.js"></script>
-    <link href="/static/settings.css" rel="stylesheet">
+    <script src="/static/chat.js" defer></script>
+    <link href="/static/chat.css" rel="stylesheet">
     <style>
         body {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -293,106 +294,5 @@
         </div>
     </div>
 
-    <script>
-        let currentDmId = null;
-        let currentDmName = null;
-        let currentUsername = null;
-
-        // Получаем параметры из URL
-        const urlParams = new URLSearchParams(window.location.search);
-        currentDmId = urlParams.get('id');
-        currentDmName = urlParams.get('name') || 'Чат';
-
-        async function loadPageData() {
-            // Загружаем текущего пользователя
-            try {
-                const response = await fetch('/api/users/me');
-                if (response.ok) {
-                    const userData = await response.json();
-                    currentUsername = userData.username;
-                }
-            } catch (error) {
-                console.error('Error loading user:', error);
-            }
-
-            // Заполняем информацию
-            if (currentDmId) {
-                document.getElementById('dmIdDisplay').textContent = currentDmId;
-                document.getElementById('dmOriginalName').textContent = currentDmName;
-                document.getElementById('dmOtherUser').textContent = getOtherUserName(currentDmId, currentUsername);
-
-                // Загружаем сохранённое имя
-                const savedName = localStorage.getItem(`dm_display_name_${currentDmId}`);
-                const input = document.getElementById('dmDisplayName');
-                if (input) {
-                    input.value = savedName || currentDmName;
-                }
-            }
-        }
-
-        function getOtherUserName(dmId, currentUser) {
-            const parts = dmId.split('-');
-            if (parts.length === 2) {
-                const other = parts[0] === currentUser ? parts[1] : parts[0];
-                // Проверяем, есть ли сохранённое отображаемое имя для этого пользователя
-                const userDisplayName = localStorage.getItem(`user_display_name_${other}`);
-                return userDisplayName || other;
-            }
-            return dmId;
-        }
-
-        function saveDMDisplayName() {
-            if (!currentDmId) {
-                alert('Чат не найден');
-                return;
-            }
-
-            const input = document.getElementById('dmDisplayName');
-            const newName = input.value.trim();
-
-            if (!newName) {
-                alert('Имя не может быть пустым');
-                return;
-            }
-
-            localStorage.setItem(`dm_display_name_${currentDmId}`, newName);
-            alert('Отображаемое имя сохранено');
-        }
-
-        async function confirmDeleteDM() {
-            if (!currentDmId) {
-                alert('Чат не найден');
-                return;
-            }
-
-            if (confirm(`Вы уверены, что хотите удалить чат с "${currentDmName}"?\n\nВся история сообщений будет удалена без возможности восстановления.`)) {
-                try {
-                    const response = await fetch(`/api/dm_channels/${currentDmId}`, {
-                        method: 'DELETE'
-                    });
-
-                    if (response.ok) {
-                        alert('Чат удалён');
-                        localStorage.removeItem('lastChat');
-                        window.location.href = '/';
-                    } else {
-                        const data = await response.json();
-                        alert(data.error || 'Ошибка при удалении');
-                    }
-                } catch (error) {
-                    console.error('Error deleting DM:', error);
-                    alert('Ошибка соединения с сервером');
-                }
-            }
-        }
-
-        // Загружаем данные
-        loadPageData();
-
-        // Экспорт функций в глобальную область
-        window.saveDMDisplayName = saveDMDisplayName;
-        window.confirmDeleteDM = confirmDeleteDM;
-        window.goBack = goBack;
-    </script>
 </body>
 </html>
