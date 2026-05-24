@@ -20,7 +20,7 @@ namespace Tests
         public ChatHubIntegrationTests(ChatDbWebApplicationFactory factory)
         {
             _factory = factory;
-            _client = factory.SharedClient; // Используем наш живой клиент
+            _client = factory.SharedClient; 
         }
 
         [Fact]
