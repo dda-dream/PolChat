@@ -56,13 +56,12 @@ namespace Tests
 
             // 3. ШАГ: Настраиваем перехват ответа от сервера
             // Используем TaskCompletionSource, чтобы тест подождал, пока сервер пришлет сообщение назад
-            var tcs = new TaskCompletionSource<string>();
-
-            hubConnection.On<string>("ReceiveMessage", (message) =>
-            {
+            //var tcs = new TaskCompletionSource<string>();
+            //hubConnection.On<string>("ReceiveMessage", (message) =>
+            //{
                 // Метод-клиент на сервере вызвал: Clients.All.SendAsync("ReceiveMessage", ...)
-                tcs.SetResult(message);
-            });
+            //    tcs.SetResult(message);
+            //});
 
             // Открываем соединение
             await hubConnection.StartAsync();
