@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="PolChat/PolChat.csproj" />
+  <Project Path="Tests/Tests.csproj" Id="67256fe9-d2d3-48b7-9185-582fc4a1137d" />
 </Solution>
