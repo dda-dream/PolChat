@@ -18,6 +18,7 @@ public class ChatHub : Hub
     private readonly IMemoryCache _cache;
     private readonly IHubContext<ChatHub> _hubContext;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IServiceProvider _serviceProvider;
 
     private static readonly Dictionary<string, SessionData> _connections = new();
 
@@ -27,7 +28,8 @@ public class ChatHub : Hub
         ILogger<ChatHub> logger,
         IMemoryCache cache,
         IHubContext<ChatHub> hubContext,
-        IServiceScopeFactory scopeFactory)
+        IServiceScopeFactory scopeFactory,
+        IServiceProvider serviceProvider)
     {
         _db = db;
         _sessionService = sessionService;
@@ -35,6 +37,7 @@ public class ChatHub : Hub
         _cache = cache;
         _hubContext = hubContext;
         _scopeFactory = scopeFactory;
+        _serviceProvider = serviceProvider;
     }
 
     public override async Task OnConnectedAsync()
@@ -79,11 +82,30 @@ public class ChatHub : Hub
             if (!stillOnline)
             {
                 var now = DateTime.UtcNow;
-                await _db.Users
-                    .Where(u => u.Username == username)
-                    .ExecuteUpdateAsync(s => s
-                        .SetProperty(u => u.Status, "offline")
-                        .SetProperty(u => u.LastSeen, now));
+
+                // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Создаем независимый скоуп для базы данных
+                using (var scope = _serviceProvider.CreateScope())
+                {
+                    var db = scope.ServiceProvider.GetRequiredService<ChatDbContext>();
+
+                    try
+                    {
+                        // Явно передаем CancellationToken.None, чтобы отмена HTTP-запроса 
+                        // в тесте не могла прервать запись в базу данных
+                        await db.Users
+                            .Where(u => u.Username == username)
+                            .ExecuteUpdateAsync(s => s
+                                .SetProperty(u => u.Status, "offline")
+                                .SetProperty(u => u.LastSeen, now),
+                                CancellationToken.None);
+                    }
+                    catch (Exception ex)
+                    {
+                        // Ошибки при отключении (например, если упала БД) 
+                        // не должны приводить к падению всего SignalR-сервера
+                        _logger.LogError(ex, "Не удалось обновить статус для пользователя {Username}", username);
+                    }
+                }
 
                 await _hubContext.Clients.All.SendAsync("user_status", new { username });
             }
