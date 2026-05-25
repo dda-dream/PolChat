@@ -45,9 +45,8 @@ public class MessageLog
     public string? Content { get; set; }
     public string? FileUrl { get; set; }
     public DateTime Timestamp { get; set; }
-
+    public string? Reactions { get; set; } = null;
     public string? ReplyToId { get; set; }
-    //public List<ReactionInMessage> Reactions { get; set; } = new();
     public string[] ReadBy { get; set; } = Array.Empty<string>();
     public List<string> DeliveredTo { get; set; } = new();
 

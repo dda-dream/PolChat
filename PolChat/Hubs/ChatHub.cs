@@ -591,6 +591,29 @@ public class ChatHub : Hub
             UPDATE messages SET reactions = {0}::jsonb WHERE id = {1}",
             JsonSerializer.Serialize(reactions), messageId);
 
+        // Update Reactions table
+        var reaction = await _db.Reactions
+            .Where(r => r.UserId == username && r.MessageId == messageId && r.Emoji == emoji)
+            .FirstOrDefaultAsync();
+
+        if (reaction == null)
+        {
+            var newReaction = new Reaction
+            {
+                UserId = username,
+                MessageId = messageId,
+                Emoji = emoji,
+                CreatedAt = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Utc)
+            };
+            await _db.Reactions.AddAsync(newReaction);
+        }
+        else
+        {
+            _db.Reactions.Remove(reaction);
+        }
+        // Update Reactions table
+
+
         await _db.SaveChangesAsync();
 
         await _hubContext.Clients.All.SendAsync("message_reaction_updated", new { id = messageId, reactions });

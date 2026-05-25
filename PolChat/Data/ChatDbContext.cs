@@ -58,7 +58,9 @@ public class ChatDbContext : DbContext
                 Content = message.Content,
                 FileUrl = message.FileUrl,
                 ReplyToId = message.ReplyToId,
-                
+                Reactions = message.Reactions.ToString(),
+                ReadBy = message.ReadBy,    
+                DeliveredTo = message.DeliveredTo,
                 Timestamp = DateTime.UtcNow, // Время создания лога
                 LogType = logType,
 
