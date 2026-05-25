@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using System.Collections.Concurrent;
 using System.Text.Json;
+using System.Threading.Channels;
 using static System.Collections.Specialized.BitVector32;
 
 namespace ChatApp.Hubs;
@@ -213,124 +214,141 @@ public class ChatHub : Hub
                     {
                         _logger.LogInformation("✅ AI RESPONSE TRIGGERED");
 
-                        // ✅ ПРАВИЛЬНО: Сохраняем данные, а не ссылку на ChatHub
-                        var channelIdCopy = channelId;
-                        var usernameCopy = username;
-                        var contentCopy = content;
-                        var connectionIdCopy = Context.ConnectionId;
+                        DoOllamaWork(channelId, content, Context.ConnectionId);
 
-                        // Используем IServiceScopeFactory для создания нового scope
-                        _ = Task.Run(async () =>
-                        {
-                            try
-                            {
-                                using (var scope = _scopeFactory.CreateScope())
-                                {
-                                    var ollama = scope.ServiceProvider.GetRequiredService<OllamaService>();
-                                    var db = scope.ServiceProvider.GetRequiredService<ChatDbContext>();
-                                    var hubContext = scope.ServiceProvider.GetRequiredService<IHubContext<ChatHub>>();
-
-                                    // Получаем бота
-                                    var botUser = await db.Users.FirstOrDefaultAsync(u => u.IsBot == true);
-                                    if (botUser == null)
-                                    {
-                                        _logger.LogWarning("Bot user not found");
-                                        return;
-                                    }
-
-                              
-                                    var rows = await db.Messages
-                                        .Where(m => m.ChannelId == channelId)
-                                        .OrderBy(m => m.Timestamp)
-                                        .Select(m => new { m.Content })
-                                        .ToListAsync();
-
-                                    var context = "";
-                                    var length = context.Length;
-                                    foreach (var r in rows)
-                                    {
-                                        context += r + "\n---\n";
-                                    }
-
-                                    var response = await ollama.GenerateResponseAsync(contentCopy, context, default, connectionIdCopy);
-
-                                    if (string.IsNullOrWhiteSpace(response))
-                                    {
-                                        response = "Извините, не могу ответить на это сообщение.";
-                                    }
-
-                                    // Сохраняем сообщение
-                                    var aiMsg = new Message
-                                    {
-                                        Id = Guid.NewGuid().ToString(),
-                                        ChannelId = channelIdCopy,
-                                        Username = botUser.Username,
-                                        Content = response,
-                                        Timestamp = DateTime.UtcNow,
-                                        Edited = false,
-                                        Reactions = new List<ReactionInMessage>(),
-                                        ReadBy = Array.Empty<string>(),
-                                        DeliveredTo = new List<string>()
-                                    };
-
-                                    await db.Messages.AddAsync(aiMsg);
-                                    await db.SaveChangesAsync();
-
-                                    // Отправляем клиенту
-                                    var messageToSendAI = new
-                                    {
-                                        id = aiMsg.Id,
-                                        channelId = channelIdCopy,
-                                        username = botUser.Username,
-                                        content = response,
-                                        fileUrl = (string?)null,
-                                        timestamp = aiMsg.Timestamp.ToString("O"),
-                                        edited = false,
-                                        reactions = new List<ReactionInMessage>(),
-                                        readBy = new List<string>(),
-                                        deliveredTo = new List<string>(),
-                                        replyTo = (object?)null,
-                                        isBot = true
-                                    };
-
-                                    await hubContext.Clients.Group(channelIdCopy).SendAsync("new_message", messageToSendAI);
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.LogError(ex, "Error in background AI processing");
-
-                                try
-                                {
-                                    using (var scope = _scopeFactory.CreateScope())
-                                    {
-                                        var hubContext = scope.ServiceProvider.GetRequiredService<IHubContext<ChatHub>>();
-                                        var errorMsg = new
-                                        {
-                                            id = Guid.NewGuid().ToString(),
-                                            channelId = channelIdCopy,
-                                            username = "AI Assistant",
-                                            content = "❌ Произошла ошибка. Попробуйте позже.",
-                                            fileUrl = (string?)null,
-                                            timestamp = DateTime.UtcNow.ToString("O"),
-                                            edited = false,
-                                            reactions = new List<ReactionInMessage>(),
-                                            readBy = new List<string>(),
-                                            deliveredTo = new List<string>(),
-                                            replyTo = (object?)null,
-                                            isBot = true
-                                        };
-                                        await hubContext.Clients.Group(channelIdCopy).SendAsync("new_message", errorMsg);
-                                    }
-                                }
-                                catch (Exception sendEx)
-                                {
-                                    _logger.LogError(sendEx, "Failed to send error message");
-                                }
-                            }
-                        });
                     }
                 }
+            }
+        }
+    }
+
+    public async Task DoOllamaWork(string channelId, string content, string connectionId)
+    {
+        try
+        {
+            using (var scope = _scopeFactory.CreateScope())
+            {
+                var ollama = scope.ServiceProvider.GetRequiredService<OllamaService>();
+                var db = scope.ServiceProvider.GetRequiredService<ChatDbContext>();
+                var hubContext = scope.ServiceProvider.GetRequiredService<IHubContext<ChatHub>>();
+
+                // Получаем бота
+                var botUser = await db.Users.FirstOrDefaultAsync(u => u.IsBot == true);
+                if (botUser == null)
+                {
+                    _logger.LogWarning("Bot user not found");
+                    return;
+                }
+
+
+                var rows = await db.Messages
+                    .Where(m => m.ChannelId == channelId)
+                    .OrderBy(m => m.Timestamp)
+                    .Select(m => new { m.Content })
+                    .ToListAsync();
+
+                var context = "";
+                var length = context.Length;
+                foreach (var r in rows)
+                {
+                    context += r + "\n---\n";
+                }
+
+
+
+                var messageToSendAI = new
+                {
+                    id = Guid.NewGuid().ToString(),
+                    channelId = channelId,
+                    username = botUser.Username,
+                    content = $"[INFO] Длинна текущего контекста: {context.Length} байт.",
+                    fileUrl = (string?)null,
+                    timestamp = DateTime.UtcNow.ToString("O"),
+                    edited = false,
+                    reactions = new List<ReactionInMessage>(),
+                    readBy = new List<string>(),
+                    deliveredTo = new List<string>(),
+                    replyTo = (object?)null,
+                    isBot = true
+                };
+                await hubContext.Clients.Group(channelId).SendAsync("new_message", messageToSendAI);
+
+
+
+                var response = await ollama.GenerateResponseAsync(content, context, default, connectionId);
+
+                if (string.IsNullOrWhiteSpace(response))
+                {
+                    response = "Извините, не могу ответить на это сообщение.";
+                }
+
+                // Сохраняем сообщение
+                var aiMsg = new Message
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    ChannelId = channelId,
+                    Username = botUser.Username,
+                    Content = response,
+                    Timestamp = DateTime.UtcNow,
+                    Edited = false,
+                    Reactions = new List<ReactionInMessage>(),
+                    ReadBy = Array.Empty<string>(),
+                    DeliveredTo = new List<string>()
+                };
+
+                await db.Messages.AddAsync(aiMsg);
+                await db.SaveChangesAsync();
+
+                // Отправляем клиенту
+                messageToSendAI = new
+                {
+                    id = aiMsg.Id,
+                    channelId = channelId,
+                    username = botUser.Username,
+                    content = response,
+                    fileUrl = (string?)null,
+                    timestamp = aiMsg.Timestamp.ToString("O"),
+                    edited = false,
+                    reactions = new List<ReactionInMessage>(),
+                    readBy = new List<string>(),
+                    deliveredTo = new List<string>(),
+                    replyTo = (object?)null,
+                    isBot = true
+                };
+
+                await hubContext.Clients.Group(channelId).SendAsync("new_message", messageToSendAI);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in background AI processing");
+
+            try
+            {
+                using (var scope = _scopeFactory.CreateScope())
+                {
+                    var hubContext = scope.ServiceProvider.GetRequiredService<IHubContext<ChatHub>>();
+                    var errorMsg = new
+                    {
+                        id = Guid.NewGuid().ToString(),
+                        channelId = channelId,
+                        username = "AI Assistant",
+                        content = "❌ Произошла ошибка. Попробуйте позже.",
+                        fileUrl = (string?)null,
+                        timestamp = DateTime.UtcNow.ToString("O"),
+                        edited = false,
+                        reactions = new List<ReactionInMessage>(),
+                        readBy = new List<string>(),
+                        deliveredTo = new List<string>(),
+                        replyTo = (object?)null,
+                        isBot = true
+                    };
+                    await hubContext.Clients.Group(channelId).SendAsync("new_message", errorMsg);
+                }
+            }
+            catch (Exception sendEx)
+            {
+                _logger.LogError(sendEx, "Failed to send error message");
             }
         }
     }
