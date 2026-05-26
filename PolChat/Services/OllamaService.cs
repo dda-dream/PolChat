@@ -50,9 +50,9 @@ public class OllamaService
 
     public async Task<string> GenerateResponseAsync(
         string userMessage,
-    string? context = null,
-    CancellationToken cancellationToken = default,
-    string? connectionId = null) 
+        string? context = null,
+        CancellationToken cancellationToken = default,
+        string? connectionId = null) 
     {
         try
         {

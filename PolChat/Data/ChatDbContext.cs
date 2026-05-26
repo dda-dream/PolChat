@@ -13,13 +13,102 @@ public class ChatDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<Channel> Channels => Set<Channel>();
     public DbSet<Message> Messages => Set<Message>();
+    public DbSet<MessageLog> MessagesLog => Set<MessageLog>();
+
+
+
     public DbSet<DMChannel> DmChannels => Set<DMChannel>();
     public DbSet<Reaction> Reactions => Set<Reaction>();
 
 
 
+    public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        // 1. Находим все измененные, добавленные или удаленные записи типа Message
+        var entries = ChangeTracker.Entries<Message>()
+            .Where(e => e.State == EntityState.Added ||
+                        e.State == EntityState.Modified ||
+                        e.State == EntityState.Deleted)
+            .ToList();
+
+        var logsToCreate = new List<MessageLog>();
+
+        foreach (var entry in entries)
+        {
+            // 2. Определяем тип операции
+            string logType = entry.State switch
+            {
+                EntityState.Added => "INSERT",
+                EntityState.Modified => "UPDATE",
+                EntityState.Deleted => "DELETE",
+                _ => "UNKNOWN"
+            };
+
+            // 3. Берем объект (для удаленных сущностей берем старые значения)
+            var message = entry.Entity;
+
+            // 4. Создаем запись для лога
+            var log = new MessageLog
+            {
+                // Если Id в логе генерируется базой (Identity), это поле можно опустить
+                // или записать оригинальный Id в отдельную колонку, например, OriginalMessageId
+                Id = message.Id,
+                ChannelId = message.ChannelId,
+                Username = message.Username,
+                Content = message.Content,
+                FileUrl = message.FileUrl,
+                ReplyToId = message.ReplyToId,
+                Reactions = message.Reactions.ToString(),
+                ReadBy = message.ReadBy,    
+                DeliveredTo = message.DeliveredTo,
+                Timestamp = DateTime.UtcNow, // Время создания лога
+                LogType = logType,
+
+            };
+
+            /*
+    id text COLLATE pg_catalog."default" NOT NULL,
+    channel_id text COLLATE pg_catalog."default" NOT NULL,
+    username text COLLATE pg_catalog."default",
+    content text COLLATE pg_catalog."default",
+    file_url text COLLATE pg_catalog."default",
+    reply_to_id text COLLATE pg_catalog."default",
+    "timestamp" timestamp without time zone NOT NULL,
+    edited boolean DEFAULT false,
+    edited_at timestamp without time zone,
+    reactions jsonb DEFAULT '[]'::jsonb,
+    read_by text[] COLLATE pg_catalog."default" DEFAULT '{}'::text[],
+    delivered_to text[] COLLATE pg_catalog."default" DEFAULT '{}'::text[],
+    log_type text COLLATE pg_catalog."default"
+             */
+
+
+            logsToCreate.Add(log);
+        }
+
+        // 5. Добавляем логи в контекст перед сохранением
+        if (logsToCreate.Any())
+        {
+            //await MessagesLog.AddRangeAsync(logsToCreate, cancellationToken);
+
+            foreach (var log in logsToCreate)
+            {
+                Entry(log).State = EntityState.Added;
+            }
+        }
+
+
+
+
+        // 6. Сохраняем всё одной транзакцией
+        return await base.SaveChangesAsync(cancellationToken);
+    }
+
+
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+
         // Users
         modelBuilder.Entity<User>(e =>
         {
@@ -43,6 +132,11 @@ public class ChatDbContext : DbContext
             e.HasIndex(c => c.Name);
             e.HasIndex(c => c.CreatedAt);
         });
+
+
+
+
+
 
         // Messages
         modelBuilder.Entity<Message>(e =>
@@ -114,6 +208,8 @@ public class ChatDbContext : DbContext
             e.Property(d => d.Participants)
                 .HasColumnType("text[]");
         });
+
+
 
 
 

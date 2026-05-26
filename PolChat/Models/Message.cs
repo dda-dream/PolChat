@@ -6,9 +6,6 @@ namespace ChatApp.Models;
 public class Message
 {
     public string Id { get; set; } = null!;
-
-    //[ForeignKey(nameof(Channel))]
-    //[Column("channel_id")]
     public string ChannelId { get; set; } = null!;
     public string Username { get; set; } = null!;
     public string? Content { get; set; }
@@ -34,6 +31,25 @@ public class Message
     public Message? ReplyTo { get; set; }
     [JsonIgnore]
     public User? User { get; set; }
+}
+
+
+public class MessageLog
+{
+    public string LogType { get; set; } = string.Empty;
+
+
+    public string Id { get; set; } = null!;
+    public string ChannelId { get; set; } = null!;
+    public string Username { get; set; } = null!;
+    public string? Content { get; set; }
+    public string? FileUrl { get; set; }
+    public DateTime Timestamp { get; set; }
+    public string? Reactions { get; set; } = null;
+    public string? ReplyToId { get; set; }
+    public string[] ReadBy { get; set; } = Array.Empty<string>();
+    public List<string> DeliveredTo { get; set; } = new();
+
 }
 
 public class ReactionInMessage
