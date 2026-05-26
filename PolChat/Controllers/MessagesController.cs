@@ -408,7 +408,7 @@ public class MessagesController : ControllerBase
         return Ok(new { read_by = readBy, read_count = readBy.Length });
     }
 
-    // GET /api/message/{messageId}/reactions
+ 
     // GET /api/message/{messageId}/reactions
     [HttpGet("/api/message/{messageId}/reactions")]
     public async Task<IActionResult> GetMessageReactions(string messageId)
@@ -417,33 +417,28 @@ public class MessagesController : ControllerBase
         if (session == null) return Unauthorized(new { error = "Not authenticated" });
 
         // Получаем сообщение с его реакциями из JSON поля
-        var message = await _db.Messages
-            .Where(m => m.Id == messageId)
-            .Select(m => new { m.Reactions })
-            .FirstOrDefaultAsync();
+        var reactions = await _db.Reactions
+            .Where(r => r.MessageId == messageId)
+            .ToListAsync();
 
-        if (message == null)
+        if (reactions == null)
         {
             return NotFound(new { error = "Message not found" });
         }
 
-        // Конвертируем ReactionInMessage в формат, ожидаемый клиентом
-        var reactions = message.Reactions ?? new List<ReactionInMessage>();
 
         // Преобразуем в формат, который ожидает клиент (список с отдельной записью на каждого пользователя)
         var result = new List<object>();
         foreach (var reaction in reactions)
         {
-            foreach (var user in reaction.Users)
+            result.Add(new
             {
-                result.Add(new
-                {
-                    messageId = messageId,
-                    userId = user,
-                    emoji = reaction.Emoji,
-                    createdAt = DateTime.UtcNow.ToString("O") // или можно хранить дату в ReactionInMessage
-                });
-            }
+                messageId = messageId,
+                userId = reaction.UserId,
+                emoji = reaction.Emoji,
+                createdAt = reaction.CreatedAt.ToString("O") // или можно хранить дату в ReactionInMessage
+            });
+            
         }
 
         return Ok(result);

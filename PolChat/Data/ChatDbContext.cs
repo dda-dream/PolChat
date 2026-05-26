@@ -14,9 +14,6 @@ public class ChatDbContext : DbContext
     public DbSet<Channel> Channels => Set<Channel>();
     public DbSet<Message> Messages => Set<Message>();
     public DbSet<MessageLog> MessagesLog => Set<MessageLog>();
-
-
-
     public DbSet<DMChannel> DmChannels => Set<DMChannel>();
     public DbSet<Reaction> Reactions => Set<Reaction>();
 
