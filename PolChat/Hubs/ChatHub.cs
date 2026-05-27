@@ -577,37 +577,37 @@ public class ChatHub : Hub
 
         var username = userInfo.Username;
 
-        var row = await _db.Messages
-            .Where(m => m.Id == messageId)
-            .Select(m => m.Reactions)
-            .FirstOrDefaultAsync();
+        //var row = await _db.Messages
+        //    .Where(m => m.Id == messageId)
+        //    .Select(m => m.Reactions)
+        //    .FirstOrDefaultAsync();
 
-        if (row == null) return;
+        //if (row == null) return;
 
-        var reactions = row ?? new List<ReactionInMessage>();
-        var existing = reactions.FirstOrDefault(r => r.Emoji == emoji);
+        //var reactions = row ?? new List<ReactionInMessage>();
+        //var existing = reactions.FirstOrDefault(r => r.Emoji == emoji);
 
-        if (existing != null)
-        {
-            if (existing.Users.Contains(username))
-            {
-                existing.Users.Remove(username);
-                if (existing.Users.Count == 0)
-                    reactions.Remove(existing);
-            }
-            else
-            {
-                existing.Users.Add(username);
-            }
-        }
-        else
-        {
-            reactions.Add(new ReactionInMessage { Emoji = emoji, Users = new List<string> { username } });
-        }
+        //if (existing != null)
+        //{
+        //    if (existing.Users.Contains(username))
+        //    {
+        //        existing.Users.Remove(username);
+        //        if (existing.Users.Count == 0)
+        //            reactions.Remove(existing);
+        //    }
+        //    else
+        //    {
+        //        existing.Users.Add(username);
+        //    }
+        //}
+        //else
+        //{
+        //    reactions.Add(new ReactionInMessage { Emoji = emoji, Users = new List<string> { username } });
+        //}
 
-        await _db.Database.ExecuteSqlRawAsync(@"
-            UPDATE messages SET reactions = {0}::jsonb WHERE id = {1}",
-            JsonSerializer.Serialize(reactions), messageId);
+        //await _db.Database.ExecuteSqlRawAsync(@"
+        //    UPDATE messages SET reactions = {0}::jsonb WHERE id = {1}",
+        //    JsonSerializer.Serialize(reactions), messageId);
 
         // Update Reactions table
         var reaction = await _db.Reactions
@@ -633,6 +633,10 @@ public class ChatHub : Hub
 
 
         await _db.SaveChangesAsync();
+
+        var reactions = await _db.Reactions
+            .Where(r => r.MessageId == messageId)
+            .ToListAsync();
 
         await _hubContext.Clients.All.SendAsync("message_reaction_updated", new { id = messageId, reactions });
     }

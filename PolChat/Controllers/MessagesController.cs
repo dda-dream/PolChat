@@ -201,6 +201,53 @@ public class MessagesController : ControllerBase
             foreach (var row in rows)
             {
                 var senderExists = existingUsers.Contains(row.Username);
+
+                var reactions = await _db.Reactions
+                    .Where(r => r.MessageId == row.Id)
+                    .OrderBy(r => r.Emoji)
+                    .ToListAsync();
+                if (row.Id == "0c09fe59-5899-44b3-9d01-8074e413c3fd") {
+
+                }
+                var q = new ReactionInMessage();
+                var w = new List<string>();
+                Reaction f = null;
+                var rInMsg = new List<ReactionInMessage>();
+                var c = reactions.Count;
+                var cc = 0;
+                foreach (var reaction in reactions)
+                {
+                    if (f == null) { f = reaction; }
+                    if (f.Emoji == reaction.Emoji)
+                    {
+                        cc += 1;
+                        w.Add(reaction.UserId);
+                        q.Emoji = reaction.Emoji;
+                        if (cc == c)
+                        {
+                            q.Users = w;
+                            rInMsg.Add(q);
+                        }
+                    }
+                    else if (f.Emoji != reaction.Emoji)
+                    {
+                        cc += 1;
+                        q.Users = w;
+                        rInMsg.Add(q);
+                        q = new ReactionInMessage();
+                        w = new List<string>();
+                        q.Emoji = reaction.Emoji;
+                        w.Add(reaction.UserId);
+                        f = reaction;
+                        if (cc == c)
+                        {
+                            q.Users = w;
+                            rInMsg.Add(q);
+                        }
+                    }
+                    
+                }
+
                 var msg = new MessageDto
                 {
                     Id = row.Id,
@@ -211,7 +258,7 @@ public class MessagesController : ControllerBase
                     Timestamp = row.Timestamp.ToString("O"),
                     Edited = row.Edited,
                     EditedAt = row.EditedAt,
-                    Reactions = row.Reactions ?? new List<ReactionInMessage>(),
+                    Reactions = rInMsg,
                     ReadBy = row.ReadBy ?? Array.Empty<string>(),
                     DeliveredTo = row.DeliveredTo ?? new List<string>(),
                     IsDeletedSender = !senderExists
