@@ -319,6 +319,8 @@ public class MessagesController : ControllerBase
         // Broadcast edit to channel
         await _hub.Clients.Group(msg.ChannelId).SendAsync("message_edited", new { id = messageId, content = newContent });
 
+        //_cache.Remove()
+
         return Ok(new { success = true });
     }
 
@@ -418,6 +420,32 @@ public class MessagesController : ControllerBase
 
         return Ok(counts);
     }
+
+
+    [HttpPost("/api/unreadAllUsers")]
+    public async Task<IActionResult> GetUnreadCountsAllUsers([FromBody] LoginRequest request)
+    {
+        var user = await _db.Users.FindAsync(request.Username);
+        if (user == null || user.Password != DbInitializer.ComputeSha256Hash(request.Password))
+        {
+            return Unauthorized(new { success = false, error = "Invalid credentials" });
+        }
+
+        string cacheKey = $"GetUnreadCounts_AllUsers";
+
+        Dictionary<string, int>? counts;
+        if (_cache.TryGetValue(cacheKey, out counts) == false)
+        {
+            if (counts == null)
+                counts = new Dictionary<string, int>();
+            counts = await GetRealUnreadCountsAllUsers();
+
+            _cache.Set(cacheKey, counts, TimeSpan.FromSeconds(_configuration.GetValue<long>("MemoryCache:ExpireSeconds")));
+        }
+
+        return Ok(counts);
+    }
+
 
     // GET /api/messages/{channelId}/status
     [HttpGet("/api/messages/{channelId}/status")]
@@ -522,6 +550,47 @@ public class MessagesController : ControllerBase
         }
         return result;
     }
+
+    private async Task<Dictionary<string, int>> GetRealUnreadCountsAllUsers()
+    {
+        var conn = _db.Database.GetDbConnection();
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"SELECT 
+                                recipient.user_name AS username, 
+                                COUNT(*) AS unread_count
+                            FROM messages m
+                            LEFT JOIN channels c ON c.id = m.channel_id
+                            LEFT JOIN dm_channels d ON d.id = m.channel_id
+                            -- Разворачиваем потенциальных получателей для каждого типа канала
+                            LEFT JOIN LATERAL (
+                                -- Для DM каналов получатели — это все участники
+                                SELECT unnest(d.participants) AS user_name WHERE d.id IS NOT NULL
+                                -- UNION (при необходимости) можно добавить сюда участников приватных каналов
+                            ) recipient ON TRUE
+                            WHERE 
+                                -- 1. Исключаем автора сообщения (сам себе не отправляет непрочитанные)
+                                m.username != recipient.user_name
+                                -- 2. Главное условие: пользователя НЕТ в списке прочитавших это сообщение
+                                AND NOT (recipient.user_name = ANY(m.read_by))
+                                -- 3. Проверяем валидность канала
+                                AND (
+                                    (c.id IS NOT NULL AND c.is_private = FALSE) -- Для публичных каналов (если логика позволяет)
+                                    OR (d.id IS NOT NULL)                       -- Для личных сообщений (DM)
+                                )
+                            GROUP BY recipient.user_name
+                            ORDER BY unread_count DESC;";
+
+
+        var result = new Dictionary<string, int>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            result[reader.GetString(0)] = reader.GetInt32(1);
+        }
+        return result;
+    }
+
 
     // GET /api/messages/item/{messageId}
     [HttpGet("/api/messages/item/{messageId}")]
