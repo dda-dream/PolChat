@@ -1,9 +1,9 @@
 {
   "compileOnSave": true,
   "compilerOptions": {
-    "target": "ES2022",
+    //"moduleResolution": "node",
+    "target": "ES2021",
     "module": "ESNext",
-    "moduleResolution": "bundler",
     "lib": [ "DOM", "DOM.Iterable", "ES2021" ],
 
     "outDir": ".",
@@ -20,7 +20,9 @@
     "noUnusedParameters": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
-    "noEmitOnError": false
+
+    "noEmitOnError": true
+
   },
   "include": [ "./wwwroot/static/global.d.ts", "./wwwroot/static/chat.ts" ],
   "exclude": [ "node_modules" ]
