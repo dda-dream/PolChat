@@ -158,7 +158,7 @@ public class WebSearchService : IAsyncDisposable
         }
     }
 
-    private async Task NotifySearchStatus(string? connectionId, string message, string status, int? current = null, int? total = null)
+    public async Task NotifySearchStatus(string? connectionId, string message, string status, int? current = null, int? total = null)
     {
         if (string.IsNullOrEmpty(connectionId))
             return;

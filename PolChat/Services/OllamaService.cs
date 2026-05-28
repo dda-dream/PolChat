@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
+using Microsoft.OpenApi;
 using System.ComponentModel.DataAnnotations;
 using System.Net;
 using System.Text;
@@ -56,37 +57,115 @@ public class OllamaService
     {
         try
         {
-            if (NeedsWebSearch(userMessage))
+            if (NeedsWebSearch(userMessage) || true)
             {
-                _logger.LogInformation("Web search needed for: {UserMessage}", userMessage);
-                var searchResults = await PerformDeepWebSearchAsync(userMessage, cancellationToken, connectionId);
-                var l = searchResults.Length;
-                if (!string.IsNullOrEmpty(searchResults))
+
+                var message = new List<object>
                 {
-                    return await GenerateResponseWithContextAsync(userMessage, searchResults, cancellationToken);
+                    new
+                    {
+                        role = "system",
+                        content = @"проверь, требуется ли поиск в интернете для промта user. если поиск нужен: выведи только список запросов в интернет без лишних слов."
+                    },
+                    new
+                    {
+                        role = "user",
+                        content = userMessage
+                    }
+                };
+
+                if (!string.IsNullOrEmpty(context))
+                {
+                    message.Insert(1, new { role = "assistant", content = context });
                 }
+                // 1. получаем ссылки для поиска через CallOllamaApiAsync
+                string a = await CallOllamaApiAsync(message, cancellationToken);
+                //2. из полученной строки - получаем List<string> запросов
+                List<string> listZaprosov = a.Split("\n").ToList();
+                if (listZaprosov.Count > 10)
+                    return "Произошла ошибка: поисковых запросов больше 10";
+                
+                //3. по каждому элементу в коллекции вызываем GenerateResponseWithContextAsync и получаем результат поиска
+                //по одному запросу.
+                //Сохраняем результат поиска в словаре Dictionary<string, string>  где ключ - это запрос,
+                //а значение - результат поиска через GenerateResponseWithContextAsync
+                Dictionary<string, string> slovar = new Dictionary<string, string>();
+                string str = string.Empty;
+                foreach (var zapros in listZaprosov)
+                {
+                    str += zapros + "\n";
+                }
+                await _webSearch.NotifySearchStatus(connectionId, str, "info");
+                foreach (var zapros in listZaprosov)
+                {
+                    var searchResults = await PerformDeepWebSearchAsync(zapros, cancellationToken, connectionId);
+                    slovar.Add(zapros, searchResults);
+                }
+
+                //4. собираем словарь в 1 строку и отправляем в CallOllamaApiAsync
+                String content = string.Empty; 
+                foreach (var slova in slovar)
+                {
+                    content += slova.Value + "\n";
+                }
+                List<object> mess = new List<object>
+                {
+                    new
+                    {
+                        role = "system",
+                        content = @"Отформатируй и структурируй информацию от user и представь в виде подробного сообщения."
+                    },
+                    new
+                    {
+                        role = "user",
+                        content = content
+                    },
+                    new
+                    {
+                        role = "user",
+                        content = userMessage
+                    }
+                }
+                    ;
+                string answer = await CallOllamaApiAsync(mess, cancellationToken);
+                return answer;
+
+            }
+            else
+            {
+                return ":(";
             }
 
-            var messages = new List<object>
-            {
-                new
-                {
-                    role = "system",
-                    content = @"Ты - полезный AI-ассистент в чате. Отвечай дружелюбно и по делу. Будь кратким и понятным."
-                },
-                new
-                {
-                    role = "user",
-                    content = userMessage
-                }
-            };
 
-            if (!string.IsNullOrEmpty(context))
-            {
-                messages.Insert(1, new { role = "assistant", content = context });
-            }
+            //_logger.LogInformation("Web search needed for: {UserMessage}", userMessage);
+            //        var searchResults = await PerformDeepWebSearchAsync(userMessage, cancellationToken, connectionId);
+            //        var l = searchResults.Length;
+            //        if (!string.IsNullOrEmpty(searchResults))
+            //        {
+            //            return await GenerateResponseWithContextAsync(userMessage, searchResults, cancellationToken);
+            //        }
 
-            return await CallOllamaApiAsync(messages, cancellationToken);
+
+            //    var messages = new List<object>
+            //    {
+            //        new
+            //        {
+            //            role = "system",
+            //            content = @"Ты - полезный AI-ассистент в чате. Отвечай дружелюбно и по делу. Будь кратким и понятным."
+            //        },
+            //        new
+            //        {
+            //            role = "user",
+            //            content = userMessage
+            //        }
+            //    };
+
+            //    if (!string.IsNullOrEmpty(context))
+            //    {
+            //        messages.Insert(1, new { role = "assistant", content = context });
+            //    }
+
+            //    return await CallOllamaApiAsync(messages, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -102,7 +181,7 @@ public class OllamaService
             _logger.LogInformation("Starting deep web search for: {Query}", query);
 
             // Передаем connectionId в SearchAsync
-            var searchResults = await _webSearch.SearchAsync(query, 10, connectionId);
+            var searchResults = await _webSearch.SearchAsync(query, 3, connectionId);
 
             if (!searchResults.Any())
             {
@@ -129,6 +208,7 @@ public class OllamaService
         }
     }
 
+
     private bool NeedsWebSearch(string userMessage)
     {
         var keywords = new[]
@@ -140,41 +220,6 @@ public class OllamaService
         return keywords.Any(k => lowerMessage.Contains(k));
     }
 
-    private async Task<string> GenerateResponseWithContextAsync(
-        string userMessage,
-        string searchResults,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            var messages = new List<object>
-            {
-                new
-                {
-                    role = "system",
-                    content = @"Ты - полезный AI-ассистент. Проанализируй предоставленные результаты поиска и дай информативный ответ.
-- Используй информацию из источников
-- Указывай источники данных
-- Если информация отсутствует - честно скажи об этом
-- Будь точным и полезным"
-                },
-                new
-                {
-                    role = "user",
-                    content = $"Вопрос: {userMessage}\n\nНайденная информация:\n{searchResults}\n\nДай ответ на вопрос."
-                }
-            };
-
-            var aiResponse = await CallOllamaApiAsync(messages, cancellationToken);
-
-            return $"🔍 Результаты поиска:\n\n{aiResponse}\n\n---\n📎 Источники: данные из поисковой выдачи";
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error generating response with context");
-            return $"🔍 Найденная информация:\n\n{searchResults}";
-        }
-    }
 
     private async Task<string> CallOllamaApiAsync(List<object> messages, CancellationToken cancellationToken)
     {
