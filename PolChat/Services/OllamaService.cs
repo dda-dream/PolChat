@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
+using System.Collections.Concurrent;
 using System.ComponentModel.DataAnnotations;
 using System.Net;
 using System.Text;
@@ -82,8 +83,7 @@ public class OllamaService
                 string a = await CallOllamaApiAsync(message, cancellationToken);
                 //2. из полученной строки - получаем List<string> запросов
                 List<string> listZaprosov = a.Split("\n").ToList();
-                if (listZaprosov.Count > 10)
-                    return "Произошла ошибка: поисковых запросов больше 10";
+                
                 
                 //3. по каждому элементу в коллекции вызываем GenerateResponseWithContextAsync и получаем результат поиска
                 //по одному запросу.
@@ -95,12 +95,38 @@ public class OllamaService
                 {
                     str += zapros + "\n";
                 }
-                await _webSearch.NotifySearchStatus(connectionId, str, "info");
+
+                await _webSearch.NotifySearchStatus(connectionId, "[VSE_POISKOVIE_ZAPROSI] " + "\n" + str, "info");
+                if (listZaprosov.Count > 10)
+                {
+                    return "Произошла ошибка: поисковых запросов больше 10";
+                }
+
+                // в цикле по запросам получсать по кажому запросу набор ссылок
+                // и добпавлять их в Liast<strng>
+                var allUrls = new List<string>();
                 foreach (var zapros in listZaprosov)
                 {
-                    var searchResults = await PerformDeepWebSearchAsync(zapros, cancellationToken, connectionId);
-                    slovar.Add(zapros, searchResults);
+                    var searchUrls = await LookUrlForSearch(zapros, connectionId);
+                    allUrls = allUrls.Union(searchUrls).ToList();
                 }
+
+                var searchResults = await MySearchAsync(allUrls, connectionId);
+                foreach (SearchResult result in searchResults)
+                {
+                    await _webSearch.NotifySearchStatus(connectionId, $"[Ссылка] {result.Url}, [Контент] {result.Content}", "info");
+                    slovar.Add(result.Url, result.Content);
+                }
+                //foreach (var zapros in listZaprosov)
+                //{
+                //    await _webSearch.NotifySearchStatus(connectionId, "[ZAPROS] " + "\n" + zapros, "info");
+                //    var searchResults = await PerformDeepWebSearchAsync(zapros, cancellationToken, connectionId);
+                //    slovar.Add(zapros, searchResults);
+                //    await _webSearch.NotifySearchStatus(connectionId, "[INFO] " + "\n" + searchResults, "info");
+                //}
+
+                await _webSearch.NotifySearchStatus(connectionId, $"[INFO] Поиск завершен. Подготовка данных для отправки в ИИ.", "info");
+
 
                 //4. собираем словарь в 1 строку и отправляем в CallOllamaApiAsync
                 String content = string.Empty; 
@@ -113,7 +139,7 @@ public class OllamaService
                     new
                     {
                         role = "system",
-                        content = @"Отформатируй и структурируй информацию от user и представь в виде подробного сообщения."
+                        content = @"Отформатируй и структурируй информацию от user."
                     },
                     new
                     {
@@ -127,6 +153,8 @@ public class OllamaService
                     }
                 }
                     ;
+                await _webSearch.NotifySearchStatus(connectionId, $"[INFO] Длина текущего контекста: {content.Length} байт.", "info");
+               
                 string answer = await CallOllamaApiAsync(mess, cancellationToken);
                 return answer;
 
@@ -136,41 +164,67 @@ public class OllamaService
                 return ":(";
             }
 
-
-            //_logger.LogInformation("Web search needed for: {UserMessage}", userMessage);
-            //        var searchResults = await PerformDeepWebSearchAsync(userMessage, cancellationToken, connectionId);
-            //        var l = searchResults.Length;
-            //        if (!string.IsNullOrEmpty(searchResults))
-            //        {
-            //            return await GenerateResponseWithContextAsync(userMessage, searchResults, cancellationToken);
-            //        }
-
-
-            //    var messages = new List<object>
-            //    {
-            //        new
-            //        {
-            //            role = "system",
-            //            content = @"Ты - полезный AI-ассистент в чате. Отвечай дружелюбно и по делу. Будь кратким и понятным."
-            //        },
-            //        new
-            //        {
-            //            role = "user",
-            //            content = userMessage
-            //        }
-            //    };
-
-            //    if (!string.IsNullOrEmpty(context))
-            //    {
-            //        messages.Insert(1, new { role = "assistant", content = context });
-            //    }
-
-            //    return await CallOllamaApiAsync(messages, cancellationToken);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in GenerateResponseAsync");
             return "Произошла ошибка при обработке запроса.";
+        }
+    }
+
+    public async Task<List<string>> LookUrlForSearch(string query, string? connectionId = null, int maxConcurrency = 10)
+    {
+        var results = new ConcurrentBag<SearchResult>();
+
+        try
+        {
+            _logger.LogInformation("Searching for: {Query}", query);
+
+            string url = $"https://html.duckduckgo.com/html/search?q={Uri.EscapeDataString(query)}";
+
+
+            var urls = await _webSearch.ExtractUrlsStepByStepAsync(url);
+
+            return urls;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Search failed for query: {Query}", query);
+            
+            return new List<string>();
+        }
+    }
+
+    public async Task<List<SearchResult>> MySearchAsync(List<string> urls, string? connectionId = null, int maxConcurrency = 10)
+    {
+        var results = new ConcurrentBag<SearchResult>();
+
+        try
+        {
+           
+            // Создаем Semaphore для ограничения параллелизма
+            using var semaphore = new SemaphoreSlim(maxConcurrency);
+
+            // Создаем задачи для параллельной обработки
+            var tasks = urls.Select((resultUrl, index) => _webSearch.ProcessUrlAsync(
+                resultUrl,
+                index + 1,
+                urls.Count,
+                connectionId,
+                semaphore,
+                results)).ToList();
+
+            // Ожидаем завершения всех задач
+            await Task.WhenAll(tasks);
+
+
+            _logger.LogInformation("Found {Count} results", results.Count);
+            return results.ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Search failed for query: {Query}", urls);
+            return results.ToList();
         }
     }
 
@@ -181,7 +235,7 @@ public class OllamaService
             _logger.LogInformation("Starting deep web search for: {Query}", query);
 
             // Передаем connectionId в SearchAsync
-            var searchResults = await _webSearch.SearchAsync(query, 3, connectionId);
+            var searchResults = await _webSearch.SearchAsync(query, connectionId);
 
             if (!searchResults.Any())
             {
@@ -191,9 +245,9 @@ public class OllamaService
             var pageContents = new List<string>();
             foreach (var result in searchResults)
             {
-                if (!string.IsNullOrEmpty(result.Snippet))
+                if (!string.IsNullOrEmpty(result.Content))
                 {
-                    pageContents.Add(result.Snippet);
+                    pageContents.Add(result.Content);
                 }
             }
 

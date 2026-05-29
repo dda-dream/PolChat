@@ -261,7 +261,7 @@ public class ChatHub : Hub
                     id = Guid.NewGuid().ToString(),
                     channelId = channelId,
                     username = botUser.Username,
-                    content = $"[INFO] Длинна текущего контекста: {context.Length} байт.",
+                    content = $"[INFO] Длина текущего контекста: {context.Length} байт.",
                     fileUrl = (string?)null,
                     timestamp = DateTime.UtcNow.ToString("O"),
                     edited = false,

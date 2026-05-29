@@ -5013,7 +5013,7 @@ if (isChatPage) {
                 emoji = '❌';
                 break;
             default:
-                emoji = '🤖';
+                emoji = '';
         }
 
         // Формируем текст сообщения с прогрессом
@@ -5047,10 +5047,10 @@ if (isChatPage) {
             }
 
             // Удаляем предыдущее статусное сообщение этого типа
-            const existingStatusMsg = messagesDiv.querySelector(`.message[data-status-type="${status.status}"]`);
-            if (existingStatusMsg && status.status !== 'completed' && status.status !== 'error') {
-                existingStatusMsg.remove();
-            }
+            // const existingStatusMsg = messagesDiv.querySelector(`.message[data-status-type="${status.status}"]`);
+            // if (existingStatusMsg && status.status !== 'completed' && status.status !== 'error') {
+            //     existingStatusMsg.remove();
+            // }
 
             // Добавляем атрибут для отслеживания
             const messageHtml = formatMessage(statusMessage);
@@ -5766,6 +5766,7 @@ if (isRegisterPage) {
 // ============ КОД ТОЛЬКО ДЛЯ СТРАНИЦЫ НАСТРОЕК КАНАЛА ============
 if (isSettingsPage) {
 
+    document.addEventListener('DOMContentLoaded', setupDangerZone);
 
     let currentDmId: string | null = '';
     let currentDmName = '';
@@ -5775,6 +5776,29 @@ if (isSettingsPage) {
     const urlParams = new URLSearchParams(window.location.search);
     currentDmId = urlParams.get('id');
     currentDmName = urlParams.get('name') || 'Чат';
+
+    function setupDangerZone(): void {
+        const dangerElement = document.querySelector('.danger-item') as HTMLElement;
+
+        if (!dangerElement) {
+            console.warn('Danger zone not found');
+            return;
+        }
+
+        const handleClick = (event: MouseEvent):
+            void =>
+                {
+                    // Блокируем всплытие к родителям
+            event.stopPropagation();
+            confirmDeleteChannel();
+                };
+
+          
+        
+
+        // Навешиваем обработчик
+        dangerElement.addEventListener('click', handleClick);
+    }
 
     async function loadPageData() {
         // Загружаем текущего пользователя
@@ -5974,7 +5998,7 @@ if (isSettingsPage) {
                     const deleteItem = dangerSectionElement.querySelector('.setting-item') as HTMLElement | null;
                     if (deleteItem) {
                         deleteItem.classList.remove('danger-item');
-                        deleteItem.style.cursor = 'default';
+                        
                         deleteItem.onclick = null;
 
                         // Добавляем или обновляем сообщение

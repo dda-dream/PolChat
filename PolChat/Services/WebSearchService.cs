@@ -58,28 +58,33 @@ public class WebSearchService : IAsyncDisposable
         return _browser;
     }
 
-    public async Task<List<SearchResult>> SearchAsync(string query, int maxResults = 5, string? connectionId = null, int maxConcurrency = 3)
+    public async Task<List<SearchResult>> SearchAsync(string query, string? connectionId = null, int maxConcurrency = 10)
     {
         var results = new ConcurrentBag<SearchResult>();
 
         try
         {
             // Отправляем статус начала поиска
-            await NotifySearchStatus(connectionId, "🔍 Начинаем поиск в интернете...", "searching");
+            await NotifySearchStatus(connectionId, " Начинаем поиск в интернете...", "searching");
 
             _logger.LogInformation("Searching DuckDuckGo for: {Query}", query);
 
-            string url = $"https://html.duckduckgo.com/html/?q={Uri.EscapeDataString(query)}";
+            string url = $"https://html.duckduckgo.com/html/search?q={Uri.EscapeDataString(query)}";
+
+            
 
             // Отправляем статус получения ссылок
-            await NotifySearchStatus(connectionId, "📑 Получаем ссылки из поисковой выдачи...", "fetching_links");
+            await NotifySearchStatus(connectionId, " Получаем ссылки из поисковой выдачи...", "fetching_links");
 
             var urls = await ExtractUrlsStepByStepAsync(url);
 
-            var urlsToProcess = urls.Take(maxResults).ToList();
+            string result = string.Join("\n", urls);
+            await NotifySearchStatus(connectionId, "[URLS] " + "\n" + result, "info");
+
+            var urlsToProcess = urls.ToList();
             var totalToProcess = urlsToProcess.Count;
 
-            await NotifySearchStatus(connectionId, $"✅ Найдено {totalToProcess} ссылок. Начинаем параллельный анализ...", "links_found", totalToProcess);
+            await NotifySearchStatus(connectionId, $" Найдено {totalToProcess} ссылок. Начинаем параллельный анализ...", "links_found", totalToProcess);
 
             // Создаем Semaphore для ограничения параллелизма
             using var semaphore = new SemaphoreSlim(maxConcurrency);
@@ -97,7 +102,7 @@ public class WebSearchService : IAsyncDisposable
             await Task.WhenAll(tasks);
 
             // Отправляем статус завершения
-            await NotifySearchStatus(connectionId, $"✅ Поиск завершен. Найдено {results.Count} страниц с информацией.", "completed", results.Count);
+            await NotifySearchStatus(connectionId, $" Поиск завершен. Найдено {results.Count} страниц с информацией.", "completed", results.Count);
 
             _logger.LogInformation("Found {Count} results", results.Count);
             return results.ToList();
@@ -105,12 +110,12 @@ public class WebSearchService : IAsyncDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Search failed for query: {Query}", query);
-            await NotifySearchStatus(connectionId, $"❌ Ошибка поиска: {ex.Message}", "error");
+            await NotifySearchStatus(connectionId, $" Ошибка поиска: {ex.Message}", "error");
             return results.ToList();
         }
     }
 
-    private async Task ProcessUrlAsync(
+    public async Task ProcessUrlAsync(
         string resultUrl,
         int processed,
         int totalToProcess,
@@ -124,7 +129,7 @@ public class WebSearchService : IAsyncDisposable
             // Отправляем статус обработки каждой ссылки
             await NotifySearchStatus(
                 connectionId,
-                $"📖 Анализируем страницу {processed} из {totalToProcess}: {resultUrl[..Math.Min(50, resultUrl.Length)]}...",
+                $" Анализируем страницу {processed} из {totalToProcess}: {resultUrl[..Math.Min(50, resultUrl.Length)]}...",
                 "processing_page",
                 processed,
                 totalToProcess);
@@ -135,7 +140,7 @@ public class WebSearchService : IAsyncDisposable
             {
                 Url = resultUrl,
                 Title = "",
-                Snippet = content
+                Content = content
             });
 
             _logger.LogDebug("Processed {Processed}/{Total}: {Url}", processed, totalToProcess, resultUrl);
@@ -149,7 +154,7 @@ public class WebSearchService : IAsyncDisposable
             {
                 Url = resultUrl,
                 Title = "",
-                Snippet = $"[Ошибка загрузки: {ex.Message}]"
+                Content = $"[Ошибка загрузки: {ex.Message}]"
             });
         }
         finally
@@ -409,5 +414,5 @@ public class SearchResult
 {
     public string Url { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
-    public string Snippet { get; set; } = string.Empty;
+    public string Content { get; set; } = string.Empty;
 }
