@@ -333,7 +333,7 @@ public class ChatHub : Hub
                         id = Guid.NewGuid().ToString(),
                         channelId = channelId,
                         username = "AI Assistant",
-                        content = "❌ Произошла ошибка. Попробуйте позже.",
+                        content = "Произошла ошибка. Попробуйте позже.",
                         fileUrl = (string?)null,
                         timestamp = DateTime.UtcNow.ToString("O"),
                         edited = false,
@@ -355,7 +355,7 @@ public class ChatHub : Hub
 
     public async Task SendAIMessage(string channelId, string content, string tempId)
     {
-        _logger.LogInformation("🤖 SendAIMessage: Channel={ChannelId}, Content={Content}", channelId, content);
+        _logger.LogInformation("SendAIMessage: Channel={ChannelId}, Content={Content}", channelId, content);
 
         var userInfo = _connections.GetValueOrDefault(Context.ConnectionId);
         if (userInfo == null) return;
@@ -410,14 +410,14 @@ public class ChatHub : Hub
                     var rows = await db.Messages
                         .Where(m => m.ChannelId == channelId)
                         .OrderBy(m => m.Timestamp)
-                        .Select(m => new { m.Content })
+                        .Select(m => new { m.Content, m.Username, m.Timestamp })
                         .ToListAsync();
 
                     var context = "";
                     var length = context.Length;
                     foreach (var r in rows)
                     {
-                        context += r + "\n---\n";
+                        context += $"User: {r.Username}; Time: {r.Timestamp.ToString("dd MMMM yyyy HH:mm:ss")}; Message: {r.Content}; \n---\n";
                     }
 
                     var response = await ollama.GenerateResponseAsync(contentCopy, context, default, connectionIdCopy);
@@ -469,106 +469,6 @@ public class ChatHub : Hub
         });
     }
 
-    private async Task ProcessAIResponseAsync(string channelId, string username, string userMessage, string connectionId)
-    {
-        _logger.LogInformation("ProcessAIResponseAsync START: channel={ChannelId}", channelId);
-
-        try
-        {
-            using (var scope = _scopeFactory.CreateScope())
-            {
-                var db = scope.ServiceProvider.GetRequiredService<ChatDbContext>();
-                var ollama = scope.ServiceProvider.GetRequiredService<OllamaService>();
-                var hubContext = scope.ServiceProvider.GetRequiredService<IHubContext<ChatHub>>();
-
-                // Получаем пользователя-бота
-                var botUser = await db.Users.FirstOrDefaultAsync(u => u.IsBot == true);
-                if (botUser == null)
-                {
-                    _logger.LogWarning("Bot user not found");
-                    return;
-                }
-
-                // Передаем connectionId в OllamaService
-                var response = await ollama.GenerateResponseAsync(userMessage, null, default, connectionId);
-
-                if (string.IsNullOrWhiteSpace(response))
-                {
-                    response = "Извините, не могу ответить на это сообщение.";
-                }
-
-                // Сохраняем сообщение
-                var aiMsg = new Message
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    ChannelId = channelId,
-                    Username = botUser.Username,
-                    Content = response,
-                    Timestamp = DateTime.UtcNow,
-                    Edited = false,
-                    Reactions = new List<ReactionInMessage>(),
-                    ReadBy = Array.Empty<string>(),
-                    DeliveredTo = new List<string>()
-                };
-
-                await db.Messages.AddAsync(aiMsg);
-                await db.SaveChangesAsync();
-
-                // Отправляем клиенту
-                var messageToSend = new
-                {
-                    id = aiMsg.Id,
-                    channelId,
-                    username = botUser.Username,
-                    content = response,
-                    fileUrl = (string?)null,
-                    timestamp = aiMsg.Timestamp.ToString("O"),
-                    edited = false,
-                    reactions = new List<ReactionInMessage>(),
-                    readBy = new List<string>(),
-                    deliveredTo = new List<string>(),
-                    replyTo = (object?)null,
-                    isBot = true
-                };
-
-                _logger.LogInformation("Sending AI response to channel {ChannelId}", channelId);
-                await hubContext.Clients.Group(channelId).SendAsync("new_message", messageToSend);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error in ProcessAIResponseAsync");
-
-            // Отправляем сообщение об ошибке
-            try
-            {
-                using (var scope = _scopeFactory.CreateScope())
-                {
-                    var hubContext = scope.ServiceProvider.GetRequiredService<IHubContext<ChatHub>>();
-                    var errorMsg = new
-                    {
-                        id = Guid.NewGuid().ToString(),
-                        channelId,
-                        username = "AI Assistant",
-                        content = "❌ Произошла ошибка. Попробуйте позже.",
-                        fileUrl = (string?)null,
-                        timestamp = DateTime.UtcNow.ToString("O"),
-                        edited = false,
-                        reactions = new List<ReactionInMessage>(),
-                        readBy = new List<string>(),
-                        deliveredTo = new List<string>(),
-                        replyTo = (object?)null,
-                        isBot = true
-                    };
-                    await hubContext.Clients.Group(channelId).SendAsync("new_message", errorMsg);
-                }
-            }
-            catch (Exception sendEx)
-            {
-                _logger.LogError(sendEx, "Failed to send error message");
-            }
-        }
-    }
 
     public async Task AddReaction(string messageId, string emoji)
     {

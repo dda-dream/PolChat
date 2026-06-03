@@ -282,11 +282,7 @@ public class WebSearchService : IAsyncDisposable
             // Очищаем лишние пробелы и пустые строки
             text = text.replace(/\s+/g, ' ').trim();
             
-            // Разбиваем на предложения и группируем
-            const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
-            
-            // Возвращаем первые 50 предложений (примерно 3000-5000 символов)
-            return sentences.slice(0, 50).join(' ');
+            return text;
         })()");
 
             // Вариант 2: Эмуляция реальных нажатий клавиш Ctrl+A, Ctrl+C
@@ -309,8 +305,8 @@ public class WebSearchService : IAsyncDisposable
             fullText = CleanExtractedText(fullText);
 
             // Обрезаем до разумного размера (3000 символов)
-            if (fullText.Length > 3000)
-                fullText = fullText.Substring(0, 3000);
+            //if (fullText.Length > 3000)
+            //    fullText = fullText.Substring(0, 3000);
 
             _logger.LogDebug("Extracted {Length} characters from {Url}", fullText.Length, url);
 

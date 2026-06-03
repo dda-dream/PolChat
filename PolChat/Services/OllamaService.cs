@@ -7,6 +7,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace ChatApp.Services;
 
@@ -54,19 +55,30 @@ public class OllamaService
         string userMessage,
         string? context = null,
         CancellationToken cancellationToken = default,
-        string? connectionId = null) 
+        string? connectionId = null)
     {
         try
         {
-            if (NeedsWebSearch(userMessage) || true)
-            {
 
-                var message = new List<object>
+            var message = new List<object>
                 {
                     new
                     {
                         role = "system",
-                        content = @"проверь, требуется ли поиск в интернете для промта user. если поиск нужен: выведи только список запросов в интернет без лишних слов."
+                        content = @"проверь, требуется ли поиск в интернете для промта user. 
+                                    если поиск нужен: выведи только список запросов через ';'.
+                                    если поиск не нужен, выведи 'поиск не нужен'
+                                    если user спрашивает о сообщениях чата, выведи 'поиск не нужен'
+                                    никаких других вариантов ответа не выводи"
+                    },
+                    new
+                    {
+                        role = "assistant",
+                        content = @"проверь, требуется ли поиск в интернете для промта user. 
+                                    если поиск нужен: выведи только список запросов через ';'.
+                                    если поиск не нужен, выведи 'поиск не нужен'
+                                    если user спрашивает о сообщениях чата, выведи 'поиск не нужен'
+                                    никаких других вариантов ответа не выводи"
                     },
                     new
                     {
@@ -75,16 +87,49 @@ public class OllamaService
                     }
                 };
 
-                if (!string.IsNullOrEmpty(context))
+            
+            message.Insert(1, new { role = "assistant", content = context });
+            
+            // 1. получаем ссылки для поиска через CallOllamaApiAsync
+            string a = await CallOllamaApiAsync(message, cancellationToken);
+
+
+            if (a.Contains("поиск не нужен"))
+            {
+                var messageForAI = new List<object>
                 {
-                    message.Insert(1, new { role = "assistant", content = context });
-                }
-                // 1. получаем ссылки для поиска через CallOllamaApiAsync
-                string a = await CallOllamaApiAsync(message, cancellationToken);
+                    new
+                    {
+                        role = "system",
+                        content = @"ответь на сообщение. если нужно, используй system(контекст чата)"
+                    },
+                    new
+                    {
+                        role = "system",
+                        content = context
+                    },
+                    new
+                    {
+                        role = "user",
+                        content = userMessage
+                    }
+                };
+                //await _webSearch.NotifySearchStatus(connectionId, $"[Сообщение ИИ] {context}", "info");
+
+                string messageFromAI = await CallOllamaApiAsync(messageForAI, cancellationToken);
+
+                return messageFromAI;
+            }
+            else
+            {
+                char[] delimiters = { ';', '\r', '\n' };
+                string[] parts = a.Split(
+                    delimiters,
+                    StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                 //2. из полученной строки - получаем List<string> запросов
-                List<string> listZaprosov = a.Split("\n").ToList();
-                
-                
+                List<string> listZaprosov = parts.ToList();
+
+
                 //3. по каждому элементу в коллекции вызываем GenerateResponseWithContextAsync и получаем результат поиска
                 //по одному запросу.
                 //Сохраняем результат поиска в словаре Dictionary<string, string>  где ключ - это запрос,
@@ -96,7 +141,7 @@ public class OllamaService
                     str += zapros + "\n";
                 }
 
-                await _webSearch.NotifySearchStatus(connectionId, "[VSE_POISKOVIE_ZAPROSI] " + "\n" + str, "info");
+                await _webSearch.NotifySearchStatus(connectionId, "[Все поисковые запросы] " + "\n" + str, "info");
                 if (listZaprosov.Count > 10)
                 {
                     return "Произошла ошибка: поисковых запросов больше 10";
@@ -129,7 +174,7 @@ public class OllamaService
 
 
                 //4. собираем словарь в 1 строку и отправляем в CallOllamaApiAsync
-                String content = string.Empty; 
+                String content = string.Empty;
                 foreach (var slova in slovar)
                 {
                     content += slova.Value + "\n";
@@ -154,16 +199,10 @@ public class OllamaService
                 }
                     ;
                 await _webSearch.NotifySearchStatus(connectionId, $"[INFO] Длина текущего контекста: {content.Length} байт.", "info");
-               
+
                 string answer = await CallOllamaApiAsync(mess, cancellationToken);
                 return answer;
-
             }
-            else
-            {
-                return ":(";
-            }
-
         }
         catch (Exception ex)
         {
@@ -190,18 +229,18 @@ public class OllamaService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Search failed for query: {Query}", query);
-            
+
             return new List<string>();
         }
     }
 
-    public async Task<List<SearchResult>> MySearchAsync(List<string> urls, string? connectionId = null, int maxConcurrency = 10)
+    public async Task<List<SearchResult>> MySearchAsync(List<string> urls, string? connectionId = null, int maxConcurrency = 5)
     {
         var results = new ConcurrentBag<SearchResult>();
 
         try
         {
-           
+
             // Создаем Semaphore для ограничения параллелизма
             using var semaphore = new SemaphoreSlim(maxConcurrency);
 
@@ -287,8 +326,11 @@ public class OllamaService
             think = _settings.ReasoningEffort
         };
 
+        
         var jsonRequest = JsonSerializer.Serialize(request);
+        
         var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
+        
         var response = await _httpClient.PostAsync("/api/chat", content, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
