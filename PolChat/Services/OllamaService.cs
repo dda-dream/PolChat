@@ -89,13 +89,17 @@ public class OllamaService
 
             
             message.Insert(1, new { role = "assistant", content = context });
-            
+
+            await _webSearch.NotifySearchStatus(connectionId, "Проверяется необходимость поиска в интернете...", "info");
+
             // 1. получаем ссылки для поиска через CallOllamaApiAsync
             string a = await CallOllamaApiAsync(message, cancellationToken);
 
+            
 
             if (a.Contains("поиск не нужен"))
             {
+                await _webSearch.NotifySearchStatus(connectionId, "Поиск не нужен", "info");
                 var messageForAI = new List<object>
                 {
                     new
@@ -115,13 +119,14 @@ public class OllamaService
                     }
                 };
                 //await _webSearch.NotifySearchStatus(connectionId, $"[Сообщение ИИ] {context}", "info");
-
+                await _webSearch.NotifySearchStatus(connectionId, "Отправляем сообщение в ИИ...", "info");
                 string messageFromAI = await CallOllamaApiAsync(messageForAI, cancellationToken);
 
                 return messageFromAI;
             }
             else
             {
+                await _webSearch.NotifySearchStatus(connectionId, "Поиск нужен", "info");
                 char[] delimiters = { ';', '\r', '\n' };
                 string[] parts = a.Split(
                     delimiters,
@@ -129,7 +134,7 @@ public class OllamaService
                 //2. из полученной строки - получаем List<string> запросов
                 List<string> listZaprosov = parts.ToList();
 
-
+                
                 //3. по каждому элементу в коллекции вызываем GenerateResponseWithContextAsync и получаем результат поиска
                 //по одному запросу.
                 //Сохраняем результат поиска в словаре Dictionary<string, string>  где ключ - это запрос,
@@ -146,7 +151,7 @@ public class OllamaService
                 {
                     return "Произошла ошибка: поисковых запросов больше 10";
                 }
-
+                await _webSearch.NotifySearchStatus(connectionId, "Получаем ссылки по каждому запросу...", "info");
                 // в цикле по запросам получсать по кажому запросу набор ссылок
                 // и добпавлять их в Liast<strng>
                 var allUrls = new List<string>();
@@ -155,7 +160,7 @@ public class OllamaService
                     var searchUrls = await LookUrlForSearch(zapros, connectionId);
                     allUrls = allUrls.Union(searchUrls).ToList();
                 }
-
+                await _webSearch.NotifySearchStatus(connectionId, "Читаем ссылки...", "info");
                 var searchResults = await MySearchAsync(allUrls, connectionId);
                 foreach (SearchResult result in searchResults)
                 {

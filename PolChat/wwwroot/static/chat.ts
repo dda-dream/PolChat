@@ -949,6 +949,10 @@ if (isChatPage) {
     </button>
 </div>`;
 
+        const copyIcon = `<span class="message-copy" data-msg-id="${escapeHtml(msg.id)}" title="Копировать текст" style="cursor: pointer; margin-left: 5px; opacity: 0.6; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.6'">
+    <i class="fas fa-copy" style="font-size: 10px;"></i>
+</span>`;
+
         return `<div class="message ${isOwn ? 'message-own' : ''}" id="msg-${escapeHtml(msg.id)}" data-channel-id="${escapeHtml(msg.channelId || currentChannel || '')}" data-channel-type="${escapeHtml(currentChannelType || 'channel')}">
     <div class="message-wrapper">
         <div class="message-avatar">${avatarHtml}</div>
@@ -960,6 +964,7 @@ if (isChatPage) {
                     ${editedIndicator}
                     ${currentChannelType === 'dm' ? messageStatus : ''}
                     ${readCounterHtml}
+                    ${copyIcon}
                     ${actionsArrow}
                 </div>
                 ${replyHtml}
@@ -996,6 +1001,53 @@ if (isChatPage) {
         messagesArea.addEventListener('click', handleMessageActions);
     }
 
+    // Добавьте эту функцию после existing функций (например, после deleteMessage)
+    function copyMessageContent(messageId: string) {
+        const msgDiv = document.getElementById(`msg-${messageId}`);
+        if (!msgDiv) {
+            showNotification('Сообщение не найдено', 'danger');
+            return;
+        }
+
+        // Получаем текст сообщения
+        const textDiv = msgDiv.querySelector('.message-text');
+        let textToCopy = '';
+
+        if (textDiv) {
+            // Извлекаем текст из message-text, удаляя HTML-теги
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = textDiv.innerHTML;
+            textToCopy = tempDiv.textContent || tempDiv.innerText || '';
+        }
+
+        // Если есть файл, добавляем информацию о нём
+        const fileDiv = msgDiv.querySelector('.message-file');
+        if (fileDiv && !textToCopy) {
+            const fileLink = fileDiv.querySelector('a');
+            if (fileLink) {
+                textToCopy = `[Файл: ${fileLink.textContent}]`;
+            } else {
+                textToCopy = '[Файл]';
+            }
+        }
+
+        // Если нет текста и нет файла
+        if (!textToCopy) {
+            textToCopy = '[Пустое сообщение]';
+        }
+
+        // Копируем в буфер обмена
+        navigator.clipboard.writeText(textToCopy).then(() => {
+            showNotification('✅ Текст сообщения скопирован', 'success');
+        }).catch(err => {
+            console.error('Ошибка копирования:', err);
+            showNotification('❌ Не удалось скопировать текст', 'danger');
+        });
+    }
+
+    // Обновите formatMessage функцию - добавьте кнопку копирования в actionButtons
+    // Найдите в formatMessage блок actionButtons и замените его на:
+
     function handleMessageActions(e: MouseEvent) {
         const target = e.target as HTMLElement;
 
@@ -1009,6 +1061,17 @@ if (isChatPage) {
             const msgId = actionsArrow.getAttribute('data-msg-id');
             if (msgId) {
                 toggleMessageActions(msgId, e);  // ← передаём событие мыши
+            }
+            return;
+        }
+
+        const copyIcon = target.closest('.message-copy');
+        if (copyIcon) {
+            e.preventDefault();
+            e.stopPropagation();
+            const msgId = copyIcon.getAttribute('data-msg-id');
+            if (msgId) {
+                copyMessageContent(msgId);
             }
             return;
         }
@@ -1621,7 +1684,7 @@ if (isChatPage) {
         if (div) {
             div.innerHTML = `<div class="preview-content">
             ${content}
-            <div class="preview-actions" style="margin-top: 12px; display: flex; gap: 8px; justify-content: flex-end;">
+            <div class="preview-actions">
                 <button class="btn-cancel" onclick="cancelFilePreview()"><i class="fas fa-times"></i></button>
             </div>
         </div>`;
@@ -3404,22 +3467,35 @@ if (isChatPage) {
         }
     }
 
-    function addAIAssistantButton() {
-        const inputArea = document.querySelector('.input-area');
-        if (!inputArea) return;
+    function addOrDeleteAIAssistantButton(checkAdd: boolean) {
+        if (checkAdd) {
+            const aiButtonExist = document.getElementById("aiButton") as HTMLButtonElement;
 
-        const aiButton = document.createElement('button');
-        aiButton.className = 'btn btn-outline-info ms-2';
-        aiButton.innerHTML = '<i class="fas fa-robot"></i> AI';
-        aiButton.title = 'Вызвать AI в текущий чат (одно сообщение)';
-        aiButton.onclick = () => {
-            activateAIMode();
-        };
+            if (!aiButtonExist) {
 
-        const sendButton = document.getElementById('sendButton');
-        if (sendButton && sendButton.parentElement) {
-            sendButton.parentElement.insertBefore(aiButton, sendButton.nextSibling);
+                const inputArea = document.querySelector('.input-area');
+                if (!inputArea) return;
+
+                const aiButton = document.createElement('button');
+                aiButton.className = 'btn btn-outline-info ms-2';
+                aiButton.innerHTML = '<i class="fas fa-robot"></i> AI';
+                aiButton.title = 'Вызвать AI в текущий чат (одно сообщение)';
+                aiButton.id = "aiButton"
+                aiButton.onclick = () => {
+                    activateAIMode();
+                };
+
+                const sendButton = document.getElementById('sendButton');
+                if (sendButton && sendButton.parentElement) {
+                    sendButton.parentElement.insertBefore(aiButton, sendButton.nextSibling);
+                }
+            }
         }
+        else{
+            const aiButton = document.getElementById("aiButton") as HTMLButtonElement;
+            aiButton?.remove();
+             }
+        
     }
 
     function initAICancelButton() {
@@ -3653,8 +3729,8 @@ if (isChatPage) {
         const apiHasDash = apiSpan?.textContent === '--:--:--';
         const signalrHasDash = signalrSpan?.textContent === '--:--:--';
 
-        let apiStatus = 'WebApi';
-        let signalrStatus = 'SignalR';
+        let apiStatus = 'W';
+        let signalrStatus = 'S';
 
         if (apiHasDash) apiStatus = '---';
         if (signalrHasDash) signalrStatus = '---';
@@ -3792,6 +3868,7 @@ if (isChatPage) {
     }
 
 
+    let x = 0;
 
     async function joinChannel(type: 'channel' | 'dm', id: string, name: string, desc: string) {
         if (isAIModeActive) deactivateAIMode();
@@ -3815,6 +3892,9 @@ if (isChatPage) {
         currentPage = 1;
         hasMoreMessages = true;
         receivedMessages.clear();
+
+        
+            
 
         // Подписываемся на новый канал с таймаутом
         if (connection.state === signalR.HubConnectionState.Connected) {
@@ -3843,6 +3923,16 @@ if (isChatPage) {
             messageInput.disabled = false;
             messageInput.focus();
         }
+
+        if (currentChannelName == "AI Assistant") {
+            addOrDeleteAIAssistantButton(false);
+            //x = 0;
+        }
+        else
+            //if (x < 1) {
+            //x += 1
+            addOrDeleteAIAssistantButton(true);
+        
     }
 
     // Новая оптимизированная функция загрузки сообщений
@@ -4029,8 +4119,8 @@ if (isChatPage) {
         const apiHasDash = apiSpan?.textContent === '--:--:--';
         const signalrHasDash = signalrSpan?.textContent === '--:--:--';
 
-        let apiStatus = apiHasDash ? '---' : 'WebApi';
-        let signalrStatus = signalrHasDash ? '---' : 'SignalR';
+        let apiStatus = apiHasDash ? '---' : 'W';
+        let signalrStatus = signalrHasDash ? '---' : 'S';
 
         let baseTitle = `Pol Чат [ ${apiStatus} | ${signalrStatus} ]`;
 
@@ -5158,7 +5248,6 @@ if (isChatPage) {
         setupVisibilityTracking();
         startHeartbeat();
         initNotificationSound();
-        addAIAssistantButton();
         initAICancelButton();
         initDragAndDrop();
         scrollToBottomSafely(true);
