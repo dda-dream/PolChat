@@ -525,18 +525,19 @@ public class MessagesController : ControllerBase
         var conn = _db.Database.GetDbConnection();
         await conn.OpenAsync();
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = @"
-            SELECT m.channel_id, COUNT(*) as unread_count
-            FROM messages m
-            LEFT JOIN channels c ON c.id = m.channel_id
-            LEFT JOIN dm_channels d ON d.id = m.channel_id
-            WHERE m.username != @username 
-            AND NOT (@username = ANY(m.read_by))
-            AND (
-                (c.id IS NOT NULL AND c.is_private = FALSE)  
-                OR (d.id IS NOT NULL AND @username = ANY(d.participants))  
-            )
-            GROUP BY m.channel_id";
+        cmd.CommandText = 
+@"
+SELECT m.channel_id, COUNT(*) as unread_count
+FROM messages m
+LEFT JOIN channels c ON c.id = m.channel_id
+LEFT JOIN dm_channels d ON d.id = m.channel_id
+WHERE m.username != @username 
+AND NOT (@username = ANY(m.read_by))
+AND (
+    (c.id IS NOT NULL AND c.is_private = FALSE)  
+    OR (d.id IS NOT NULL AND @username = ANY(d.participants))  
+)
+GROUP BY m.channel_id";
         var p = cmd.CreateParameter();
         p.ParameterName = "username";
         p.Value = username;
@@ -556,30 +557,25 @@ public class MessagesController : ControllerBase
         var conn = _db.Database.GetDbConnection();
         await conn.OpenAsync();
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = @"SELECT 
-                                recipient.user_name AS username, 
-                                COUNT(*) AS unread_count
-                            FROM messages m
-                            LEFT JOIN channels c ON c.id = m.channel_id
-                            LEFT JOIN dm_channels d ON d.id = m.channel_id
-                            -- Разворачиваем потенциальных получателей для каждого типа канала
-                            LEFT JOIN LATERAL (
-                                -- Для DM каналов получатели — это все участники
-                                SELECT unnest(d.participants) AS user_name WHERE d.id IS NOT NULL
-                                -- UNION (при необходимости) можно добавить сюда участников приватных каналов
-                            ) recipient ON TRUE
-                            WHERE 
-                                -- 1. Исключаем автора сообщения (сам себе не отправляет непрочитанные)
-                                m.username != recipient.user_name
-                                -- 2. Главное условие: пользователя НЕТ в списке прочитавших это сообщение
-                                AND NOT (recipient.user_name = ANY(m.read_by))
-                                -- 3. Проверяем валидность канала
-                                AND (
-                                    (c.id IS NOT NULL AND c.is_private = FALSE) -- Для публичных каналов (если логика позволяет)
-                                    OR (d.id IS NOT NULL)                       -- Для личных сообщений (DM)
-                                )
-                            GROUP BY recipient.user_name
-                            ORDER BY unread_count DESC;";
+        cmd.CommandText =
+@"
+SELECT recipient.user_name AS username, COUNT(*) AS unread_count
+FROM messages m
+LEFT JOIN channels c ON c.id = m.channel_id
+LEFT JOIN dm_channels d ON d.id = m.channel_id
+LEFT JOIN LATERAL (
+    SELECT unnest(d.participants) AS user_name WHERE d.id IS NOT NULL
+) recipient ON TRUE
+WHERE m.username != recipient.user_name
+      AND NOT (recipient.user_name = ANY(m.read_by))
+/*    
+	AND (
+        (c.id IS NOT NULL AND c.is_private = FALSE) 
+        OR (d.id IS NOT NULL)                       
+    )
+*/
+GROUP BY recipient.user_name
+ORDER BY unread_count DESC;";
 
 
         var result = new Dictionary<string, int>();
