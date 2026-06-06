@@ -3868,7 +3868,6 @@ if (isChatPage) {
     }
 
 
-    let x = 0;
 
     async function joinChannel(type: 'channel' | 'dm', id: string, name: string, desc: string) {
         if (isAIModeActive) deactivateAIMode();
