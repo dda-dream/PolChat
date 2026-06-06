@@ -6,6 +6,8 @@ using ChatApp.Services;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using StackExchange.Redis;
+using System.Net;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -34,6 +36,45 @@ else
 {
     Console.WriteLine($"[WARNING] Redis connection string is NULL.");
 }
+
+
+// ===== HTTPS Configuration =====
+var port = builder.Configuration.GetValue<int>("Server:Port", 5000);
+var useHttps = builder.Configuration.GetValue<bool>("Server:UseHttps", true);
+
+Console.WriteLine($"[START] Chat: {(useHttps ? "https" : "http")}://127.0.0.1:{port}");
+
+
+//получение сертификата:
+//sudo apt install -y certbot
+//sudo certbot certonly --standalone -d fbdda.duckdns.org
+builder.WebHost.ConfigureKestrel(options =>
+{
+    //options.ListenAnyIP(80);
+    options.Listen(IPAddress.Any, port, listenOptions =>
+    {
+        var cert = X509Certificate2.CreateFromPemFile(
+            "fullchain.pem",
+            "privkey.pem"
+        );
+
+        if (OperatingSystem.IsWindows())
+        {
+            using var original = cert;
+            cert = new X509Certificate2(
+                original.Export(X509ContentType.Pfx)
+            );
+        }
+
+        listenOptions.UseHttps(
+            cert
+        );
+    });
+});
+
+
+
+
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddMemoryCache();
@@ -208,17 +249,5 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-// ===== HTTPS Configuration =====
-var port = builder.Configuration.GetValue<int>("Server:Port", 5000);
-var useHttps = builder.Configuration.GetValue<bool>("Server:UseHttps", false);
 
-Console.WriteLine($"[START] Chat: {(useHttps ? "https" : "http")}://127.0.0.1:{port}");
-
-if (useHttps)
-{
-    app.Run($"https://0.0.0.0:{port}");
-}
-else
-{
-    app.Run($"http://0.0.0.0:{port}");
-}
+app.Run();//$"https://0.0.0.0:{port}");
