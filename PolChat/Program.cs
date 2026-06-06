@@ -44,6 +44,10 @@ var useHttps = builder.Configuration.GetValue<bool>("Server:UseHttps", true);
 
 Console.WriteLine($"[START] Chat: {(useHttps ? "https" : "http")}://127.0.0.1:{port}");
 
+
+//получение сертификата:
+//sudo apt install -y certbot
+//sudo certbot certonly --standalone -d fbdda.duckdns.org
 builder.WebHost.ConfigureKestrel(options =>
 {
     //options.ListenAnyIP(80);
