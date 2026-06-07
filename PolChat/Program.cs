@@ -3,6 +3,8 @@ using ChatApp.Hubs;
 using ChatApp.Middleware;
 using ChatApp.Models;
 using ChatApp.Services;
+using Microsoft.AspNetCore.HttpLogging;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using StackExchange.Redis;
@@ -38,11 +40,25 @@ else
 }
 
 
-// ===== HTTPS Configuration =====
-var port = builder.Configuration.GetValue<int>("Server:Port", 5000);
-var useHttps = builder.Configuration.GetValue<bool>("Server:UseHttps", true);
+//NGINX config
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders =
+        ForwardedHeaders.XForwardedFor |
+        ForwardedHeaders.XForwardedProto;
 
-Console.WriteLine($"[START] Chat: {(useHttps ? "https" : "http")}://127.0.0.1:{port}");
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+
+    // Указываем IP самого Nginx — только ему доверяем заголовки
+    options.KnownProxies.Add(IPAddress.Parse("10.66.66.1")); // ← IP Nginx
+});
+
+// ===== HTTPS Configuration =====
+var port = builder.Configuration.GetValue<int>("Server:Port", 5555);
+
+Console.WriteLine($"[START] Chat: https://127.0.0.1:{port}");
+Console.WriteLine($"[START] Chat: http://127.0.0.1:5554");
 
 
 //получение сертификата:
@@ -50,7 +66,7 @@ Console.WriteLine($"[START] Chat: {(useHttps ? "https" : "http")}://127.0.0.1:{p
 //sudo certbot certonly --standalone -d fbdda.duckdns.org
 builder.WebHost.ConfigureKestrel(options =>
 {
-    //options.ListenAnyIP(80);
+    options.Listen(IPAddress.Any, 5554);
     options.Listen(IPAddress.Any, port, listenOptions =>
     {
         var cert = X509Certificate2.CreateFromPemFile(
@@ -146,6 +162,13 @@ builder.Services.AddCors(options =>
     });
 });
 
+
+
+
+
+
+
+
 var app = builder.Build();
 
 // ===== Middleware =====
@@ -155,6 +178,35 @@ app.UseCors();
 app.UseMiddleware<SessionAuthenticationMiddleware>();
 app.MapControllers();
 app.MapHub<ChatHub>("/chathub");
+
+
+
+
+app.MapGet("/debug/ip", (HttpContext ctx) => new {
+    // Должен показать реальный IP клиента
+    remoteIp = ctx.Connection.RemoteIpAddress?.ToString(),
+    // Цепочка прокси: "клиент, прокси1, прокси2..."
+    xForwardedFor = ctx.Request.Headers["X-Forwarded-For"].ToString(),
+    // Реальный IP (от Nginx)
+    xRealIp = ctx.Request.Headers["X-Real-IP"].ToString(),
+    // Должен быть "https"
+    xForwardedProto = ctx.Request.Headers["X-Forwarded-Proto"].ToString(),
+
+    scheme = ctx.Request.Scheme,
+});
+
+// Одна строка лога: время | метод | путь | IP-цепочка
+app.Use(async (ctx, next) =>
+{
+    var ip = ctx.Request.Headers["X-Forwarded-For"].ToString();
+    if (string.IsNullOrEmpty(ip))
+        ip = ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {ctx.Request.Method} {ctx.Request.Path} | {ip}");
+
+    await next();
+});
+
 
 // Health check endpoint for Ollama
 app.MapGet("/api/ai/health", async (OllamaService ollamaService) =>
