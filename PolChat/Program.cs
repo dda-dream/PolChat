@@ -17,8 +17,14 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Host.UseSerilog();
 
 // Настройка Serilog
+// Serilog — только нужные логи
 Log.Logger = new LoggerConfiguration()
-    .WriteTo.Console()
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft", Serilog.Events.LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.EntityFrameworkCore", Serilog.Events.LogEventLevel.Warning)
+    .MinimumLevel.Override("System", Serilog.Events.LogEventLevel.Warning)
+    .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
     .CreateLogger();
 
 // ===== Configuration =====
@@ -171,6 +177,20 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+app.UseForwardedHeaders();
+// Одна строка лога: время | метод | путь | IP-цепочка
+app.Use(async (ctx, next) =>
+{
+    var ip = ctx.Request.Headers["X-Forwarded-For"].ToString();
+    if (string.IsNullOrEmpty(ip))
+        ip = ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {ctx.Request.Method} {ctx.Request.Path} | {ip}");
+
+    await next();
+});
+
+
 // ===== Middleware =====
 app.UseRouting();
 app.UseStaticFiles();
@@ -195,17 +215,7 @@ app.MapGet("/debug/ip", (HttpContext ctx) => new {
     scheme = ctx.Request.Scheme,
 });
 
-// Одна строка лога: время | метод | путь | IP-цепочка
-app.Use(async (ctx, next) =>
-{
-    var ip = ctx.Request.Headers["X-Forwarded-For"].ToString();
-    if (string.IsNullOrEmpty(ip))
-        ip = ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 
-    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {ctx.Request.Method} {ctx.Request.Path} | {ip}");
-
-    await next();
-});
 
 
 // Health check endpoint for Ollama
