@@ -61,10 +61,11 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 });
 
 // ===== HTTPS Configuration =====
-var port = builder.Configuration.GetValue<int>("Server:Port", 5555);
+var httpsPort = builder.Configuration.GetValue<int>("Server:HttpsPort", 5555);
+var httpPort = builder.Configuration.GetValue<int>("Server:HttpPort", 5554);
 
-Console.WriteLine($"[START] Chat: https://127.0.0.1:{port}");
-Console.WriteLine($"[START] Chat: http://127.0.0.1:5554");
+Console.WriteLine($"[START] Chat: https://127.0.0.1:{httpsPort}");
+Console.WriteLine($"[START] Chat:  http://127.0.0.1:{httpPort}");
 
 
 //получение сертификата:
@@ -72,8 +73,8 @@ Console.WriteLine($"[START] Chat: http://127.0.0.1:5554");
 //sudo certbot certonly --standalone -d fbdda.duckdns.org
 builder.WebHost.ConfigureKestrel(options =>
 {
-    options.Listen(IPAddress.Any, 5554);
-    options.Listen(IPAddress.Any, port, listenOptions =>
+    options.Listen(IPAddress.Any, httpPort);
+    options.Listen(IPAddress.Any, httpsPort, listenOptions =>
     {
         var cert = X509Certificate2.CreateFromPemFile(
             "fullchain.pem",
@@ -126,7 +127,9 @@ if (!string.IsNullOrEmpty(redisConnection))
         options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
         options.HandshakeTimeout = TimeSpan.FromSeconds(15);
         options.KeepAliveInterval = TimeSpan.FromSeconds(15);
-        options.MaximumParallelInvocationsPerClient = 1;
+        options.MaximumParallelInvocationsPerClient = 10;
+        // Снимаем ограничение полностью (значение null убирает лимит)
+        options.MaximumReceiveMessageSize = null;
     })
     .AddStackExchangeRedis(redisConnection, options =>
     {
@@ -140,7 +143,9 @@ else
         options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
         options.HandshakeTimeout = TimeSpan.FromSeconds(15);
         options.KeepAliveInterval = TimeSpan.FromSeconds(15);
-        options.MaximumParallelInvocationsPerClient = 1;
+        options.MaximumParallelInvocationsPerClient = 10;
+        // Снимаем ограничение полностью (значение null убирает лимит)
+        options.MaximumReceiveMessageSize = null;
     });
 }
 
@@ -190,18 +195,6 @@ app.Use(async (ctx, next) =>
     await next();
 });
 
-
-// ===== Middleware =====
-app.UseRouting();
-app.UseStaticFiles();
-app.UseCors();
-app.UseMiddleware<SessionAuthenticationMiddleware>();
-app.MapControllers();
-app.MapHub<ChatHub>("/chathub");
-
-
-
-
 app.MapGet("/debug/ip", (HttpContext ctx) => new {
     // Должен показать реальный IP клиента
     remoteIp = ctx.Connection.RemoteIpAddress?.ToString(),
@@ -214,6 +207,21 @@ app.MapGet("/debug/ip", (HttpContext ctx) => new {
 
     scheme = ctx.Request.Scheme,
 });
+
+
+
+
+
+// ===== Middleware =====
+app.UseRouting();
+app.UseStaticFiles();
+app.UseCors();
+app.UseMiddleware<SessionAuthenticationMiddleware>();
+app.MapControllers();
+app.MapHub<ChatHub>("/chathub");
+
+
+
 
 
 
@@ -312,4 +320,4 @@ using (var scope = app.Services.CreateScope())
 }
 
 
-app.Run();//$"https://0.0.0.0:{port}");
+app.Run();
