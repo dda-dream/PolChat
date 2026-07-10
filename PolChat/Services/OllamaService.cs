@@ -35,12 +35,9 @@ public class OllamaService
 
         _searchHttpClient = httpClientFactory.CreateClient();
         _searchHttpClient.Timeout = TimeSpan.FromSeconds(30);
-        _searchHttpClient.DefaultRequestHeaders.Add("User-Agent",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-        _searchHttpClient.DefaultRequestHeaders.Add("Accept",
-            "application/json, text/plain, */*");
-        _searchHttpClient.DefaultRequestHeaders.Add("Accept-Language",
-            "ru-RU,ru;q=0.9,en;q=0.8");
+        _searchHttpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+        _searchHttpClient.DefaultRequestHeaders.Add("Accept", "application/json, text/plain, */*");
+        _searchHttpClient.DefaultRequestHeaders.Add("Accept-Language", "ru-RU,ru;q=0.9,en;q=0.8");
 
         if (!string.IsNullOrEmpty(_settings.ApiKey))
         {
